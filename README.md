@@ -49,7 +49,7 @@ sudo nano /opt/trend-top/config.json   # fill every CHANGE_ME_* field
 docker compose exec app node scripts/apply-config.mjs node server/jobs.js collect
 ```
 
-`deploy.sh` reads the config, exports `POSTGRES_PASSWORD` and `APP_PORT`, then runs `docker compose up`. Point Cloudflare Tunnel or `deploy/nginx.conf` at `http://127.0.0.1:3010`. The scheduler collects at 02:00 UTC and sends the digest each hour.
+`deploy.sh` reads the config, exports `POSTGRES_PASSWORD` and `APP_PORT`, then runs `docker compose up`. The app is published on port **3010** (all interfaces). Optional `deploy/nginx.conf` proxies that port. The scheduler collects at 02:00 UTC and sends the digest each hour.
 
 ## Ranking methodology
 
