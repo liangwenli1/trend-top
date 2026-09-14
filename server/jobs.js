@@ -7,8 +7,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const token = () => crypto.randomBytes(24).toString('hex');
 const hash = x => crypto.createHash('sha256').update(x).digest('hex');
 
-const MAX_REPOS = 1000;
-const MAX_ASSETS_PER_TYPE = 200;
+const MAX_REPOS = 2000;
+const MAX_ASSETS_PER_TYPE = 400;
 const MEGA_STARS = 80000;
 const MEGA_CAP = 40;
 const LANGUAGES = [
