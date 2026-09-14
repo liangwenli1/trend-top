@@ -8,6 +8,7 @@ const token = () => crypto.randomBytes(24).toString('hex');
 const hash = x => crypto.createHash('sha256').update(x).digest('hex');
 
 const MAX_REPOS = 400;
+const MAX_ASSETS_PER_TYPE = 80;
 const MEGA_STARS = 80000;
 const MEGA_CAP = 40;
 const LANGUAGES = [
@@ -65,6 +66,190 @@ export function keepCandidate(unique, repo) {
   if (unique.size >= MAX_REPOS) return false;
   unique.set(repo.id, repo);
   return true;
+}
+
+const ASSET_TYPES = ['skill', 'plugin', 'agent', 'components', 'website'];
+const OFFICIAL_ORGS = new Set([
+  'microsoft', 'vercel', 'anthropics', 'openai', 'modelcontextprotocol',
+  'shadcn-ui', 'langchain-ai', 'ollama', 'supabase', 'astral-sh', 'github',
+  'vercel-labs', 'facebook', 'google', 'google-gemini', 'continuedev'
+]);
+const ASSET_QUERIES = {
+  skill: [
+    { q: 'SKILL.md in:readme archived:false stars:>1', sort: 'updated', pages: 2, perPage: 50 },
+    { q: 'topic:claude-skills archived:false', sort: 'stars', pages: 1, perPage: 50 },
+    { q: 'topic:agent-skills archived:false', sort: 'stars', pages: 1, perPage: 50 },
+    { q: '"claude skill" in:readme archived:false stars:>2', sort: 'updated', pages: 1, perPage: 50 }
+  ],
+  plugin: [
+    { q: 'topic:mcp-server archived:false', sort: 'stars', pages: 2, perPage: 50 },
+    { q: 'mcp-server in:name archived:false stars:>3', sort: 'updated', pages: 2, perPage: 50 },
+    { q: 'topic:mcp archived:false stars:>15', sort: 'updated', pages: 1, perPage: 50 }
+  ],
+  agent: [
+    { q: 'topic:ai-agents archived:false stars:>15', sort: 'stars', pages: 2, perPage: 50 },
+    { q: 'topic:coding-agent archived:false', sort: 'updated', pages: 1, perPage: 50 },
+    { q: '"coding agent" in:readme archived:false stars:>20', sort: 'updated', pages: 1, perPage: 50 }
+  ],
+  components: [
+    { q: 'topic:shadcn-ui archived:false', sort: 'stars', pages: 1, perPage: 50 },
+    { q: 'topic:react-components archived:false stars:>40', sort: 'updated', pages: 2, perPage: 50 },
+    { q: 'topic:ui-library language:TypeScript archived:false stars:>30', sort: 'updated', pages: 1, perPage: 50 }
+  ],
+  website: [
+    { q: 'awesome-mcp in:name archived:false', sort: 'stars', pages: 1, perPage: 30 },
+    { q: 'mcp directory in:readme archived:false stars:>20', sort: 'stars', pages: 1, perPage: 30 },
+    { q: 'skills.sh in:readme archived:false', sort: 'updated', pages: 1, perPage: 20 },
+    { q: 'topic:awesome-list mcp OR skills archived:false', sort: 'stars', pages: 1, perPage: 30 }
+  ]
+};
+
+function inferAssetType(repo) {
+  const topics = (repo.topics || []).map(item => String(item).toLowerCase());
+  const blob = `${repo.full_name} ${repo.description || ''} ${topics.join(' ')}`.toLowerCase();
+  if (topics.some(item => item.includes('mcp')) || /\bmcp[- ]server\b/.test(blob) || blob.includes('model context protocol')) return 'plugin';
+  if (topics.some(item => item.includes('skill')) || blob.includes('skill.md') || blob.includes('claude skill')) return 'skill';
+  if (topics.some(item => ['ai-agent', 'ai-agents', 'coding-agent', 'autonomous-agent'].includes(item)) || /\b(coding agent|ai agent)\b/.test(blob)) return 'agent';
+  if (topics.some(item => ['shadcn-ui', 'react-components', 'ui-components', 'component-library', 'ui-library'].includes(item))) return 'components';
+  if (topics.includes('awesome-list') || /\b(directory|registry|awesome mcp|skills\.sh)\b/.test(blob)) return 'website';
+  return null;
+}
+
+function assetSlug(fullName) {
+  return String(fullName || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'item';
+}
+
+async function upsertGithubRepo(repo, at) {
+  await query(
+    `INSERT INTO repos (
+       id, full_name, description, language, topics, stars, forks,
+       created_at, pushed_at, updated_at, archived, deleted, source
+     ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,FALSE,'github')
+     ON CONFLICT (id) DO UPDATE SET
+       full_name = EXCLUDED.full_name,
+       description = EXCLUDED.description,
+       language = EXCLUDED.language,
+       topics = EXCLUDED.topics,
+       stars = EXCLUDED.stars,
+       forks = EXCLUDED.forks,
+       pushed_at = EXCLUDED.pushed_at,
+       updated_at = EXCLUDED.updated_at,
+       archived = EXCLUDED.archived,
+       deleted = FALSE,
+       source = 'github'`,
+    [
+      repo.id,
+      repo.full_name,
+      repo.description || '',
+      repo.language || '',
+      JSON.stringify(repo.topics || []),
+      repo.stargazers_count,
+      repo.forks_count,
+      repo.created_at,
+      repo.pushed_at,
+      repo.updated_at,
+      Boolean(repo.archived)
+    ]
+  );
+  await query(
+    `INSERT INTO snapshots (repo_id, sampled_at, stars, forks, source)
+     VALUES ($1, $2, $3, $4, 'github')
+     ON CONFLICT (repo_id, sampled_at) DO UPDATE SET stars = EXCLUDED.stars, forks = EXCLUDED.forks`,
+    [repo.id, at, repo.stargazers_count, repo.forks_count]
+  );
+}
+
+async function upsertAsset(type, repo) {
+  const slug = assetSlug(repo.full_name);
+  const id = `${type}-${slug}`;
+  const org = String(repo.full_name || '').split('/')[0];
+  const official = OFFICIAL_ORGS.has(org.toLowerCase());
+  const topics = repo.topics || [];
+  const category = topics[0] || type;
+  await query(
+    `INSERT INTO assets (
+       id, type, slug, name, full_name, description, category, category_zh, category_en,
+       official, official_evidence, cluster_id, url, install, language, topics, stars, forks,
+       created_at, pushed_at, recommend_rank, recommend_note_zh, recommend_note_en
+     ) VALUES (
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18,$19,$20,$21,$22,$23
+     )
+     ON CONFLICT (id) DO UPDATE SET
+       name = EXCLUDED.name,
+       full_name = EXCLUDED.full_name,
+       description = EXCLUDED.description,
+       category = EXCLUDED.category,
+       category_zh = EXCLUDED.category_zh,
+       category_en = EXCLUDED.category_en,
+       official = EXCLUDED.official,
+       official_evidence = EXCLUDED.official_evidence,
+       cluster_id = EXCLUDED.cluster_id,
+       url = EXCLUDED.url,
+       language = EXCLUDED.language,
+       topics = EXCLUDED.topics,
+       stars = EXCLUDED.stars,
+       forks = EXCLUDED.forks,
+       pushed_at = EXCLUDED.pushed_at`,
+    [
+      id, type, slug, String(repo.full_name).split('/')[1] || repo.full_name, repo.full_name,
+      repo.description || '', category, category, category, official,
+      official ? `Verified vendor org ${org}` : null, `${type}:${category}`,
+      repo.html_url || `https://github.com/${repo.full_name}`, null, repo.language || '',
+      JSON.stringify(topics), repo.stargazers_count || 0, repo.forks_count || 0,
+      repo.created_at, repo.pushed_at, null, null, null
+    ]
+  );
+  return id;
+}
+
+async function collectTypedAssets(knownRepos) {
+  const counts = {};
+  const extra = new Map();
+  for (const type of ASSET_TYPES) {
+    const found = new Map();
+    for (const repo of knownRepos) {
+      if (inferAssetType(repo) === type) found.set(repo.id, repo);
+    }
+    for (const spec of ASSET_QUERIES[type]) {
+      for (let page = 1; page <= spec.pages; page++) {
+        if (found.size >= MAX_ASSETS_PER_TYPE) break;
+        const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(spec.q)}&sort=${encodeURIComponent(spec.sort)}&order=desc&per_page=${spec.perPage}&page=${page}`;
+        const body = await github(url);
+        for (const repo of body.items || []) {
+          if (!repo?.id || found.has(repo.id)) continue;
+          found.set(repo.id, repo);
+          if (found.size >= MAX_ASSETS_PER_TYPE) break;
+        }
+        await sleep(1200);
+      }
+    }
+    for (const repo of found.values()) {
+      await upsertAsset(type, repo);
+      if (!knownRepos.some(item => item.id === repo.id)) extra.set(repo.id, repo);
+    }
+    counts[type] = found.size;
+  }
+  return { counts, extra: [...extra.values()] };
+}
+
+async function copyRepoMetricsToAssets() {
+  await query(
+    `INSERT INTO asset_daily (asset_id, day, star_created, stars)
+     SELECT a.id, d.day, COALESCE(d.star_created, 0), d.stars
+     FROM assets a
+     JOIN repos r ON lower(r.full_name) = lower(a.full_name)
+     JOIN daily_metrics d ON d.repo_id = r.id
+     ON CONFLICT (asset_id, day) DO UPDATE SET
+       star_created = EXCLUDED.star_created,
+       stars = EXCLUDED.stars`
+  );
+  const today = new Date().toISOString().slice(0, 10);
+  await query(
+    `INSERT INTO asset_daily (asset_id, day, star_created, stars)
+     SELECT id, $1::date, 0, stars FROM assets
+     ON CONFLICT (asset_id, day) DO UPDATE SET stars = EXCLUDED.stars`,
+    [today]
+  );
 }
 
 async function github(url, version = '2022-11-28') {
@@ -168,53 +353,24 @@ export async function collect() {
     found = unique.size;
     const at = new Date().toISOString();
     for (const repo of unique.values()) {
-      await query(
-        `INSERT INTO repos (
-           id, full_name, description, language, topics, stars, forks,
-           created_at, pushed_at, updated_at, archived, deleted, source
-         ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,FALSE,'github')
-         ON CONFLICT (id) DO UPDATE SET
-           full_name = EXCLUDED.full_name,
-           description = EXCLUDED.description,
-           language = EXCLUDED.language,
-           topics = EXCLUDED.topics,
-           stars = EXCLUDED.stars,
-           forks = EXCLUDED.forks,
-           pushed_at = EXCLUDED.pushed_at,
-           updated_at = EXCLUDED.updated_at,
-           archived = EXCLUDED.archived,
-           deleted = FALSE,
-           source = 'github'`,
-        [
-          repo.id,
-          repo.full_name,
-          repo.description || '',
-          repo.language || '',
-          JSON.stringify(repo.topics || []),
-          repo.stargazers_count,
-          repo.forks_count,
-          repo.created_at,
-          repo.pushed_at,
-          repo.updated_at,
-          Boolean(repo.archived)
-        ]
-      );
-      await query(
-        `INSERT INTO snapshots (repo_id, sampled_at, stars, forks, source)
-         VALUES ($1, $2, $3, $4, 'github')
-         ON CONFLICT (repo_id, sampled_at) DO UPDATE SET stars = EXCLUDED.stars, forks = EXCLUDED.forks`,
-        [repo.id, at, repo.stargazers_count, repo.forks_count]
-      );
+      await upsertGithubRepo(repo, at);
       sampled++;
+    }
+
+    const assets = await collectTypedAssets([...unique.values()]);
+    for (const repo of assets.extra) {
+      await upsertGithubRepo(repo, at);
+      unique.set(repo.id, repo);
     }
 
     const history = await syncStarHistory([...unique.values()].map(r => ({ id: r.id, full_name: r.full_name })));
     await rebuildDerivedMetrics();
+    await copyRepoMetricsToAssets();
     await query(
       `UPDATE sync_runs SET finished_at = $1, status = $2, found = $3, sampled = $4, error = $5 WHERE id = $6`,
       [new Date().toISOString(), 'ok', found, sampled, history.failed ? `${history.failed} star histories unavailable` : null, runId]
     );
-    return { found, sampled, history };
+    return { found, sampled, history, assets: assets.counts };
   } catch (e) {
     await query(
       `UPDATE sync_runs SET finished_at = $1, status = $2, found = $3, sampled = $4, error = $5 WHERE id = $6`,
