@@ -112,15 +112,13 @@
 .dialog-overlay { z-index: 90; }
 .dialog-content {
   z-index: 91;
-  overflow: visible;
+  overflow: auto;
   width: min(96vw, 720px);
+  max-height: min(92dvh, 880px);
   padding: clamp(24px, 2.5vw, 42px);
   border-color: #d8d8d8;
   border-radius: 0;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
 }
-.dialog-content::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .dialog-content h2 { margin: 0 52px 8px 0; font-size: clamp(28px, 2.7vw, 38px); font-weight: 660; line-height: 1.1; }
 .dialog-content > p { margin: 0 45px 27px 0; color: #666; font-size: 16px; line-height: 1.5; }
 .dialog-close { top: 22px; right: 22px; width: 40px; height: 40px; border: 1px solid #d8d8d8; background: #fff; }
@@ -133,17 +131,12 @@
 .subscribe-form .field input { min-height: 50px; font-size: 16px; }
 .subscribe-form .primary.wide { width: 100%; min-height: 56px; }
 
-.topic-multi-select { position: relative; width: 100%; z-index: 2; }
+.topic-multi-select { position: relative; width: 100%; }
 .topic-multi-select .design-select-trigger { width: 100%; }
 .topic-multi-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topic-multi-menu {
-  position: absolute;
-  top: calc(100% + 7px);
-  left: 0;
-  right: 0;
-  z-index: 30;
+  z-index: 1200;
   overflow: auto;
-  max-height: min(360px, 45vh);
   border-radius: 0;
 }
 .topic-multi-menu .design-select-item { width: 100%; border: 0; background: transparent; text-align: left; font: inherit; }

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as Tabs from '@radix-ui/react-tabs';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Select from '@radix-ui/react-select';
@@ -42,21 +43,42 @@ export function TopicMultiSelect({
   ariaLabel
 }) {
   const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState(null);
   const rootRef = useRef(null);
+  const menuRef = useRef(null);
   const selected = Array.isArray(value) ? value : [];
   const labels = options.filter(option => selected.includes(option.value)).map(option => option.label);
   useEffect(() => {
     if (!open) return undefined;
+    const place = () => {
+      const box = rootRef.current?.querySelector('.design-select-trigger')?.getBoundingClientRect();
+      if (!box) return;
+      const maxHeight = Math.min(360, Math.round(window.innerHeight * 0.45));
+      const spaceBelow = window.innerHeight - box.bottom - 16;
+      const openUp = spaceBelow < 180 && box.top > spaceBelow;
+      const height = Math.min(maxHeight, Math.max(120, openUp ? box.top - 16 : spaceBelow));
+      setMenuPos({
+        top: openUp ? box.top - 7 - height : box.bottom + 7,
+        left: box.left,
+        width: box.width,
+        maxHeight: height
+      });
+    };
+    place();
     const close = event => {
-      if (rootRef.current?.contains(event.target)) return;
+      if (rootRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
       setOpen(false);
     };
     const escape = event => { if (event.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', close);
     document.addEventListener('keydown', escape);
+    addEventListener('resize', place);
+    addEventListener('scroll', place, true);
     return () => {
       document.removeEventListener('mousedown', close);
       document.removeEventListener('keydown', escape);
+      removeEventListener('resize', place);
+      removeEventListener('scroll', place, true);
     };
   }, [open]);
   const toggle = option => {
@@ -80,12 +102,15 @@ export function TopicMultiSelect({
         <span className="topic-multi-value">{labels.length ? labels.join(', ') : placeholder}</span>
         <SelectChevron />
       </button>
-      {open && (
+      {open && menuPos && createPortal(
         <div
+          ref={menuRef}
           className="design-select-content topic-multi-menu"
           role="listbox"
           aria-multiselectable="true"
           aria-label={ariaLabel}
+          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, width: menuPos.width, minWidth: menuPos.width, maxHeight: menuPos.maxHeight }}
+          onPointerDown={event => event.stopPropagation()}
         >
           <div className="design-select-viewport">
             {options.length ? options.map(option => (
@@ -104,13 +129,18 @@ export function TopicMultiSelect({
               </button>
             )) : <p className="topic-multi-empty">{placeholder}</p>}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
 }
 
-// Adapted from float_ui's 21st.dev Radix newsletter dialog; content is Trend Top's own form.
+function ignoreSubscribeMenu(event) {
+  const node = event.target;
+  if (node instanceof Element && node.closest('.topic-multi-menu')) event.preventDefault();
+}
+
 export function SubscribeDialog({trigger,title,description,children}) {
-  return <Dialog.Root><Dialog.Trigger asChild>{trigger}</Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content"><Dialog.Close className="dialog-close" aria-label={document.documentElement.lang==='zh'?'关闭':'Close'}>×</Dialog.Close><Dialog.Title>{title}</Dialog.Title><Dialog.Description>{description}</Dialog.Description>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>;
+  return <Dialog.Root><Dialog.Trigger asChild>{trigger}</Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content" onPointerDownOutside={ignoreSubscribeMenu} onInteractOutside={ignoreSubscribeMenu} onFocusOutside={ignoreSubscribeMenu}><Dialog.Close className="dialog-close" aria-label={document.documentElement.lang==='zh'?'关闭':'Close'}>×</Dialog.Close><Dialog.Title>{title}</Dialog.Title><Dialog.Description>{description}</Dialog.Description>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>;
 }
