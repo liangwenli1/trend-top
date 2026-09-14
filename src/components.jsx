@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import * as Tabs from '@radix-ui/react-tabs';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Select from '@radix-ui/react-select';
@@ -43,33 +42,21 @@ export function TopicMultiSelect({
   ariaLabel
 }) {
   const [open, setOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState(null);
   const rootRef = useRef(null);
-  const menuRef = useRef(null);
   const selected = Array.isArray(value) ? value : [];
   const labels = options.filter(option => selected.includes(option.value)).map(option => option.label);
   useEffect(() => {
     if (!open) return undefined;
-    const place = () => {
-      const box = rootRef.current?.querySelector('.design-select-trigger')?.getBoundingClientRect();
-      if (!box) return;
-      setMenuPos({ top: box.bottom + 7, left: box.left, width: box.width });
-    };
-    place();
     const close = event => {
-      if (rootRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
+      if (rootRef.current?.contains(event.target)) return;
       setOpen(false);
     };
     const escape = event => { if (event.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', close);
     document.addEventListener('keydown', escape);
-    addEventListener('resize', place);
-    addEventListener('scroll', place, true);
     return () => {
       document.removeEventListener('mousedown', close);
       document.removeEventListener('keydown', escape);
-      removeEventListener('resize', place);
-      removeEventListener('scroll', place, true);
     };
   }, [open]);
   const toggle = option => {
@@ -93,14 +80,12 @@ export function TopicMultiSelect({
         <span className="topic-multi-value">{labels.length ? labels.join(', ') : placeholder}</span>
         <SelectChevron />
       </button>
-      {open && menuPos && createPortal(
+      {open && (
         <div
-          ref={menuRef}
           className="design-select-content topic-multi-menu"
           role="listbox"
           aria-multiselectable="true"
           aria-label={ariaLabel}
-          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, width: menuPos.width, minWidth: menuPos.width }}
         >
           <div className="design-select-viewport">
             {options.length ? options.map(option => (
@@ -111,6 +96,7 @@ export function TopicMultiSelect({
                 role="option"
                 aria-selected={selected.includes(option.value)}
                 data-state={selected.includes(option.value) ? 'checked' : 'unchecked'}
+                onMouseDown={event => event.preventDefault()}
                 onClick={() => toggle(option.value)}
               >
                 <span>{option.label}</span>
@@ -118,8 +104,7 @@ export function TopicMultiSelect({
               </button>
             )) : <p className="topic-multi-empty">{placeholder}</p>}
           </div>
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   );

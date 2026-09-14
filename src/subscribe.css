@@ -112,6 +112,7 @@
 .dialog-overlay { z-index: 90; }
 .dialog-content {
   z-index: 91;
+  overflow: visible;
   width: min(96vw, 720px);
   padding: clamp(24px, 2.5vw, 42px);
   border-color: #d8d8d8;
@@ -132,11 +133,15 @@
 .subscribe-form .field input { min-height: 50px; font-size: 16px; }
 .subscribe-form .primary.wide { width: 100%; min-height: 56px; }
 
-.topic-multi-select { position: relative; width: 100%; }
+.topic-multi-select { position: relative; width: 100%; z-index: 2; }
 .topic-multi-select .design-select-trigger { width: 100%; }
 .topic-multi-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topic-multi-menu {
-  z-index: 1100;
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  right: 0;
+  z-index: 30;
   overflow: auto;
   max-height: min(360px, 45vh);
   border-radius: 0;
