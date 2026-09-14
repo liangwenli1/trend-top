@@ -121,8 +121,11 @@ export function TopicMultiSelect({
                 role="option"
                 aria-selected={selected.includes(option.value)}
                 data-state={selected.includes(option.value) ? 'checked' : 'unchecked'}
-                onMouseDown={event => event.preventDefault()}
-                onClick={() => toggle(option.value)}
+                onPointerDown={event => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  toggle(option.value);
+                }}
               >
                 <span>{option.label}</span>
                 {selected.includes(option.value) && <span className="design-select-check" aria-hidden="true">✓</span>}
@@ -136,9 +139,14 @@ export function TopicMultiSelect({
   );
 }
 
+function eventFromSubscribeMenu(event) {
+  const original = event.detail?.originalEvent ?? event;
+  const path = typeof original.composedPath === 'function' ? original.composedPath() : [];
+  return [...path, original.target, event.target].some(node => node instanceof Element && node.closest('.topic-multi-menu'));
+}
+
 function ignoreSubscribeMenu(event) {
-  const node = event.target;
-  if (node instanceof Element && node.closest('.topic-multi-menu')) event.preventDefault();
+  if (eventFromSubscribeMenu(event)) event.preventDefault();
 }
 
 export function SubscribeDialog({trigger,title,description,children}) {
