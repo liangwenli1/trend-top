@@ -135,31 +135,20 @@
 .topic-multi-select .design-select-trigger { width: 100%; }
 .topic-multi-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topic-multi-menu {
-  display: grid;
-  gap: 6px;
-  max-height: 220px;
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  right: 0;
+  z-index: 30;
   overflow: auto;
-  margin-top: 8px;
-  padding: 8px;
-  border: 1px solid #111;
-  background: #fff;
+  max-height: min(360px, 45vh);
+  border-radius: 0;
 }
-.topic-multi-menu label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 40px;
-  padding: 6px 10px;
-  border: 0;
-  background: #fafafa;
-  color: #222;
-  font-size: 14px;
-  line-height: 1.3;
-  cursor: pointer;
-}
-.topic-multi-menu label.is-checked { background: #efefef; font-weight: 700; }
-.topic-multi-menu input { flex: none; width: 17px; height: 17px; }
-.topic-multi-empty { margin: 6px 4px; color: #737373; font-size: 14px; }
+.topic-multi-menu .design-select-item { width: 100%; border: 0; background: transparent; text-align: left; font: inherit; }
+.topic-multi-menu .design-select-item:hover,
+.topic-multi-menu .design-select-item:focus-visible { background: #111; color: #fff; }
+.topic-multi-menu .design-select-item[data-state=checked]:not(:hover):not(:focus-visible) { background: #efefef; font-weight: 700; }
+.topic-multi-empty { margin: 10px; color: #737373; font-size: 14px; }
 
 @media (max-width: 1000px) {
   .subscribe-cta-inner { grid-template-columns: 1fr; gap: 35px; }

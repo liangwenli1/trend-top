@@ -81,17 +81,23 @@ export function TopicMultiSelect({
         <SelectChevron />
       </button>
       {open && (
-        <div className="topic-multi-menu" role="listbox" aria-multiselectable="true" aria-label={ariaLabel}>
-          {options.length ? options.map(option => (
-            <label key={option.value} className={selected.includes(option.value) ? 'is-checked' : ''}>
-              <input
-                type="checkbox"
-                checked={selected.includes(option.value)}
-                onChange={() => toggle(option.value)}
-              />
-              <span>{option.label}</span>
-            </label>
-          )) : <p className="topic-multi-empty">{placeholder}</p>}
+        <div className="design-select-content topic-multi-menu" role="listbox" aria-multiselectable="true" aria-label={ariaLabel}>
+          <div className="design-select-viewport">
+            {options.length ? options.map(option => (
+              <button
+                type="button"
+                key={option.value}
+                className="design-select-item"
+                role="option"
+                aria-selected={selected.includes(option.value)}
+                data-state={selected.includes(option.value) ? 'checked' : 'unchecked'}
+                onClick={() => toggle(option.value)}
+              >
+                <span>{option.label}</span>
+                {selected.includes(option.value) && <span className="design-select-check" aria-hidden="true">✓</span>}
+              </button>
+            )) : <p className="topic-multi-empty">{placeholder}</p>}
+          </div>
         </div>
       )}
     </div>
