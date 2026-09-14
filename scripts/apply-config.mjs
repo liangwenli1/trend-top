@@ -14,7 +14,6 @@ const database = config.database ?? {};
 const site = config.site ?? {};
 const github = config.github ?? {};
 const admin = config.admin ?? {};
-const resend = config.resend ?? {};
 const smtp = config.smtp ?? {};
 const host = process.env.DATABASE_HOST || database.host || 'db';
 const user = encodeURIComponent(database.user || 'trend_top');
@@ -36,13 +35,9 @@ const env = {
   CONFIG_PATH: path
 };
 
-if (resend.apiKey && resend.from) {
-  env.RESEND_API_KEY = resend.apiKey;
-  env.RESEND_FROM = resend.from;
-}
 if (smtp.host && smtp.fromEmail) {
   env.SMTP_HOST = smtp.host;
-  env.SMTP_PORT = String(smtp.port || 587);
+  env.SMTP_PORT = String(smtp.port || 465);
   env.SMTP_USER = smtp.username || '';
   env.SMTP_PASS = smtp.password || '';
   env.SMTP_FROM = smtp.fromName ? `${smtp.fromName} <${smtp.fromEmail}>` : smtp.fromEmail;
