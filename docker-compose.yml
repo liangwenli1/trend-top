@@ -1,0 +1,65 @@
+# Isolated from meridian-travel-guide (3000 / 5432), vaultwarden (8000), and cloudflared.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: trend_top
+      POSTGRES_USER: trend_top
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run ./deploy.sh so config.json is loaded}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trend_top -d trend_top"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${APP_PORT:-3010}:3001"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3001"
+      DATA_MODE: live
+      CONFIG_PATH: /opt/trend-top/config.json
+    volumes:
+      - /opt/trend-top:/opt/trend-top:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  scheduler:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATA_MODE: live
+      CONFIG_PATH: /opt/trend-top/config.json
+    volumes:
+      - /opt/trend-top:/opt/trend-top:ro
+    entrypoint: ["node", "scripts/apply-config.mjs"]
+    command: ["node", "scripts/scheduler.mjs"]
+
+volumes:
+  postgres_data:

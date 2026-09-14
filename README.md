@@ -35,6 +35,22 @@ For example, in a cron-compatible scheduler (UTC):
 
 Database tables migrate automatically on startup. Keep the Postgres volume (or `data/pglite`) on persistent storage. Email delivery failures are recorded and retried up to three times. Resend digest requests use a stable idempotency key to avoid duplicate sends during retries within Resend's 24-hour window. A delivery is claimed atomically before send, so overlapping workers cannot both send it. If a worker crashes during send, the record remains `sending` for operator review rather than risking an automatic duplicate.
 
+## Docker
+
+Same layout as meridian-travel-guide: secrets live in `/opt/trend-top/config.json`, not in git. Host port **3010** and an internal Postgres (not published) avoid the existing 3000 / 5432 / 8000 bindings.
+
+On the VPS:
+
+```bash
+sudo mkdir -p /opt/trend-top
+sudo cp config.json /opt/trend-top/config.json
+sudo nano /opt/trend-top/config.json   # fill every CHANGE_ME_* field
+./deploy.sh -d --build
+docker compose exec app node scripts/apply-config.mjs node server/jobs.js collect
+```
+
+`deploy.sh` reads the config, exports `POSTGRES_PASSWORD` and `APP_PORT`, then runs `docker compose up`. Point Cloudflare Tunnel or `deploy/nginx.conf` at `http://127.0.0.1:3010`. The scheduler collects at 02:00 UTC and sends the digest each hour.
+
 ## Ranking methodology
 
 `hot` = 45% log-scaled period Star gain + 20% Star gain divided by starting Stars plus 100 + 15% log-scaled Fork gain + 20% recent push recency. Each input is percentile-normalized against the filtered candidate set in SQL (`period_metrics` + window functions). In live mode, Star gain is **new Stars created** in GitHub's official history day buckets, expanded into `daily_metrics` on collect so 1/7/30-day windows are complete after the first run. This is not the net difference in total Stars and its day boundaries may differ from UTC. Fork gain remains a net difference between our daily snapshots. While Fork gain is unavailable, its 15% component is omitted and the remaining weights are renormalized. Demo mode uses synthetic snapshot net changes for both. The period can be 1, 7, or 30 days; snapshot boundaries require a match within 6 hours. Anomalous gains over three times a previous comparable period (and over 100 Stars) get no hot score pending review. `rising` sorts absolute gain; `new` limits age to 90 days and minimum 20 Stars; `ai` filters by published topic keyword evidence before hot ranking; `stars` and `forks` sort current cumulative totals. Search, language, topic, age and pagination act on these result sets. Without complete history, gains and score are null, shown as “数据不足 / Insufficient data.”

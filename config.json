@@ -1,0 +1,31 @@
+{
+  "site": {
+    "origin": "https://CHANGE_ME_DOMAIN",
+    "port": 3010
+  },
+  "database": {
+    "host": "db",
+    "port": 5432,
+    "name": "trend_top",
+    "user": "trend_top",
+    "password": "CHANGE_ME_POSTGRES_PASSWORD"
+  },
+  "github": {
+    "token": "CHANGE_ME_GITHUB_TOKEN"
+  },
+  "admin": {
+    "token": "CHANGE_ME_ADMIN_TOKEN"
+  },
+  "resend": {
+    "apiKey": "",
+    "from": ""
+  },
+  "smtp": {
+    "host": "",
+    "port": 587,
+    "username": "",
+    "password": "",
+    "fromEmail": "",
+    "fromName": "Trend Top"
+  }
+}
