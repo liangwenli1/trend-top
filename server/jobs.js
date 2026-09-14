@@ -7,8 +7,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const token = () => crypto.randomBytes(24).toString('hex');
 const hash = x => crypto.createHash('sha256').update(x).digest('hex');
 
-const MAX_REPOS = 400;
-const MAX_ASSETS_PER_TYPE = 80;
+const MAX_REPOS = 1000;
+const MAX_ASSETS_PER_TYPE = 200;
 const MEGA_STARS = 80000;
 const MEGA_CAP = 40;
 const LANGUAGES = [
@@ -37,20 +37,20 @@ export function discoveryPlan(now = new Date()) {
   const created90 = dateBefore(90, now);
   const pushed180 = dateBefore(180, now);
   const queries = [
-    { q: `stars:50..80000 pushed:>${pushed180} archived:false`, sort: 'updated', pages: 3, perPage: 50 },
-    { q: `created:>${created90} stars:5..5000 archived:false`, sort: 'stars', pages: 2, perPage: 50 },
-    { q: 'topic:ai stars:>20 archived:false', sort: 'updated', pages: 2, perPage: 50 },
+    { q: `stars:50..80000 pushed:>${pushed180} archived:false`, sort: 'updated', pages: 5, perPage: 100 },
+    { q: `created:>${created90} stars:5..5000 archived:false`, sort: 'stars', pages: 3, perPage: 100 },
+    { q: 'topic:ai stars:>20 archived:false', sort: 'updated', pages: 3, perPage: 100 },
     ...languages.map(language => ({
       q: `language:${language} stars:20..40000 pushed:>${pushed180} archived:false`,
       sort: 'updated',
-      pages: 1,
-      perPage: 50
+      pages: 2,
+      perPage: 100
     })),
     ...topics.map(topic => ({
       q: `topic:${topic} stars:>10 archived:false`,
       sort: 'updated',
-      pages: 1,
-      perPage: 50
+      pages: 2,
+      perPage: 100
     }))
   ];
   return { queries, languages, topics, maxRepos: MAX_REPOS, megaCap: MEGA_CAP };
@@ -76,31 +76,31 @@ const OFFICIAL_ORGS = new Set([
 ]);
 const ASSET_QUERIES = {
   skill: [
-    { q: 'SKILL.md in:readme archived:false stars:>1', sort: 'updated', pages: 2, perPage: 50 },
-    { q: 'topic:claude-skills archived:false', sort: 'stars', pages: 1, perPage: 50 },
-    { q: 'topic:agent-skills archived:false', sort: 'stars', pages: 1, perPage: 50 },
-    { q: '"claude skill" in:readme archived:false stars:>2', sort: 'updated', pages: 1, perPage: 50 }
+    { q: 'SKILL.md in:readme archived:false stars:>1', sort: 'updated', pages: 3, perPage: 100 },
+    { q: 'topic:claude-skills archived:false', sort: 'stars', pages: 2, perPage: 100 },
+    { q: 'topic:agent-skills archived:false', sort: 'stars', pages: 2, perPage: 100 },
+    { q: '"claude skill" in:readme archived:false stars:>2', sort: 'updated', pages: 2, perPage: 100 }
   ],
   plugin: [
-    { q: 'topic:mcp-server archived:false', sort: 'stars', pages: 2, perPage: 50 },
-    { q: 'mcp-server in:name archived:false stars:>3', sort: 'updated', pages: 2, perPage: 50 },
-    { q: 'topic:mcp archived:false stars:>15', sort: 'updated', pages: 1, perPage: 50 }
+    { q: 'topic:mcp-server archived:false', sort: 'stars', pages: 3, perPage: 100 },
+    { q: 'mcp-server in:name archived:false stars:>3', sort: 'updated', pages: 3, perPage: 100 },
+    { q: 'topic:mcp archived:false stars:>15', sort: 'updated', pages: 2, perPage: 100 }
   ],
   agent: [
-    { q: 'topic:ai-agents archived:false stars:>15', sort: 'stars', pages: 2, perPage: 50 },
-    { q: 'topic:coding-agent archived:false', sort: 'updated', pages: 1, perPage: 50 },
-    { q: '"coding agent" in:readme archived:false stars:>20', sort: 'updated', pages: 1, perPage: 50 }
+    { q: 'topic:ai-agents archived:false stars:>15', sort: 'stars', pages: 3, perPage: 100 },
+    { q: 'topic:coding-agent archived:false', sort: 'updated', pages: 2, perPage: 100 },
+    { q: '"coding agent" in:readme archived:false stars:>20', sort: 'updated', pages: 2, perPage: 100 }
   ],
   components: [
-    { q: 'topic:shadcn-ui archived:false', sort: 'stars', pages: 1, perPage: 50 },
-    { q: 'topic:react-components archived:false stars:>40', sort: 'updated', pages: 2, perPage: 50 },
-    { q: 'topic:ui-library language:TypeScript archived:false stars:>30', sort: 'updated', pages: 1, perPage: 50 }
+    { q: 'topic:shadcn-ui archived:false', sort: 'stars', pages: 2, perPage: 100 },
+    { q: 'topic:react-components archived:false stars:>40', sort: 'updated', pages: 3, perPage: 100 },
+    { q: 'topic:ui-library language:TypeScript archived:false stars:>30', sort: 'updated', pages: 2, perPage: 100 }
   ],
   website: [
-    { q: 'awesome-mcp in:name archived:false', sort: 'stars', pages: 1, perPage: 30 },
-    { q: 'mcp directory in:readme archived:false stars:>20', sort: 'stars', pages: 1, perPage: 30 },
-    { q: 'skills.sh in:readme archived:false', sort: 'updated', pages: 1, perPage: 20 },
-    { q: 'topic:awesome-list mcp OR skills archived:false', sort: 'stars', pages: 1, perPage: 30 }
+    { q: 'awesome-mcp in:name archived:false', sort: 'stars', pages: 2, perPage: 100 },
+    { q: 'mcp directory in:readme archived:false stars:>20', sort: 'stars', pages: 2, perPage: 100 },
+    { q: 'skills.sh in:readme archived:false', sort: 'updated', pages: 2, perPage: 50 },
+    { q: 'topic:awesome-list mcp OR skills archived:false', sort: 'stars', pages: 2, perPage: 100 }
   ]
 };
 
@@ -319,7 +319,7 @@ export async function collect() {
   let found = 0, sampled = 0;
   try {
     const unique = new Map();
-    const knownLimit = process.env.GITHUB_TOKEN ? 250 : 50;
+    const knownLimit = process.env.GITHUB_TOKEN ? 600 : 80;
     const known = await many(
       `SELECT id, full_name FROM repos
        WHERE source = 'github' AND deleted = FALSE

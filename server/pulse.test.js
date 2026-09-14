@@ -68,7 +68,7 @@ test('discovery plan paginates, rotates, and lowers the star floor', () => {
   assert.ok(plan.queries.some(q => /stars:50\.\./.test(q.q)));
   assert.equal(plan.languages.length, 5);
   assert.equal(plan.topics.length, 6);
-  assert.equal(plan.maxRepos, 400);
+  assert.equal(plan.maxRepos, 1000);
   const later = discoveryPlan(new Date('2026-09-21T00:00:00Z'));
   assert.notDeepEqual(plan.languages, later.languages);
   const unique = new Map();
