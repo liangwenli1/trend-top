@@ -36,7 +36,7 @@ export function TrendPanel({l,type='github-repo',board,period,language,topic,age
   const dayTitle=data?.growthBasis==='star_created'?t.daily:t.dailyNet;
   const topTitle=data?.metric==='stars'?t.topStars:data?.metric==='forks'?t.topForks:t.top;
   return <section className="trend-panel" aria-label={t.heading}>
-    <div className="visuals-heading"><div><h2>{t.heading}</h2><p>{boardLabel} · {periodLabel}</p></div><span className="data-badge">{data?.source==='demo'?t.demo:t.live}</span></div>
+    <div className="visuals-heading"><div><h2>{t.heading}</h2><p>{boardLabel} · {periodLabel}</p></div></div>
     <div className="chart-grid">
       <article className="chart-card chart-card-with-project"><div className="chart-card-head"><h3>{t.growth}</h3></div>
         {historyReady?<><LeadingProject name={data.leader} t={t}/><div className="chart-container" aria-hidden="true"><ResponsiveContainer width="100%" height="100%"><LineChart data={points} margin={{top:10,right:8,bottom:0,left:0}}><Axis l={l}/><Tooltip formatter={value=>[format(value,l),t.stars]} contentStyle={tipStyle}/><Line type="linear" dataKey="gain" stroke="#315fd9" strokeWidth={2.5} connectNulls={false} dot={points.length<=8?{r:3,fill:'#315fd9'}:false} isAnimationActive={false}/></LineChart></ResponsiveContainer></div><DataTable title={t.growth} points={points} keyName="gain" l={l} t={t}/></>:<Empty>{t.noHistory}</Empty>}

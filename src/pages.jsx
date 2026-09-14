@@ -117,7 +117,7 @@ export function TypeTrending({ l, t, type, navigate }) {
           <p className="hero-copy">{copy.sub}</p>
         </div>
         <div className="trending-lead-meta">
-          <div className="data-status">{loading ? t.loading : data?.source === 'demo' ? t.demo : t.live}</div>
+          <div className="data-status">{loading ? t.loading : data?.updatedAt ? `${t.updated} ${new Date(data.updatedAt).toLocaleDateString(l === 'zh' ? 'zh-CN' : 'en-US')}` : ''}</div>
           <div className="hero-stat"><b>{fmt(data?.total, l)}</b><span>{typeLabel(type, l)}</span></div>
         </div>
       </header>
@@ -244,7 +244,7 @@ export function TypeHome({ l, t, navigate }) {
   const types = data?.types?.length ? data.types : TYPES.map(id => ({ id, ...TYPE_META[id], count: null }));
   const total = data?.types?.reduce((sum, item) => sum + (item.count || 0), 0);
   const maxCount = Math.max(1, ...types.map(item => item.count || 0));
-  const sourceLabel = data?.source === 'demo' ? t.demo : data?.source === 'live' ? (zh ? '当前收录' : 'Current catalog') : data ? (zh ? '数据暂不可用' : 'Data unavailable') : (zh ? '正在读取数据…' : 'Loading data…');
+  const sourceLabel = !data ? (zh ? '正在读取数据…' : 'Loading data…') : data.source === 'unavailable' ? (zh ? '数据暂不可用' : 'Data unavailable') : (zh ? '当前收录' : 'Current catalog');
   const bars = chart?.bars?.slice(0, 4) || [];
   const maxGain = Math.max(1, ...bars.map(item => item.value || 0));
   const go = path => event => navigate(event, path);
@@ -270,7 +270,7 @@ export function TypeHome({ l, t, navigate }) {
             <strong>{fmt(item.count, l)}</strong>
           </li>)}
         </ul>
-        <p className="home-landscape-note">{data?.source === 'demo' ? t.sample : zh ? '按类型分别统计；具体数据以各榜单为准。' : 'Counted by type. See each board for its underlying data.'}</p>
+        <p className="home-landscape-note">{zh ? '按类型分别统计；具体数据以各榜单为准。' : 'Counted by type. See each board for its underlying data.'}</p>
       </aside>
     </section>
 
@@ -278,7 +278,7 @@ export function TypeHome({ l, t, navigate }) {
       <div className="home-section-heading"><p className="home-kicker">01 / {zh ? '看见变化' : 'See the movement'}</p><h2 id="home-proof-title">{zh ? '不只看总量，更看最近谁在增长。' : 'Look beyond totals. See what is moving now.'}</h2><p>{zh ? '以仓库榜为例，增长曲线和同榜项目的增量放在一起，快速看出趋势与差异。' : 'A sample from the repository board pairs a growth curve with the projects beside it, so the direction and the differences are easy to read.'}</p></div>
       <div className="home-proof-grid">
         <div className="home-proof-chart">
-          <div className="home-proof-card-title"><span>{zh ? '仓库增长示例' : 'Repository growth example'}</span><span>{chart?.source === 'demo' ? t.demo : chart?.source === 'github' ? t.live : sourceLabel}</span></div>
+          <div className="home-proof-card-title"><span>{zh ? '仓库增长' : 'Repository growth'}</span><span>{zh ? '近 7 天' : 'Last 7 days'}</span></div>
           <HomeGrowthChart chart={chart} l={l} loading={!chart && !chartError} error={chartError} />
           {chart?.leader && <p className="home-proof-caption">{zh ? '领跑项目' : 'Leading project'} <a href={itemPath(l, 'github-repo', chart.bars?.[0]?.id || chart.leader)} onClick={go(itemPath(l, 'github-repo', chart.bars?.[0]?.id || chart.leader))}>{chart.leader} ↗</a></p>}
         </div>
@@ -291,7 +291,7 @@ export function TypeHome({ l, t, navigate }) {
           <a className="home-proof-link" href={typePath(l, 'github-repo', 'charts')} onClick={go(typePath(l, 'github-repo', 'charts'))}>{zh ? '查看完整图表' : 'Explore all charts'} <span aria-hidden="true">↗</span></a>
         </div>
       </div>
-      <p className="home-proof-footnote">{zh ? '图表示例来自仓库热门榜。演示模式下为模拟的 Star 净增。' : 'Example from the repository Hot board. Demo-mode Star gains are illustrative net changes.'}</p>
+      <p className="home-proof-footnote">{zh ? '图表来自仓库热门榜。' : 'From the repository Hot board.'}</p>
     </section>
 
     <section className="home-process home-reveal" aria-labelledby="home-process-title">
@@ -509,7 +509,7 @@ export function ItemDetail({ l, t, type, id, navigate }) {
   return (
     <main className="simple-page repo-detail">
       <BackBtn href={typePath(l, type, 'ranking')} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, 'ranking')); }}>{l === 'zh' ? '返回排行' : 'Back to rankings'}</BackBtn>
-      <p className="eyebrow">{item.mode === 'demo' ? t.demo : t.live} · {typeLabel(type, l)}</p>
+      <p className="eyebrow">{typeLabel(type, l)}</p>
       <h1>{item.full_name}</h1>
       <p className="detail-description">{item.description}</p>
       <div className="repo-tags">
