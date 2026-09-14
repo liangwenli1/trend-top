@@ -9,6 +9,9 @@
 .account-tabs button { min-width: 120px; padding: 14px 18px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #666; font: inherit; font-weight: 700; cursor: pointer; }
 .account-tabs button[aria-current=page] { border-bottom-color: #315fd9; color: #171717; }
 .account-text-button { align-self: flex-start; padding: 4px 0; border: 0; background: none; color: #315fd9; font: inherit; font-weight: 650; text-decoration: underline; cursor: pointer; }
+.account-code-inputs { display: flex; gap: clamp(5px, 1vw, 10px); width: min(100%, 400px); }
+.subscribe-form .field .account-code-inputs input { flex: 1 1 0; width: 0; min-width: 0; max-width: 58px; height: 56px; min-height: 56px; padding: 0; border: 1px solid #cfcfcf; border-radius: 0; background: #fff; color: #171717; font-size: 24px; font-weight: 700; line-height: 1; text-align: center; font-variant-numeric: tabular-nums; }
+.subscribe-form .field .account-code-inputs input:focus { border-color: #315fd9; box-shadow: 0 0 0 1px #315fd9; }
 .account-type-grid, .account-board-grid { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .account-hint, .account-signed-in, .account-status { margin: 0; color: #666; font-size: 15px; line-height: 1.5; }
 .account-signed-in { margin: 0 0 24px; font-weight: 700; }

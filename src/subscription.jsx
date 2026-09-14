@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { DesignSelect, TopicMultiSelect } from './components.jsx';
 import { TYPES, typeLabel } from './catalog.js';
 import './account.css';
@@ -25,17 +25,73 @@ const request = async (url, method = 'GET', body) => {
   return result;
 };
 
+const emptyCode = () => Array(6).fill('');
+
+function EmailCodeInput({ digits, onChange, zh }) {
+  const inputs = useRef([]);
+  const updateDigits = (start, text) => {
+    const values = String(text).replace(/\D/g, '');
+    if (!values) return;
+    const first = values.length >= 6 ? 0 : start;
+    onChange(previous => {
+      const next = [...previous];
+      for (let offset = 0; offset < values.length && first + offset < 6; offset++) next[first + offset] = values[offset];
+      return next;
+    });
+    inputs.current[Math.min(first + values.length, 5)]?.focus();
+  };
+  const clearDigit = index => onChange(previous => previous.map((value, position) => position === index ? '' : value));
+  const keyDown = (event, index) => {
+    if (event.key === 'Backspace') {
+      event.preventDefault();
+      const target = digits[index] ? index : Math.max(0, index - 1);
+      clearDigit(target);
+      inputs.current[target]?.focus();
+    } else if (event.key === 'Delete') {
+      event.preventDefault();
+      clearDigit(index);
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      inputs.current[Math.max(0, Math.min(5, index + (event.key === 'ArrowLeft' ? -1 : 1)))]?.focus();
+    }
+  };
+  return <div className="field account-code-field">
+    <label htmlFor="account-code-0">{zh ? '邮件验证码' : 'Email code'}</label>
+    <div className="account-code-inputs" role="group" aria-label={zh ? '六位邮件验证码' : 'Six-digit email code'}>
+      {digits.map((digit, index) => <input
+        key={index}
+        ref={element => { inputs.current[index] = element; }}
+        id={`account-code-${index}`}
+        type="text"
+        inputMode="numeric"
+        autoComplete={index === 0 ? 'one-time-code' : 'off'}
+        aria-label={zh ? `第 ${index + 1} 位，共 6 位` : `Digit ${index + 1} of 6`}
+        required
+        value={digit}
+        onChange={event => {
+          const value = event.target.value.replace(/\D/g, '');
+          if (value) updateDigits(index, value.length === 2 && digits[index] ? value.slice(-1) : value);
+          else clearDigit(index);
+        }}
+        onPaste={event => { event.preventDefault(); updateDigits(index, event.clipboardData.getData('text')); }}
+        onKeyDown={event => keyDown(event, index)}
+      />)}
+    </div>
+  </div>;
+}
+
 export function AuthForm({ l, onAuthenticated, initialMode = 'register' }) {
   const zh = l === 'zh';
   const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
+  const [codeDigits, setCodeDigits] = useState(emptyCode);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const changeMode = next => { setMode(next); setMessage(''); setCode(''); };
+  const changeMode = next => { setMode(next); setMessage(''); setCodeDigits(emptyCode()); };
   const submit = async event => {
     event.preventDefault();
+    const code = codeDigits.join('');
     setBusy(true); setMessage('');
     try {
       if (mode === 'register') {
@@ -55,7 +111,7 @@ export function AuthForm({ l, onAuthenticated, initialMode = 'register' }) {
       } else if (mode === 'reset') {
         await request('/api/auth/password/reset', 'POST', { email, code, password });
         setMode('login');
-        setCode(''); setPassword('');
+        setCodeDigits(emptyCode()); setPassword('');
         setMessage(zh ? '密码已重设，请登录。' : 'Password reset. Please sign in.');
       }
     } catch (error) { setMessage(error.message); }
@@ -71,7 +127,7 @@ export function AuthForm({ l, onAuthenticated, initialMode = 'register' }) {
     <form onSubmit={submit} className="subscribe-form">
       <div className="field"><label htmlFor="account-email">{zh ? '邮箱' : 'Email'}</label><input id="account-email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com"/></div>
       {needsPassword && <div className="field"><label htmlFor="account-password">{mode === 'reset' ? (zh ? '新密码' : 'New password') : (zh ? '密码' : 'Password')}</label><input id="account-password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required minLength={mode === 'login' ? undefined : 10} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} placeholder={zh ? '至少 10 个字符' : 'At least 10 characters'}/></div>}
-      {needsCode && <div className="field"><label htmlFor="account-code">{zh ? '邮件验证码' : 'Email code'}</label><input id="account-code" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={code} onChange={event => setCode(event.target.value)} placeholder="000000"/></div>}
+      {needsCode && <EmailCodeInput digits={codeDigits} onChange={setCodeDigits} zh={zh}/>}
       <button type="submit" className="primary wide" disabled={busy}>{busy ? '…' : mode === 'register' ? (zh ? '发送注册验证码' : 'Send registration code') : mode === 'verify' ? (zh ? '验证并注册' : 'Verify and register') : mode === 'login' ? (zh ? '登录' : 'Sign in') : mode === 'reset-request' ? (zh ? '发送重设验证码' : 'Send reset code') : (zh ? '重设密码' : 'Reset password')}</button>
       {mode === 'login' && <button type="button" className="account-text-button" onClick={() => changeMode('reset-request')}>{zh ? '忘记密码？' : 'Forgot password?'}</button>}
       {mode === 'verify' && <button type="button" className="account-text-button" onClick={() => changeMode('register')}>{zh ? '重新发送验证码' : 'Send another code'}</button>}
