@@ -1,6 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {SearchInput,SubscribeDialog,DesignSelect,TopicMultiSelect} from './components.jsx';
+import {SearchInput,SubscribeDialog,DesignSelect,TopicMultiSelect,TopicDialog} from './components.jsx';
 import {AccountSubscribeForm,AccountPage} from './subscription.jsx';
 import {TYPES, boardNames, typeLabel, typePath, itemPath} from './catalog.js';
 import {ViewBar, TypeHome, TypeTrending, CategoryPage, ComparePage, SearchPage, ItemDetail, HeaderSearch, TagActions} from './pages.jsx';
@@ -152,7 +152,7 @@ function App(){
   };
   const dismissLanguageSuggestion=()=>{sessionStorage.setItem('locale-suggestion-dismissed','1');setLanguageSuggestion(null)};
   const showViewBar=Boolean(type)&&!['search','method','verify','manage','unsubscribe','account'].includes(page);
-  return <><header className="site-header"><div className="header-inner"><a className="brand" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)}>Trend Top</a><HeaderSearch l={l} t={t} navigate={navigate} q={page==='search'?params().get('q')||'':''}/><nav className="header-actions" aria-label={l==='zh'?'站点导航':'Site navigation'}><a className="header-link" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)} aria-current={page==='home'?'page':undefined}>{l==='zh'?'首页':'Home'}</a><a className="header-link" href={subscribePath} onClick={openSubscribe}>{l==='zh'?'订阅':'Subscribe'}</a><a className="header-link" href={`/${l}/account`} onClick={e=>navigate(e,`/${l}/account`)} aria-current={page==='account'?'page':undefined}>{l==='zh'?'账户':'Account'}</a><a className="header-link" aria-current={page==='method'?'page':undefined} href={`/${l}/method`} onClick={e=>navigate(e,`/${l}/method`)}>{t.method}</a></nav></div>{showViewBar&&<ViewBar l={l} type={type} page={page} query={page==='charts'?location.search.slice(1):chartsQuery} navigate={navigate}/>}</header>
+  return <><header className="site-header"><div className="header-inner"><a className="brand" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)}>Trend Top</a><HeaderSearch l={l} t={t} navigate={navigate} q={page==='search'?params().get('q')||'':''}/><nav className="header-actions" aria-label={l==='zh'?'站点导航':'Site navigation'}><a className="header-link" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)} aria-current={page==='home'?'page':undefined}>{l==='zh'?'首页':'Home'}</a><a className="header-link" href={subscribePath} onClick={openSubscribe}>{l==='zh'?'订阅':'Subscribe'}</a><a className="header-link" aria-current={page==='method'?'page':undefined} href={`/${l}/method`} onClick={e=>navigate(e,`/${l}/method`)}>{t.method}</a><a className="header-link header-signin" href={`/${l}/account`} onClick={e=>navigate(e,`/${l}/account`)} aria-current={page==='account'?'page':undefined}>{l==='zh'?'登录':'Sign in'}</a></nav></div>{showViewBar&&<ViewBar l={l} type={type} page={page} query={page==='charts'?location.search.slice(1):chartsQuery} navigate={navigate}/>}</header>
   {languageSuggestion&&<aside className="locale-suggestion" role="status"><span>{languageSuggestion==='zh'?'浏览器语言为中文，是否切换到简体中文？':'Your browser uses English. Switch to English?'}</span><button type="button" className="locale-choice" onClick={switchLanguage}>{languageSuggestion==='zh'?'切换中文':'Switch to English'}</button><button type="button" className="locale-dismiss" onClick={dismissLanguageSuggestion} aria-label={languageSuggestion==='zh'?'关闭语言提示':'Dismiss language suggestion'}>×</button></aside>}
   {page==='account'?<AccountPage l={l}/>:page==='verify'?<Verify l={l} t={t}/>:page==='manage'||page==='unsubscribe'?<Manage l={l} t={t} unsubscribe={page==='unsubscribe'}/>:page==='method'?<Method l={l} t={t}/>:page==='search'?<SearchPage l={l} t={t} q={params().get('q')||''} typeFilter={params().get('type')||''} navigate={navigate}/>:page==='home'?<><TypeHome l={l} t={t} navigate={navigate}/><SubscribeCallout l={l} t={t} data={{mailReady:true}} board="hot" type="github-repo"/></>:page==='trending'?<><TypeTrending l={l} t={t} type={type} navigate={navigate}/><SubscribeCallout l={l} t={t} data={{mailReady:true}} board="hot" type={type}/></>:page==='category'?<CategoryPage l={l} t={t} type={type} category={route.category} navigate={navigate}/>:page==='compare'?<ComparePage l={l} t={t} type={type} ids={params().get('ids')||''} navigate={navigate}/>:page==='detail'?<ItemDetail l={l} t={t} type={type} id={route.id} navigate={navigate}/>:page==='charts'?<React.Suspense fallback={<main className="simple-page">{t.loading}</main>}><AnalyticsPage l={l} names={namesForType} updatePath={updatePath} type={type} key={type}/></React.Suspense>:<Home l={l} t={t} rankingOnly={rankingPage} type={type} officialOnly={page==='official'} initialBoard={params().get('board')||(page==='official'?'official':'hot')} autoBoard={false} onChartsQueryChange={setFooterChartsQuery} key={path}/>}
   <SiteFooter l={l} t={t} onLanguageSwitch={switchLanguage} onSubscribe={openSubscribe} subscribePath={subscribePath} chartsQuery={chartsQuery} rankingQuery={rankingQuery} type={activeType}/></>;
@@ -276,12 +276,12 @@ function visibleTopics(item){
 }
 
 function RepoRow({r,l,t,board,type='github-repo',period='week',language='',topic='',age='',q='',officialOnly=false}){
-  const [showAllTopics,setShowAllTopics]=useState(false);
   const key=board==='stars'?r.stars:board==='forks'?r.forks:['hot','ai','topics','official'].includes(board)?r.score:r.gain;
   const change=r.gain!==null&&r.prevGain!==null?r.gain-r.prevGain:null;
   const id=r.slug||r.id;
   const topics=visibleTopics(r);
   const orderedTopics=topic&&topics.includes(topic)?[topic,...topics.filter(value=>value!==topic)]:topics;
+  const displayTopics=orderedTopics.slice(0,5);
   const navigate=(e,path,query)=>{e.preventDefault();updatePath(path,query);};
   const filterQuery=(overrides={})=>{
     const next=new URLSearchParams();
@@ -297,7 +297,41 @@ function RepoRow({r,l,t,board,type='github-repo',period='week',language='',topic
   const filterPath=typePath(l,type,'ranking');
   const topicLink=(value)=>filterQuery({topic:value});
   const languageLink=(value)=>filterQuery({language:value});
-  return <article className="repo-row"><div className="repo-identity"><span className="rank-num">{String(r.rank).padStart(2,'0')}</span><div><a className="repo-name" href={itemPath(l,type,id)} onClick={e=>{e.preventDefault();updatePath(itemPath(l,type,id))}}>{r.full_name} <span>↗</span></a><p>{r.description||'—'}</p><TagActions l={l} type={type} item={r} navigate={navigate}/></div></div><div className="repo-topic-column" aria-label={t.topic}><small className="mobile-column-label">{t.topic}</small>{orderedTopics.length?<div className="repo-topic-list">{orderedTopics.slice(0,1).map(value=><a className="repo-topic repo-filter-tag" title={value} key={value} href={`${filterPath}?${topicLink(value)}`} onClick={e=>navigate(e,filterPath,topicLink(value))}>{value}</a>)}{orderedTopics.length>1&&<div className="repo-topic-more-wrap"><button className="repo-topic repo-topic-more" type="button" aria-expanded={showAllTopics} aria-label={l==='zh'?`展开其余 ${orderedTopics.length-1} 个主题`:`Show ${orderedTopics.length-1} more topics`} onClick={()=>setShowAllTopics(value=>!value)}>+{orderedTopics.length-1}</button>{showAllTopics&&<div className="repo-topic-popover">{orderedTopics.slice(1).map(value=><a key={value} title={value} href={`${filterPath}?${topicLink(value)}`} onClick={e=>navigate(e,filterPath,topicLink(value))}>{value}</a>)}</div>}</div>}</div>:<span className="repo-topic-empty" aria-hidden="true">—</span>}</div><div className="repo-language-column" aria-label={t.language}><small className="mobile-column-label">{t.language}</small>{r.language?<a className="repo-language repo-filter-tag" href={`${filterPath}?${languageLink(r.language)}`} onClick={e=>navigate(e,filterPath,languageLink(r.language))}>{r.language}</a>:<span className="repo-topic-empty" aria-hidden="true">—</span>}</div><div className="metric primary-metric"><small>{board==='stars'?t.stars:board==='forks'?t.forks:['hot','ai','topics','official'].includes(board)?t.score:t.gain}</small><strong>{key===null?(r.anomaly?t.anomaly:t.insufficient):fmt(key,l)}</strong></div><div className="metric"><small>{t.stars}</small><strong>{fmt(r.stars,l)}</strong></div><div className="metric"><small>{t.gain}</small><strong className={r.gain!==null?'positive':''}>{r.gain===null?t.insufficient:`+${fmt(r.gain,l)}`}</strong>{change!==null&&<em className={`period-change ${change>=0?'is-positive':'is-negative'}`}><span className="period-change-arrow" aria-hidden="true">{change>=0?'↑':'↓'}</span><span className="period-change-label">{t.trend}</span><strong>{change>=0?'+':''}{fmt(change,l)}</strong></em>}</div><div className="metric"><small>{t.forks}</small><strong>{fmt(r.forks,l)}</strong></div></article>
+  return <article className="repo-row">
+    <div className="repo-identity">
+      <span className="rank-num">{String(r.rank).padStart(2,'0')}</span>
+      <div>
+        <a className="repo-name" href={itemPath(l,type,id)} onClick={e=>{e.preventDefault();updatePath(itemPath(l,type,id))}}>{r.full_name} <span>↗</span></a>
+        <p>{r.description||'—'}</p>
+        <TagActions l={l} type={type} item={r} navigate={navigate}/>
+      </div>
+    </div>
+    <div className="repo-topic-column" aria-label={t.topic}>
+      <small className="mobile-column-label">{t.topic}</small>
+      {displayTopics.length
+        ? <div className="repo-topic-list">
+            {displayTopics.slice(0,3).map(value=><a className="repo-topic repo-filter-tag" title={value} key={value} href={`${filterPath}?${topicLink(value)}`} onClick={e=>navigate(e,filterPath,topicLink(value))}>{value}</a>)}
+            {displayTopics.length>3&&<TopicDialog
+              trigger={<button className="repo-topic repo-topic-more" type="button" aria-label={l==='zh'?`查看另外 ${displayTopics.length-3} 个主题`:`View ${displayTopics.length-3} more topics`}>+{displayTopics.length-3}</button>}
+              topics={displayTopics.slice(3)}
+              title={l==='zh'?'更多主题':'More topics'}
+              description={l==='zh'?'选择主题，查看对应排名。':'Choose a topic to see its rankings.'}
+              hrefFor={value=>`${filterPath}?${topicLink(value)}`}
+              onSelect={value=>updatePath(filterPath,topicLink(value))}
+              locale={l}
+            />}
+          </div>
+        : <span className="repo-topic-empty" aria-hidden="true">—</span>}
+    </div>
+    <div className="repo-language-column" aria-label={t.language}>
+      <small className="mobile-column-label">{t.language}</small>
+      {r.language?<a className="repo-language repo-filter-tag" href={`${filterPath}?${languageLink(r.language)}`} onClick={e=>navigate(e,filterPath,languageLink(r.language))}>{r.language}</a>:<span className="repo-topic-empty" aria-hidden="true">—</span>}
+    </div>
+    <div className="metric primary-metric"><small>{board==='stars'?t.stars:board==='forks'?t.forks:['hot','ai','topics','official'].includes(board)?t.score:t.gain}</small><strong>{key===null?(r.anomaly?t.anomaly:t.insufficient):fmt(key,l)}</strong></div>
+    <div className="metric"><small>{t.stars}</small><strong>{fmt(r.stars,l)}</strong></div>
+    <div className="metric"><small>{t.gain}</small><strong className={r.gain!==null?'positive':''}>{r.gain===null?t.insufficient:`+${fmt(r.gain,l)}`}</strong>{change!==null&&<em className={`period-change ${change>=0?'is-positive':'is-negative'}`}><span className="period-change-arrow" aria-hidden="true">{change>=0?'↑':'↓'}</span><span className="period-change-label">{t.trend}</span><strong>{change>=0?'+':''}{fmt(change,l)}</strong></em>}</div>
+    <div className="metric"><small>{t.forks}</small><strong>{fmt(r.forks,l)}</strong></div>
+  </article>
 }
 
 function SubscribeForm({l,t,currentBoard}){

@@ -601,6 +601,9 @@ html.is-scrolling .analytics-page-nav,
 .header-search-clear{border:0;background:none;color:#737373;font-size:18px;line-height:1;cursor:pointer}
 .header-link{display:inline-flex;align-items:center;min-height:44px;font-size:16px;white-space:nowrap}
 .header-link[aria-current=page]{color:#111;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:7px}
+.header-actions .header-signin{min-height:44px;padding:0 18px;border:1px solid #111;border-radius:0;background:#111;color:#fff;font-weight:700;text-decoration:none}
+.header-actions .header-signin:hover,.header-actions .header-signin:focus-visible{border-color:#315fd9;background:#315fd9;color:#fff}
+.header-actions .header-signin[aria-current=page]{color:#fff;text-decoration:none}
 .hero-ranking-link{display:inline-flex;align-items:center;min-height:52px;padding:10px 2px;border-bottom:2px solid #111;color:#111;font-size:17px;font-weight:680;line-height:1.3;text-decoration:none}
 .hero-ranking-link:hover{color:#555;border-color:#555}
 .ranking-page{min-height:0}
@@ -686,11 +689,12 @@ html.is-scrolling .analytics-page-nav,
 @media(max-width:700px){.page-deck>.subscribe-cta{min-height:0;padding:54px 0 62px}}
 @media(max-width:420px){.header-link{font-size:13px;padding:0 2px}}
 @media(max-width:340px){.header-link{font-size:12px;padding:0 1px}}
+@media(max-width:600px){.header-actions .header-signin{min-height:38px;padding:0 12px}}
 
 /* Keep repository topics and languages in dedicated, centered columns. */
 .ranking-page .list-header,
 .ranking-page .repo-row{
-  grid-template-columns:minmax(0,1fr) minmax(190px,.36fr) minmax(130px,.22fr) 105px 105px minmax(150px,.28fr) 105px;
+  grid-template-columns:minmax(0,1fr) minmax(230px,.42fr) minmax(130px,.22fr) 105px 105px minmax(150px,.28fr) 105px;
   column-gap:16px;
 }
 .ranking-page .list-header span:not(:first-child),
@@ -709,18 +713,19 @@ html.is-scrolling .analytics-page-nav,
   display:flex;
   align-items:center;
   justify-content:center;
-  flex-wrap:nowrap;
+  flex-wrap:wrap;
   gap:6px;
   min-width:0;
   max-width:100%;
   position:relative;
 }
-.repo-topic-list > a{flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;max-width:calc(100% - 42px)}
-.repo-topic-more-wrap{position:relative;flex:none}
+.repo-topic-list > a{flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .repo-topic-more{font:inherit;cursor:pointer}
-.repo-topic-popover{position:absolute;z-index:20;top:calc(100% + 8px);right:0;display:flex;flex-wrap:wrap;gap:7px;min-width:240px;max-width:min(380px,80vw);max-height:220px;overflow:auto;padding:12px;border:1px solid #d8d8d8;background:#fff;box-shadow:0 12px 25px #0002}
-.repo-topic-popover a{display:inline-flex;max-width:100%;padding:5px 8px;border:1px solid #d8d8d8;color:#333;font-size:12px;text-decoration:none;overflow-wrap:anywhere}
-.repo-topic-popover a:hover,.repo-topic-popover a:focus-visible{border-color:#111;background:#111;color:#fff}
+.dialog-content.topic-dialog{z-index:101;width:min(92vw,590px);max-height:min(80vh,700px);border-radius:0}
+.dialog-content.topic-dialog h2{margin-right:50px;font-size:28px}
+.topic-dialog-list{display:flex;flex-wrap:wrap;gap:10px;max-height:50vh;overflow:auto}
+.topic-dialog-list a{display:inline-flex;align-items:center;min-height:40px;max-width:100%;padding:8px 12px;border:1px solid #d8d8d8;color:#111;font-size:15px;line-height:1.25;text-decoration:none;overflow-wrap:anywhere}
+.topic-dialog-list a:hover,.topic-dialog-list a:focus-visible{border-color:#111;background:#111;color:#fff}
 .repo-topic{
   display:inline-flex;
   align-items:center;

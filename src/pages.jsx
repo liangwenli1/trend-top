@@ -515,7 +515,7 @@ export function ItemDetail({ l, t, type, id, navigate }) {
       <div className="repo-tags">
         {item.official && <span className="source-tag">{l === 'zh' ? '官方' : 'Official'}</span>}
         {showCategory && <a className="tag-btn detail-category-tag" href={typePath(l, type, `c/${encodeURIComponent(category)}`)} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, `c/${encodeURIComponent(category)}`)); }}>{item.categoryLabel?.[l === 'zh' ? 'zh' : 'en'] || category}</a>}
-        {topicValues.slice(0, 6).map(value => <a className="tag-btn detail-topic-tag" key={value} href={topicHref(value)} onClick={e => { e.preventDefault(); navigate(e, topicHref(value)); }}>{value}</a>)}
+        {topicValues.slice(0, 5).map(value => <a className="tag-btn detail-topic-tag" key={value} href={topicHref(value)} onClick={e => { e.preventDefault(); navigate(e, topicHref(value)); }}>{value}</a>)}
         <a className="tag-btn tag-btn-action" href={typePath(l, type, 'compare', `ids=${encodeURIComponent(item.slug || item.id)}`)} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, 'compare'), `ids=${encodeURIComponent(item.slug || item.id)}`); }}>{l === 'zh' ? '对比同类' : 'Compare'}</a>
       </div>
       {item.officialEvidence && <p>{l === 'zh' ? '官方依据：' : 'Official evidence: '}{item.officialEvidence}</p>}

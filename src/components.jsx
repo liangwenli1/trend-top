@@ -110,3 +110,27 @@ export function TopicMultiSelect({
 export function SubscribeDialog({trigger,title,description,children}) {
   return <Dialog.Root><Dialog.Trigger asChild>{trigger}</Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content"><Dialog.Close className="dialog-close" aria-label={document.documentElement.lang==='zh'?'关闭':'Close'}>×</Dialog.Close><Dialog.Title>{title}</Dialog.Title><Dialog.Description>{description}</Dialog.Description>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>;
 }
+
+export function TopicDialog({trigger,topics,title,description,hrefFor,onSelect,locale='en'}) {
+  const [open,setOpen]=useState(false);
+  const selectTopic=(event,topic)=>{
+    if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+    event.preventDefault();
+    setOpen(false);
+    onSelect(topic);
+  };
+  return <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>
+    <Dialog.Portal>
+      <Dialog.Overlay className="dialog-overlay"/>
+      <Dialog.Content className="dialog-content topic-dialog">
+        <Dialog.Close className="dialog-close" aria-label={locale==='zh'?'关闭':'Close'}>×</Dialog.Close>
+        <Dialog.Title>{title}</Dialog.Title>
+        <Dialog.Description>{description}</Dialog.Description>
+        <div className="topic-dialog-list">
+          {topics.map(topic=><a key={topic} href={hrefFor(topic)} onClick={event=>selectTopic(event,topic)}>{topic}</a>)}
+        </div>
+      </Dialog.Content>
+    </Dialog.Portal>
+  </Dialog.Root>;
+}
