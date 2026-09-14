@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   locale TEXT NOT NULL,
   boards JSONB NOT NULL,
   language TEXT,
+  languages JSONB NOT NULL DEFAULT '[]'::jsonb,
   topic TEXT,
   topics JSONB NOT NULL DEFAULT '[]'::jsonb,
   send_hour INTEGER NOT NULL,

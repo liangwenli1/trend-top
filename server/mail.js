@@ -59,18 +59,21 @@ export async function buildDigest(sub, manageToken) {
   const names = asJson(sub.boards, []);
   const topics = (Array.isArray(asJson(sub.topics, null)) ? asJson(sub.topics, []) : (sub.topic ? [sub.topic] : []))
     .map(value => String(value ?? '').trim()).filter(Boolean);
+  const languages = (Array.isArray(asJson(sub.languages, null)) ? asJson(sub.languages, []) : (sub.language ? String(sub.language).split(',') : []))
+    .map(value => String(value ?? '').trim()).filter(Boolean);
   const topicQuery = topics.join(',');
+  const languageQuery = languages.join(',');
   const sections = [];
   for (const board of names) {
     if (!boards[board]) continue;
-    const ranking = await getRankings({ board, period: 'day', language: sub.language || '', topic: topicQuery, topics, limit: 5 });
+    const ranking = await getRankings({ board, period: 'day', language: languageQuery, languages, topic: topicQuery, topics, limit: 5 });
     if (!ranking.updatedAt) continue;
     sections.push({ board, name: boards[board][sub.locale], items: ranking.items, updatedAt: ranking.updatedAt });
   }
   const manage = `${base}/${sub.locale}/manage?token=${encodeURIComponent(manageToken)}`;
   const unsubscribe = `${base}/${sub.locale}/unsubscribe?token=${encodeURIComponent(manageToken)}`;
   const oneClick = `${base}/api/one-click?token=${encodeURIComponent(manageToken)}`;
-  const boardLink = board => `${base}/${sub.locale}/board/${board}?${new URLSearchParams({ period: 'day', language: sub.language || '', topic: topicQuery, topics: topicQuery })}`;
+  const boardLink = board => `${base}/${sub.locale}/board/${board}?${new URLSearchParams({ period: 'day', language: languageQuery, languages: languageQuery, topic: topicQuery, topics: topicQuery })}`;
   const num = new Intl.NumberFormat(sub.locale === 'zh' ? 'zh-CN' : 'en-US');
   const localTime = at => new Intl.DateTimeFormat(sub.locale === 'zh' ? 'zh-CN' : 'en-US', { timeZone: sub.timezone, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(at));
   const subject = zh ? 'Trend Top 每日摘要' : 'Trend Top daily digest';

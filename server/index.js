@@ -28,6 +28,10 @@ const storedTopics = sub => {
   const parsed = asJson(sub?.topics, null);
   return Array.isArray(parsed) ? normalizeTopics(parsed) : normalizeTopics(undefined, sub?.topic || '');
 };
+const storedLanguages = sub => {
+  const parsed = asJson(sub?.languages, null);
+  return Array.isArray(parsed) && parsed.length ? normalizeTopics(parsed) : normalizeTopics(undefined, sub?.language || '');
+};
 const fail = (res, status, message) => res.status(status).json({ error: message });
 const bursts = new Map();
 function rate(req, res, next) {
@@ -133,6 +137,7 @@ app.post('/api/subscriptions', rate, async (req, res) => {
   const b = req.body || {}, email = String(b.email || '').trim().toLowerCase(), locale = b.locale === 'en' ? 'en' : 'zh';
   const selected = Array.isArray(b.boards) ? [...new Set(b.boards.filter(x => boards[x]))] : [];
   const topics = normalizeTopics(b.topics, b.topic);
+  const languages = normalizeTopics(b.languages, b.language);
   const hour = Number(b.sendHour), zone = String(b.timezone || '');
   if (!emailRe.test(email) || email.length > 254) return fail(res, 400, 'Invalid email address');
   if (!selected.length) return fail(res, 400, 'Select at least one board');
@@ -143,16 +148,17 @@ app.post('/api/subscriptions', rate, async (req, res) => {
   }
   const sub = {
     id, email, locale, boards: JSON.stringify(selected),
-    language: String(b.language || '').slice(0, 50),
+    language: languages[0] || '',
+    languages: JSON.stringify(languages),
     topic: topics[0] || '',
     topics: JSON.stringify(topics),
     send_hour: hour, timezone: zone, status: 'pending'
   };
   await query(
     `INSERT INTO subscriptions (
-       id, email, locale, boards, language, topic, topics, send_hour, timezone, status, verify_hash, manage_hash, created_at
-     ) VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13)`,
-    [id, email, locale, sub.boards, sub.language, sub.topic, sub.topics, hour, zone, 'pending', hash(verify), encryptManageToken(manage), new Date().toISOString()]
+       id, email, locale, boards, language, languages, topic, topics, send_hour, timezone, status, verify_hash, manage_hash, created_at
+     ) VALUES ($1,$2,$3,$4::jsonb,$5,$6::jsonb,$7,$8::jsonb,$9,$10,$11,$12,$13,$14)`,
+    [id, email, locale, sub.boards, sub.language, sub.languages, sub.topic, sub.topics, hour, zone, 'pending', hash(verify), encryptManageToken(manage), new Date().toISOString()]
   );
   try {
     await sendVerification(sub, `${id}.${verify}`);
@@ -176,7 +182,8 @@ app.get('/api/manage', async (req, res) => {
     email: sub.email,
     locale: sub.locale,
     boards: asJson(sub.boards, []),
-    language: sub.language,
+    language: storedLanguages(sub)[0] || sub.language || '',
+    languages: storedLanguages(sub),
     topic: sub.topic || storedTopics(sub)[0] || '',
     topics: storedTopics(sub),
     sendHour: asNumber(sub.send_hour),
@@ -194,15 +201,19 @@ app.patch('/api/manage', async (req, res) => {
   const topics = b.topics === undefined && b.topic === undefined
     ? storedTopics(sub)
     : normalizeTopics(b.topics, b.topic);
+  const languages = b.languages === undefined && b.language === undefined
+    ? storedLanguages(sub)
+    : normalizeTopics(b.languages, b.language);
   if (!selected.length || !Number.isInteger(hour) || hour < 0 || hour > 23 || !validZone(zone)) return fail(res, 400, 'Invalid settings');
   const status = ['active', 'paused', 'cancelled'].includes(b.status) ? b.status : sub.status;
   if (sub.status === 'cancelled' && status !== 'cancelled') return fail(res, 409, 'Cancelled subscription cannot be resumed');
   await query(
-    `UPDATE subscriptions SET locale = $1, boards = $2::jsonb, language = $3, topic = $4, topics = $5::jsonb, send_hour = $6, timezone = $7, status = $8 WHERE id = $9`,
+    `UPDATE subscriptions SET locale = $1, boards = $2::jsonb, language = $3, languages = $4::jsonb, topic = $5, topics = $6::jsonb, send_hour = $7, timezone = $8, status = $9 WHERE id = $10`,
     [
       b.locale === 'en' ? 'en' : b.locale === 'zh' ? 'zh' : sub.locale,
       JSON.stringify(selected),
-      String(b.language ?? sub.language).slice(0, 50),
+      languages[0] || '',
+      JSON.stringify(languages),
       topics[0] || '',
       JSON.stringify(topics),
       hour, zone, status, sub.id

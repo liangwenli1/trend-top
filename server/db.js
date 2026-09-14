@@ -85,6 +85,7 @@ async function init() {
   await adapter.exec(schemaSql);
   // Keep existing deployments compatible with the multi-topic subscription form.
   await adapter.exec("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS topics JSONB NOT NULL DEFAULT '[]'::jsonb");
+  await adapter.exec("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS languages JSONB NOT NULL DEFAULT '[]'::jsonb");
   if (dataSource() === 'demo') {
     await seedDemo();
     const { seedCatalog } = await import('./catalog.js');

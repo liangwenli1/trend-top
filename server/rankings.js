@@ -38,7 +38,7 @@ function pctExpr(orderSql) {
   END`;
 }
 
-function rankingCte(params, { board, language, topic, topics, q, age, endpoint }) {
+function rankingCte(params, { board, language, languages, topic, topics, q, age, endpoint }) {
   let sql = `
     WITH filtered AS (
       SELECT
@@ -52,9 +52,16 @@ function rankingCte(params, { board, language, topic, topics, q, age, endpoint }
         ON p.repo_id = r.id AND p.period = $2 AND p.source = $1
       WHERE r.deleted = FALSE AND r.archived = FALSE AND r.source = $1`;
 
-  if (language) {
-    params.push(language);
+  const languageValues = filterValues(languages?.length ? languages : language);
+  if (languageValues.length === 1) {
+    params.push(languageValues[0]);
     sql += ` AND lower(r.language) = lower($${params.length})`;
+  } else if (languageValues.length > 1) {
+    params.push(JSON.stringify(languageValues));
+    sql += ` AND EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text($${params.length}::jsonb) l(lang)
+      WHERE lower(r.language) = lower(l.lang)
+    )`;
   }
   const topicValues = filterValues(topics?.length ? topics : topic);
   if (topicValues.length === 1) {
@@ -238,7 +245,7 @@ export async function getFilters() {
 }
 
 export async function getRankings({
-  board = 'hot', period = 'week', language = '', topic = '', topics = [], age = '', q = '', page = 1, limit = 10
+  board = 'hot', period = 'week', language = '', languages = [], topic = '', topics = [], age = '', q = '', page = 1, limit = 10
 } = {}) {
   if (!boards[board]) board = 'hot';
   if (!DAYS[period]) period = 'week';
@@ -257,7 +264,7 @@ export async function getRankings({
   const offset = (safePage - 1) * safeLimit;
   const metric = boards[board].metric;
   const params = [source, period, endpoint.toISOString()];
-  const cte = rankingCte(params, { board, language, topic, topics, q, age, endpoint });
+  const cte = rankingCte(params, { board, language, languages, topic, topics, q, age, endpoint });
   const extra = metric === 'score'
     ? 's.score IS NOT NULL'
     : metric === 'gain'
