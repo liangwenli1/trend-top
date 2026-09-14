@@ -46,7 +46,7 @@ sudo mkdir -p /opt/trend-top
 sudo cp config.json /opt/trend-top/config.json
 sudo nano /opt/trend-top/config.json   # fill every CHANGE_ME_* field
 ./deploy.sh -d --build
-docker compose exec app node scripts/apply-config.mjs node server/jobs.js collect
+./deploy.sh collect
 ```
 
 `deploy.sh` reads the config, exports `POSTGRES_PASSWORD` and `APP_PORT`, then runs `docker compose up`. The app is published on port **3010** (all interfaces). Optional `deploy/nginx.conf` proxies that port. The scheduler collects at 02:00 UTC and sends the digest each hour.

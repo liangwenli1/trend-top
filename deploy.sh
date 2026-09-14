@@ -20,4 +20,8 @@ case "$POSTGRES_PASSWORD" in
     ;;
 esac
 
+if [ "${1:-}" = "collect" ]; then
+  exec docker compose exec app node scripts/apply-config.mjs node server/jobs.js collect
+fi
+
 exec docker compose up "$@"
