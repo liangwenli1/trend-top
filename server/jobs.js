@@ -1,7 +1,8 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
 import { asNumber, many, one, query, ready, rebuildDerivedMetrics } from './db.js';
-import { sendMail, buildDigest } from './mail.js';
+import { sendMail } from './mail.js';
+import { buildDigest } from './digest.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const token = () => crypto.randomBytes(24).toString('hex');
@@ -409,7 +410,7 @@ export async function digest({ force = false } = {}) {
       'SELECT * FROM deliveries WHERE subscription_id = $1 AND local_date = $2',
       [sub.id, date]
     );
-    if (!delivery || delivery.status === 'sent' || delivery.status === 'sending' || (delivery.status === 'failed' && asNumber(delivery.attempts) >= 3)) continue;
+    if (!delivery || delivery.status === 'sent' || delivery.status === 'skipped' || delivery.status === 'sending' || (delivery.status === 'failed' && asNumber(delivery.attempts) >= 3)) continue;
     const claim = await query(
       `UPDATE deliveries SET status = 'sending', attempts = attempts + 1
        WHERE id = $1 AND status IN ('pending', 'failed')
@@ -420,6 +421,10 @@ export async function digest({ force = false } = {}) {
     try {
       const raw = decryptManageToken(sub.manage_hash);
       const mail = await buildDigest(sub, raw);
+      if (!mail.sections.length) {
+        await query('UPDATE deliveries SET status = $1, last_error = NULL WHERE id = $2', ['skipped', delivery.id]);
+        continue;
+      }
       await sendMail(sub.email, mail.subject, mail.text, mail.html, {
         'List-Unsubscribe': `<${mail.oneClick}>`,
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'

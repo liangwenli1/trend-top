@@ -42,9 +42,11 @@ export function TopicMultiSelect({
   ariaLabel
 }) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const rootRef = useRef(null);
   const selected = Array.isArray(value) ? value : [];
   const labels = options.filter(option => selected.includes(option.value)).map(option => option.label);
+  const visibleOptions = options.filter(option => String(option.label).toLowerCase().includes(search.trim().toLowerCase()));
   useEffect(() => {
     if (!open) return undefined;
     const close = event => {
@@ -82,8 +84,9 @@ export function TopicMultiSelect({
       </button>
       {open && (
         <div className="design-select-content topic-multi-menu" role="listbox" aria-multiselectable="true" aria-label={ariaLabel}>
+          {options.length > 16 && <input className="topic-multi-search" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder={document.documentElement.lang === 'zh' ? '搜索选项' : 'Search options'} aria-label={document.documentElement.lang === 'zh' ? '搜索选项' : 'Search options'}/>}
           <div className="design-select-viewport">
-            {options.length ? options.map(option => (
+            {visibleOptions.length ? visibleOptions.map(option => (
               <button
                 type="button"
                 key={option.value}

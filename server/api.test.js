@@ -10,7 +10,7 @@ process.env.PGLITE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pulse-api-'));
 
 const { app } = await import('./index.js');
 const { ready, one } = await import('./db.js');
-const { digest } = await import('./jobs.js');
+const { digest, decryptManageToken } = await import('./jobs.js');
 await ready;
 
 test('verification gates delivery and management controls the subscription', async () => {
@@ -52,7 +52,9 @@ test('verification gates delivery and management controls the subscription', asy
     const mail = (await one('SELECT text FROM outbox ORDER BY id DESC LIMIT 1')).text;
     assert.match(mail, /近期热门/);
     assert.match(mail, /AI 热门/);
-    const manage = decodeURIComponent(mail.match(/\/zh\/manage\?token=([^\s]+)/)[1]);
+    assert.match(mail, /\/zh\/account/);
+    assert.doesNotMatch(mail, /\/zh\/manage\?token=/);
+    const manage = decryptManageToken((await one("SELECT manage_hash FROM subscriptions WHERE email = 'hello@example.invalid'")).manage_hash);
     assert.equal((await request('/api/manage?token=' + encodeURIComponent(manage))).data.status, 'active');
     assert.equal((await request('/api/manage', 'PATCH', { token: manage, status: 'paused', boards: ['ai'], sendHour: 10, timezone: 'UTC' })).data.status, 'paused');
     const oneClick = await request('/api/one-click?token=' + encodeURIComponent(manage), 'POST');
@@ -63,4 +65,50 @@ test('verification gates delivery and management controls the subscription', asy
   } finally {
     server.close();
   }
+});
+
+test('email-code registration, login, and account-managed digest cover all six types', async () => {
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const email = 'account@example.invalid', password = 'a secure test password';
+  let cookie = '';
+  const request = async (url, method = 'GET', body, signedIn = false) => {
+    const response = await fetch(base + url, {
+      method,
+      headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(signedIn ? { Cookie: cookie } : {}) },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    if (response.headers.get('set-cookie')) cookie = response.headers.get('set-cookie').split(';')[0];
+    return { status: response.status, data: await response.json() };
+  };
+  try {
+    assert.equal((await request('/api/subscription')).status, 401);
+    assert.equal((await request('/api/auth/register', 'POST', { email, password, locale: 'en' })).status, 200);
+    const text = (await one('SELECT text FROM outbox WHERE to_email = $1 ORDER BY id DESC LIMIT 1', [email])).text;
+    const code = text.match(/code: (\d{6})/)[1];
+    assert.equal((await request('/api/auth/register/verify', 'POST', { email, code: '000000' })).status, 400);
+    const verified = await request('/api/auth/register/verify', 'POST', { email, code });
+    assert.equal(verified.status, 200);
+    assert.equal(verified.data.user.email, email);
+    assert.equal((await request('/api/auth/me', 'GET', undefined, true)).data.user.email, email);
+    const filters = await request('/api/subscription-filters?types=skill,plugin');
+    assert.ok(filters.data.topics.includes('ocr'));
+    const types = ['skill', 'plugin', 'agent', 'components', 'website', 'github-repo'];
+    const saved = await request('/api/subscription', 'PUT', { types, boards: ['hot'], languages: [], topics: [], sendHour: 9, timezone: 'UTC', locale: 'en' }, true);
+    assert.equal(saved.status, 200);
+    assert.deepEqual(saved.data.subscription.types, types);
+    assert.equal((await request('/api/subscription', 'GET', undefined, true)).data.subscription.status, 'active');
+    const delivery = await digest({ force: true });
+    assert.equal(delivery.sent, 1);
+    const mail = (await one('SELECT * FROM outbox WHERE to_email = $1 ORDER BY id DESC LIMIT 1', [email]));
+    for (const label of ['Skills', 'Plugins', 'Agents', 'Components', 'Websites', 'Repositories']) assert.match(mail.text, new RegExp(label));
+    assert.match(mail.html, /<table role="presentation"/);
+    assert.match(mail.html, /\/en\/account/);
+    assert.doesNotMatch(mail.html, /\/en\/manage\?token=/);
+    assert.equal((await request('/api/subscription/status', 'PATCH', { status: 'paused' }, true)).data.status, 'paused');
+    assert.equal((await request('/api/auth/logout', 'POST', {}, true)).status, 200);
+    assert.equal((await request('/api/subscription', 'GET', undefined, true)).status, 401);
+    assert.equal((await request('/api/auth/login', 'POST', { email, password })).status, 200);
+    assert.equal((await request('/api/subscription', 'GET', undefined, true)).data.subscription.status, 'paused');
+  } finally { server.close(); }
 });

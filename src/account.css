@@ -1,0 +1,18 @@
+.account-page { max-width: 1180px; padding-top: clamp(46px, 6vw, 95px); padding-bottom: 100px; }
+.account-page-head { max-width: 850px; margin-bottom: 42px; }
+.account-page-head h1 { margin: 12px 0 16px; font-size: clamp(44px, 5vw, 78px); letter-spacing: -.055em; line-height: 1.05; }
+.account-page-head > p:last-child { color: #666; font-size: clamp(18px, 1.3vw, 23px); line-height: 1.5; }
+.account-kicker { margin: 0; color: #315fd9; font-size: 14px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
+.account-page-card { max-width: 850px; padding: clamp(22px, 3vw, 46px); border: 1px solid #dedede; background: #fff; }
+.account-user { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 30px; padding-bottom: 22px; border-bottom: 1px solid #dedede; font-size: 18px; }
+.account-tabs { display: flex; gap: 0; margin: 0 0 24px; border-bottom: 1px solid #dedede; }
+.account-tabs button { min-width: 120px; padding: 14px 18px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #666; font: inherit; font-weight: 700; cursor: pointer; }
+.account-tabs button[aria-current=page] { border-bottom-color: #315fd9; color: #171717; }
+.account-text-button { align-self: flex-start; padding: 4px 0; border: 0; background: none; color: #315fd9; font: inherit; font-weight: 650; text-decoration: underline; cursor: pointer; }
+.account-type-grid, .account-board-grid { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.account-hint, .account-signed-in, .account-status { margin: 0; color: #666; font-size: 15px; line-height: 1.5; }
+.account-signed-in { margin: 0 0 24px; font-weight: 700; }
+.account-status { color: #315fd9; font-weight: 700; }
+.account-status-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.account-status-actions button { min-height: 46px; padding: 10px 18px; }
+@media(max-width:640px){.account-page { padding: 40px 18px 80px; }.account-type-grid, .account-board-grid { grid-template-columns: 1fr; }.account-page-card { padding: 20px; }}

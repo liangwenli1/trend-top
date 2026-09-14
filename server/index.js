@@ -12,6 +12,8 @@ import {
 } from './catalog.js';
 import { mailReady, sendVerification } from './mail.js';
 import { collect, digest, encryptManageToken, decryptManageToken, token, hash } from './jobs.js';
+import { registerAuthRoutes } from './auth.js';
+import { registerSubscriptionRoutes } from './subscriptions.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -59,6 +61,8 @@ app.get('/api/health', async (_req, res) => {
   res.json({ ok: true, mode: demo ? 'demo' : 'live', db: dbKind() });
 });
 app.get('/api/boards', (_req, res) => res.json({ boards, mode: demo ? 'demo' : 'live' }));
+registerAuthRoutes(app);
+registerSubscriptionRoutes(app);
 app.get('/api/filters', async (_req, res) => res.json(await getFilters()));
 app.get('/api/rankings', async (req, res) => res.json({ ...await getRankings(req.query), mailReady: demo || mailReady() }));
 app.get('/api/chart', async (req, res) => res.json(await getChart(req.query)));

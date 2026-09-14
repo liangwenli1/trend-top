@@ -281,9 +281,16 @@ export async function getCatalogFilters(type) {
      FROM assets WHERE type = $1 GROUP BY category ORDER BY count DESC, category`,
     [type]
   );
+  const topics = await many(
+    `SELECT topic AS name, COUNT(*)::int AS count
+     FROM assets a, LATERAL jsonb_array_elements_text(a.topics) AS topic
+     WHERE a.type = $1 AND topic <> ''
+     GROUP BY topic ORDER BY count DESC, topic LIMIT 80`,
+    [type]
+  );
   return {
     languages: languages.map(r => r.name),
-    topics: categories.map(r => r.id),
+    topics: topics.map(r => r.name),
     categories: categories.map(r => ({ id: r.id, zh: r.zh, en: r.en, count: asNumber(r.count) }))
   };
 }
@@ -329,19 +336,19 @@ export async function getCatalogRankings(type, query = {}) {
   }
   if (topicValues.length === 1) {
     params.push(topicValues[0]);
-    sql += ` AND (category = $${params.length} OR EXISTS (
+    sql += ` AND EXISTS (
       SELECT 1 FROM jsonb_array_elements_text(topics) t(topic)
-      WHERE lower(t.topic) LIKE '%' || lower($${params.length}) || '%'
-    ))`;
+      WHERE lower(t.topic) = lower($${params.length})
+    )`;
   } else if (topicValues.length > 1) {
     params.push(JSON.stringify(topicValues));
-    sql += ` AND (category IN (SELECT value FROM jsonb_array_elements_text($${params.length}::jsonb)) OR EXISTS (
+    sql += ` AND EXISTS (
       SELECT 1 FROM jsonb_array_elements_text(topics) t(topic)
       WHERE EXISTS (
         SELECT 1 FROM jsonb_array_elements_text($${params.length}::jsonb) f(value)
-        WHERE lower(t.topic) LIKE '%' || lower(f.value) || '%'
+        WHERE lower(t.topic) = lower(f.value)
       )
-    ))`;
+    )`;
   }
   if (q) {
     params.push(q);

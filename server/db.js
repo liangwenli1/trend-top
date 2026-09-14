@@ -86,6 +86,9 @@ async function init() {
   // Keep existing deployments compatible with the multi-topic subscription form.
   await adapter.exec("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS topics JSONB NOT NULL DEFAULT '[]'::jsonb");
   await adapter.exec("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS languages JSONB NOT NULL DEFAULT '[]'::jsonb");
+  await adapter.exec("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS user_id TEXT");
+  await adapter.exec("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS types JSONB NOT NULL DEFAULT '[\"github-repo\"]'::jsonb");
+  await adapter.exec('CREATE INDEX IF NOT EXISTS subscriptions_user_idx ON subscriptions (user_id)');
   if (dataSource() === 'demo') {
     await seedDemo();
     const { seedCatalog } = await import('./catalog.js');
@@ -236,8 +239,10 @@ export async function expandStarHistoryToDaily(repoId = null) {
 export async function applySnapshotsToDaily() {
   await query(`
     INSERT INTO daily_metrics (repo_id, day, source, stars, forks)
-    SELECT repo_id, (timezone('UTC', sampled_at))::date, source, stars, forks
+    SELECT DISTINCT ON (repo_id, (timezone('UTC', sampled_at))::date, source)
+      repo_id, (timezone('UTC', sampled_at))::date, source, stars, forks
     FROM snapshots
+    ORDER BY repo_id, (timezone('UTC', sampled_at))::date, source, sampled_at DESC, stars DESC, forks DESC
     ON CONFLICT (repo_id, day, source) DO UPDATE SET
       forks=EXCLUDED.forks,
       stars=COALESCE(daily_metrics.stars, EXCLUDED.stars)

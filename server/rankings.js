@@ -68,7 +68,7 @@ function rankingCte(params, { board, language, languages, topic, topics, q, age,
     params.push(topicValues[0]);
     sql += ` AND EXISTS (
       SELECT 1 FROM jsonb_array_elements_text(r.topics) t(topic)
-      WHERE lower(t.topic) LIKE '%' || lower($${params.length}) || '%'
+      WHERE lower(t.topic) = lower($${params.length})
     )`;
   } else if (topicValues.length > 1) {
     params.push(JSON.stringify(topicValues));
@@ -76,7 +76,7 @@ function rankingCte(params, { board, language, languages, topic, topics, q, age,
       SELECT 1 FROM jsonb_array_elements_text(r.topics) t(topic)
       WHERE EXISTS (
         SELECT 1 FROM jsonb_array_elements_text($${params.length}::jsonb) f(value)
-        WHERE lower(t.topic) LIKE '%' || lower(f.value) || '%'
+        WHERE lower(t.topic) = lower(f.value)
       )
     )`;
   }

@@ -104,7 +104,9 @@ CREATE TABLE IF NOT EXISTS sync_runs (
 CREATE TABLE IF NOT EXISTS subscriptions (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
+  user_id TEXT,
   locale TEXT NOT NULL,
+  types JSONB NOT NULL DEFAULT '["github-repo"]'::jsonb,
   boards JSONB NOT NULL,
   language TEXT,
   languages JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -117,6 +119,34 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   manage_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL,
   verified_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  locale TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  verified_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS auth_codes (
+  email TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  password_hash TEXT,
+  locale TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  sent_at TIMESTAMPTZ NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (email, purpose)
+);
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS deliveries (
@@ -152,6 +182,7 @@ CREATE INDEX IF NOT EXISTS snapshots_source_sampled_idx ON snapshots (source, sa
 CREATE INDEX IF NOT EXISTS daily_metrics_source_day_idx ON daily_metrics (source, day);
 CREATE INDEX IF NOT EXISTS period_metrics_source_period_idx ON period_metrics (source, period);
 CREATE INDEX IF NOT EXISTS deliveries_sub_date_idx ON deliveries (subscription_id, local_date);
+CREATE INDEX IF NOT EXISTS auth_sessions_user_idx ON auth_sessions (user_id);
 CREATE INDEX IF NOT EXISTS assets_type_idx ON assets (type);
 CREATE INDEX IF NOT EXISTS assets_category_idx ON assets (type, category);
 CREATE INDEX IF NOT EXISTS assets_cluster_idx ON assets (cluster_id);

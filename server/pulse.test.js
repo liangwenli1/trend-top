@@ -9,7 +9,7 @@ delete process.env.DATABASE_URL;
 process.env.DATA_MODE = 'demo';
 process.env.PGLITE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pulse-core-'));
 
-const { ready, query, one, many, expandStarHistoryToDaily, rebuildDerivedMetrics } = await import('./db.js');
+const { ready, query, one, many, expandStarHistoryToDaily, applySnapshotsToDaily, rebuildDerivedMetrics } = await import('./db.js');
 const { getRankings, getStarSeries } = await import('./rankings.js');
 const { digest, encryptManageToken, discoveryPlan, keepCandidate } = await import('./jobs.js');
 await ready;
@@ -61,6 +61,20 @@ test('official Star history expands into complete daily metrics', async () => {
   }
 });
 
+test('daily snapshot rebuild keeps only the latest snapshot for each UTC day', async () => {
+  const id = 999998;
+  await query(
+    `INSERT INTO snapshots (repo_id, sampled_at, stars, forks, source) VALUES
+     ($1, '2026-09-14T02:00:00Z', 100, 10, 'github'),
+     ($1, '2026-09-14T18:00:00Z', 105, 12, 'github')`,
+    [id]
+  );
+  await applySnapshotsToDaily();
+  const daily = await one("SELECT stars, forks FROM daily_metrics WHERE repo_id = $1 AND day = '2026-09-14' AND source = 'github'", [id]);
+  assert.equal(Number(daily.stars), 105);
+  assert.equal(Number(daily.forks), 12);
+});
+
 test('discovery plan paginates, rotates, and lowers the star floor', () => {
   const plan = discoveryPlan(new Date('2026-09-14T00:00:00Z'));
   assert.ok(plan.queries.some(q => q.pages >= 2));
@@ -68,7 +82,7 @@ test('discovery plan paginates, rotates, and lowers the star floor', () => {
   assert.ok(plan.queries.some(q => /stars:50\.\./.test(q.q)));
   assert.equal(plan.languages.length, 5);
   assert.equal(plan.topics.length, 6);
-  assert.equal(plan.maxRepos, 1000);
+  assert.equal(plan.maxRepos, 2000);
   const later = discoveryPlan(new Date('2026-09-21T00:00:00Z'));
   assert.notDeepEqual(plan.languages, later.languages);
   const unique = new Map();
@@ -95,4 +109,17 @@ test('daily digest is one combined message and is idempotent', async () => {
   assert.match(out[0].text, /Fastest rising/);
   assert.match(out[0].text, /unsubscribe/i);
   assert.equal((await one('SELECT status FROM deliveries WHERE subscription_id = $1', [id])).status, 'sent');
+});
+
+test('daily digest skips an empty selection instead of sending an empty email', async () => {
+  const id = crypto.randomUUID();
+  await query(
+    `INSERT INTO subscriptions (id, email, locale, boards, language, topic, topics, send_hour, timezone, status, manage_hash, created_at)
+     VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7::jsonb,$8,$9,$10,$11,$12)`,
+    [id, 'empty@example.com', 'en', JSON.stringify(['hot']), '', '', JSON.stringify(['no-such-topic']), 9, 'UTC', 'active', encryptManageToken(`${id}.test-secret`), new Date().toISOString()]
+  );
+  const result = await digest({ force: true });
+  assert.equal(result.sent, 0);
+  assert.equal((await many('SELECT * FROM outbox WHERE to_email = $1', ['empty@example.com'])).length, 0);
+  assert.equal((await one('SELECT status FROM deliveries WHERE subscription_id = $1', [id])).status, 'skipped');
 });
