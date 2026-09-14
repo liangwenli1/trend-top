@@ -66,6 +66,11 @@ function isType(type) {
   return TYPES.includes(type);
 }
 
+function filterValues(value) {
+  const values = Array.isArray(value) ? value : [value];
+  return [...new Set(values.flatMap(item => String(item ?? '').split(',')).map(item => item.trim()).filter(Boolean))];
+}
+
 function boardsFor(type) {
   return type === 'github-repo'
     ? {
@@ -304,7 +309,8 @@ export async function getCatalogRankings(type, query = {}) {
   let board = boards[query.board] ? query.board : 'hot';
   let period = DAYS[query.period] ? query.period : 'week';
   const language = String(query.language || '');
-  const topic = String(query.category || query.topic || '');
+  const categoryValues = filterValues(query.categories ?? query.category);
+  const topicValues = filterValues(query.topics ?? query.topic);
   const q = String(query.q || '');
   const officialOnly = board === 'official' || query.official === '1' || query.official === 'true';
   const endpoint = await latestAssetDay();
@@ -314,9 +320,28 @@ export async function getCatalogRankings(type, query = {}) {
     params.push(language);
     sql += ` AND lower(language) = lower($${params.length})`;
   }
-  if (topic) {
-    params.push(topic);
+  if (categoryValues.length === 1) {
+    params.push(categoryValues[0]);
     sql += ` AND category = $${params.length}`;
+  } else if (categoryValues.length > 1) {
+    params.push(categoryValues);
+    sql += ` AND category = ANY($${params.length}::text[])`;
+  }
+  if (topicValues.length === 1) {
+    params.push(topicValues[0]);
+    sql += ` AND (category = $${params.length} OR EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(topics) t(topic)
+      WHERE lower(t.topic) LIKE '%' || lower($${params.length}) || '%'
+    ))`;
+  } else if (topicValues.length > 1) {
+    params.push(JSON.stringify(topicValues));
+    sql += ` AND (category IN (SELECT value FROM jsonb_array_elements_text($${params.length}::jsonb)) OR EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(topics) t(topic)
+      WHERE EXISTS (
+        SELECT 1 FROM jsonb_array_elements_text($${params.length}::jsonb) f(value)
+        WHERE lower(t.topic) LIKE '%' || lower(f.value) || '%'
+      )
+    ))`;
   }
   if (q) {
     params.push(q);

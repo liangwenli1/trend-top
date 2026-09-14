@@ -14,7 +14,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173/en/home` for the English default, or use `/zh/home` for Chinese. The API runs on port 3001. Build and serve one production-style process with `npm run build` then `npm start` at `http://localhost:3001/`. The first layer is asset type: `/en/skill`, `/en/plugin`, `/en/components`, `/en/website`, and `/en/github-repo`, each with `/ranking`, `/charts`, `/official`, `/c/:category`, `/compare`, and item detail. Legacy `/en/ranking` and `/en/charts` redirect to the repository type. Language and topic filters load from `GET /api/{type}/filters`.
+Open `http://localhost:5173/en/home` for the English default, or use `/zh/home` for Chinese. The API runs on port 3001. Build and serve one production-style process with `npm run build` then `npm start` at `http://localhost:3001/`. The homepage introduces the product with a six-type collection snapshot, a repository growth example from the chart API, and a short guide before the type picker. The first discovery layer is asset type: `/en/skill`, `/en/plugin`, `/en/agent`, `/en/components`, `/en/website`, and `/en/github-repo`, each with `/ranking`, `/charts`, `/official`, `/c/:category`, `/compare`, and item detail. Legacy `/en/ranking` and `/en/charts` redirect to the repository type. Language and topic filters load from `GET /api/{type}/filters`.
 
 Demo emails are recorded at `http://localhost:5173/api/demo-outbox`; open the verification link in the email's `text` field. After verification, run `npm run digest -- --force` to produce a sample daily digest; inspect the outbox again. `--force` bypasses the send hour only, not the once-per-local-day rule. The management and unsubscribe links are inside that digest.
 

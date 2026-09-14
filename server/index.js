@@ -20,6 +20,14 @@ app.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 const demo = (process.env.DATA_MODE || 'demo') === 'demo';
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const validZone = z => { try { new Intl.DateTimeFormat('en', { timeZone: z }); return true; } catch { return false; } };
+const normalizeTopics = (value, fallback = '') => {
+  const values = Array.isArray(value) ? value : [value ?? fallback];
+  return [...new Set(values.flatMap(item => String(item ?? '').split(',')).map(item => item.trim()).filter(Boolean))].slice(0, 20).map(item => item.slice(0, 50));
+};
+const storedTopics = sub => {
+  const parsed = asJson(sub?.topics, null);
+  return Array.isArray(parsed) ? normalizeTopics(parsed) : normalizeTopics(undefined, sub?.topic || '');
+};
 const fail = (res, status, message) => res.status(status).json({ error: message });
 const bursts = new Map();
 function rate(req, res, next) {
@@ -124,6 +132,7 @@ app.post('/api/ai-report', rate, async (req, res) => {
 app.post('/api/subscriptions', rate, async (req, res) => {
   const b = req.body || {}, email = String(b.email || '').trim().toLowerCase(), locale = b.locale === 'en' ? 'en' : 'zh';
   const selected = Array.isArray(b.boards) ? [...new Set(b.boards.filter(x => boards[x]))] : [];
+  const topics = normalizeTopics(b.topics, b.topic);
   const hour = Number(b.sendHour), zone = String(b.timezone || '');
   if (!emailRe.test(email) || email.length > 254) return fail(res, 400, 'Invalid email address');
   if (!selected.length) return fail(res, 400, 'Select at least one board');
@@ -135,14 +144,15 @@ app.post('/api/subscriptions', rate, async (req, res) => {
   const sub = {
     id, email, locale, boards: JSON.stringify(selected),
     language: String(b.language || '').slice(0, 50),
-    topic: String(b.topic || '').slice(0, 50),
+    topic: topics[0] || '',
+    topics: JSON.stringify(topics),
     send_hour: hour, timezone: zone, status: 'pending'
   };
   await query(
     `INSERT INTO subscriptions (
-       id, email, locale, boards, language, topic, send_hour, timezone, status, verify_hash, manage_hash, created_at
-     ) VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11,$12)`,
-    [id, email, locale, sub.boards, sub.language, sub.topic, hour, zone, 'pending', hash(verify), encryptManageToken(manage), new Date().toISOString()]
+       id, email, locale, boards, language, topic, topics, send_hour, timezone, status, verify_hash, manage_hash, created_at
+     ) VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13)`,
+    [id, email, locale, sub.boards, sub.language, sub.topic, sub.topics, hour, zone, 'pending', hash(verify), encryptManageToken(manage), new Date().toISOString()]
   );
   try {
     await sendVerification(sub, `${id}.${verify}`);
@@ -167,7 +177,8 @@ app.get('/api/manage', async (req, res) => {
     locale: sub.locale,
     boards: asJson(sub.boards, []),
     language: sub.language,
-    topic: sub.topic,
+    topic: sub.topic || storedTopics(sub)[0] || '',
+    topics: storedTopics(sub),
     sendHour: asNumber(sub.send_hour),
     timezone: sub.timezone,
     status: sub.status
@@ -180,16 +191,20 @@ app.patch('/api/manage', async (req, res) => {
   const selected = Array.isArray(b.boards) ? [...new Set(b.boards.filter(x => boards[x]))] : asJson(sub.boards, []);
   const hour = b.sendHour === undefined ? asNumber(sub.send_hour) : Number(b.sendHour);
   const zone = b.timezone === undefined ? sub.timezone : String(b.timezone);
+  const topics = b.topics === undefined && b.topic === undefined
+    ? storedTopics(sub)
+    : normalizeTopics(b.topics, b.topic);
   if (!selected.length || !Number.isInteger(hour) || hour < 0 || hour > 23 || !validZone(zone)) return fail(res, 400, 'Invalid settings');
   const status = ['active', 'paused', 'cancelled'].includes(b.status) ? b.status : sub.status;
   if (sub.status === 'cancelled' && status !== 'cancelled') return fail(res, 409, 'Cancelled subscription cannot be resumed');
   await query(
-    `UPDATE subscriptions SET locale = $1, boards = $2::jsonb, language = $3, topic = $4, send_hour = $5, timezone = $6, status = $7 WHERE id = $8`,
+    `UPDATE subscriptions SET locale = $1, boards = $2::jsonb, language = $3, topic = $4, topics = $5::jsonb, send_hour = $6, timezone = $7, status = $8 WHERE id = $9`,
     [
       b.locale === 'en' ? 'en' : b.locale === 'zh' ? 'zh' : sub.locale,
       JSON.stringify(selected),
       String(b.language ?? sub.language).slice(0, 50),
-      String(b.topic ?? sub.topic).slice(0, 50),
+      topics[0] || '',
+      JSON.stringify(topics),
       hour, zone, status, sub.id
     ]
   );

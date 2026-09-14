@@ -1,0 +1,43 @@
+/* Keep interactive controls and the peer-comparison cards on a square grid. */
+button,
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+[role="button"],
+.primary,
+.more,
+.ghost,
+.language-switch,
+.tag-btn,
+.back-btn,
+.catalog-button,
+.category-rank-action,
+.compare-more-link,
+.analytics-breadcrumb,
+.analytics-tile-links a,
+.design-select-trigger,
+.design-select-content {
+  border-radius: 0 !important;
+}
+
+.compare-option-card,
+.category-feature-card {
+  border-radius: 0;
+}
+
+.detail-metrics > div,
+.repo-detail .repo-tags span,
+.repo-detail .repo-tags a {
+  border-radius: 0 !important;
+}
+
+.compare-source-badge,
+.category-official,
+.category-rank-tags span {
+  border-radius: 0;
+}
+
+.page-indicator button span,
+.analytics-page-nav button span {
+  border-radius: 0;
+}

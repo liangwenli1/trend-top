@@ -14,6 +14,11 @@ export const boards = {
 
 const aiTerms = ['ai', 'llm', 'agent', 'agents', 'inference', 'rag', 'machine-learning', 'model', 'mcp'];
 
+function filterValues(value) {
+  const values = Array.isArray(value) ? value : [value];
+  return [...new Set(values.flatMap(item => String(item ?? '').split(',')).map(item => item.trim()).filter(Boolean))];
+}
+
 export function aiEvidence(repo) {
   const topics = Array.isArray(repo.topics) ? repo.topics : asJson(repo.topics, []);
   const topicEvidence = topics
@@ -33,7 +38,7 @@ function pctExpr(orderSql) {
   END`;
 }
 
-function rankingCte(params, { board, language, topic, q, age, endpoint }) {
+function rankingCte(params, { board, language, topic, topics, q, age, endpoint }) {
   let sql = `
     WITH filtered AS (
       SELECT
@@ -51,11 +56,21 @@ function rankingCte(params, { board, language, topic, q, age, endpoint }) {
     params.push(language);
     sql += ` AND lower(r.language) = lower($${params.length})`;
   }
-  if (topic) {
-    params.push(topic);
+  const topicValues = filterValues(topics?.length ? topics : topic);
+  if (topicValues.length === 1) {
+    params.push(topicValues[0]);
     sql += ` AND EXISTS (
       SELECT 1 FROM jsonb_array_elements_text(r.topics) t(topic)
       WHERE lower(t.topic) LIKE '%' || lower($${params.length}) || '%'
+    )`;
+  } else if (topicValues.length > 1) {
+    params.push(JSON.stringify(topicValues));
+    sql += ` AND EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(r.topics) t(topic)
+      WHERE EXISTS (
+        SELECT 1 FROM jsonb_array_elements_text($${params.length}::jsonb) f(value)
+        WHERE lower(t.topic) LIKE '%' || lower(f.value) || '%'
+      )
     )`;
   }
   if (q) {
@@ -223,7 +238,7 @@ export async function getFilters() {
 }
 
 export async function getRankings({
-  board = 'hot', period = 'week', language = '', topic = '', age = '', q = '', page = 1, limit = 10
+  board = 'hot', period = 'week', language = '', topic = '', topics = [], age = '', q = '', page = 1, limit = 10
 } = {}) {
   if (!boards[board]) board = 'hot';
   if (!DAYS[period]) period = 'week';
@@ -242,7 +257,7 @@ export async function getRankings({
   const offset = (safePage - 1) * safeLimit;
   const metric = boards[board].metric;
   const params = [source, period, endpoint.toISOString()];
-  const cte = rankingCte(params, { board, language, topic, q, age, endpoint });
+  const cte = rankingCte(params, { board, language, topic, topics, q, age, endpoint });
   const extra = metric === 'score'
     ? 's.score IS NOT NULL'
     : metric === 'gain'
