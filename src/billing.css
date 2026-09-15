@@ -58,4 +58,20 @@
 .admin-result-ok span,.admin-result-error span{display:inline-grid;place-items:center;flex:none;width:28px;height:28px;font-size:16px;font-weight:800;color:#fff;background:#315fd9}
 .admin-result-error span{background:#a53e3e}
 .admin-result-error{color:#a53e3e}
+.admin-operations{margin-top:64px;padding-top:38px;border-top:1px solid #111}
+.admin-operations h2{margin:8px 0 14px;font-size:34px;letter-spacing:-.035em}
+.admin-candidate-form{display:grid;grid-template-columns:minmax(260px,1.4fr) minmax(180px,.7fr);gap:18px;margin:28px 0}
+.admin-candidate-form label{display:flex;flex-direction:column;gap:9px;font-weight:700}
+.admin-candidate-form input{min-height:54px;border:1px solid #bbb;border-radius:0;background:#fff;padding:0 15px;font:inherit}
+.admin-candidate-notes{grid-column:1/-1}
+.admin-candidate-form .primary{justify-self:start;min-width:180px}
+.admin-collection-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:34px 0}
+.admin-collection-grid article{display:flex;flex-direction:column;gap:4px;padding:24px;border:1px solid #ddd;border-top:4px solid #315fd9}
+.admin-collection-grid strong{font-size:34px;letter-spacing:-.04em}
+.admin-collection-grid span{color:#666;font-size:14px;font-weight:650}
+.admin-query-table{overflow:auto;border:1px solid #ddd}
+.admin-query-table table{width:100%;border-collapse:collapse;min-width:620px}
+.admin-query-table th,.admin-query-table td{padding:13px 15px;border-bottom:1px solid #e6e6e6;text-align:left;font-size:14px}
+.admin-query-table th{color:#666;font-size:12px;letter-spacing:.07em;text-transform:uppercase}
 @media(max-width:760px){.billing-page,.billing-result,.admin-page{padding:40px 20px 72px}.admin-grid,.admin-grid-3,.pricing-layout{grid-template-columns:1fr;gap:24px}.billing-hero h1,.billing-result h1,.admin-page h1{font-size:36px}.pricing-card{padding:22px}.billing-cycle button{min-width:0;flex:1}}
+@media(max-width:760px){.admin-candidate-form,.admin-collection-grid{grid-template-columns:1fr}.admin-candidate-notes{grid-column:auto}}

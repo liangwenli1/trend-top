@@ -59,10 +59,14 @@ export function defaultSettings() {
         apiBaseUrl: cleanUrl(process.env.CREEM_API_BASE_URL || (mode === 'prod' ? 'https://api.creem.io' : 'https://test-api.creem.io')),
         graceDays: Math.max(0, Math.min(30, Number(process.env.BILLING_GRACE_DAYS || 3)))
       },
+      collection: {
+        websiteEnrichment: true,
+        firecrawlApiUrl: cleanUrl(process.env.FIRECRAWL_API_URL || 'https://api.firecrawl.dev')
+      },
       contact: { email: process.env.CONTACT_EMAIL || '' },
       social: { x: safeUrl(process.env.SOCIAL_X_URL), facebook: safeUrl(process.env.SOCIAL_FACEBOOK_URL), telegram: safeUrl(process.env.SOCIAL_TELEGRAM_URL) }
     },
-    secret: { creemApiKey: process.env.CREEM_API_KEY || '', creemWebhookSecret: process.env.CREEM_WEBHOOK_SECRET || '' }
+    secret: { creemApiKey: process.env.CREEM_API_KEY || '', creemWebhookSecret: process.env.CREEM_WEBHOOK_SECRET || '', firecrawlApiKey: process.env.FIRECRAWL_API_KEY || '' }
   };
 }
 
@@ -75,6 +79,7 @@ export async function getSettings() {
   return {
     public: {
       billing: { ...defaults.public.billing, ...storedBilling, prices: normalizePrices(stored.billing?.prices || legacyPrices(stored.billing), defaults.public.billing.prices) },
+      collection: { ...defaults.public.collection, ...(stored.collection || {}) },
       contact: { ...defaults.public.contact, ...(stored.contact || {}) },
       social: { ...defaults.public.social, ...(stored.social || {}) }
     },
@@ -84,7 +89,7 @@ export async function getSettings() {
 
 export async function saveSettings(input) {
   const current = await getSettings();
-  const billing = input?.billing || {}, contact = input?.contact || {}, social = input?.social || {}, secrets = input?.secrets || {};
+  const billing = input?.billing || {}, collection = input?.collection || {}, contact = input?.contact || {}, social = input?.social || {}, secrets = input?.secrets || {};
   const mode = modeValue(billing.mode ?? current.public.billing.mode);
   const publicData = {
     billing: {
@@ -94,17 +99,22 @@ export async function saveSettings(input) {
       apiBaseUrl: cleanUrl(billing.apiBaseUrl || (mode === 'prod' ? 'https://api.creem.io' : 'https://test-api.creem.io')),
       graceDays: Math.max(0, Math.min(30, Number(billing.graceDays ?? 3)))
     },
+    collection: {
+      websiteEnrichment: collection.websiteEnrichment === undefined ? current.public.collection.websiteEnrichment : Boolean(collection.websiteEnrichment),
+      firecrawlApiUrl: cleanUrl(collection.firecrawlApiUrl || current.public.collection.firecrawlApiUrl || 'https://api.firecrawl.dev')
+    },
     contact: { email: String(contact.email || '').trim().slice(0, 254) },
     social: { x: safeUrl(social.x), facebook: safeUrl(social.facebook), telegram: safeUrl(social.telegram) }
   };
   const secret = {
     creemApiKey: secrets.creemApiKey === undefined ? current.secret.creemApiKey : String(secrets.creemApiKey || '').trim(),
-    creemWebhookSecret: secrets.creemWebhookSecret === undefined ? current.secret.creemWebhookSecret : String(secrets.creemWebhookSecret || '').trim()
+    creemWebhookSecret: secrets.creemWebhookSecret === undefined ? current.secret.creemWebhookSecret : String(secrets.creemWebhookSecret || '').trim(),
+    firecrawlApiKey: secrets.firecrawlApiKey === undefined ? current.secret.firecrawlApiKey : String(secrets.firecrawlApiKey || '').trim()
   };
   const now = new Date().toISOString();
   await query(`INSERT INTO app_settings (key,public_data,secret_data,updated_at) VALUES ($1,$2::jsonb,$3,$4)
     ON CONFLICT (key) DO UPDATE SET public_data=EXCLUDED.public_data,secret_data=EXCLUDED.secret_data,updated_at=EXCLUDED.updated_at`, [SETTING_KEY, JSON.stringify(publicData), encrypt(secret), now]);
-  return { public: publicData, configured: Boolean(secret.creemApiKey && secret.creemWebhookSecret), secretFlags: { creemApiKey: Boolean(secret.creemApiKey), creemWebhookSecret: Boolean(secret.creemWebhookSecret) } };
+  return { public: publicData, configured: Boolean(secret.creemApiKey && secret.creemWebhookSecret), secretFlags: { creemApiKey: Boolean(secret.creemApiKey), creemWebhookSecret: Boolean(secret.creemWebhookSecret), firecrawlApiKey: Boolean(secret.firecrawlApiKey) } };
 }
 
 export async function publicSettings() {

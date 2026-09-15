@@ -50,7 +50,7 @@ function rankingCte(params, { board, language, languages, topic, topics, q, age,
       FROM repos r
       LEFT JOIN period_metrics p
         ON p.repo_id = r.id AND p.period = $2 AND p.source = $1
-      WHERE r.deleted = FALSE AND r.archived = FALSE AND r.source = $1`;
+      WHERE r.deleted = FALSE AND r.archived = FALSE AND r.active = TRUE AND r.source = $1`;
 
   const languageValues = filterValues(languages?.length ? languages : language);
   if (languageValues.length === 1) {
@@ -130,7 +130,7 @@ function rankingCte(params, { board, language, languages, topic, topics, q, age,
       SELECT
         (SELECT COUNT(*)::int FROM filtered) AS candidate_count,
         (SELECT COUNT(*)::int FROM valid) AS valid_count,
-        (SELECT COUNT(*)::int FROM repos WHERE deleted = FALSE AND archived = FALSE AND source = $1) AS universe,
+        (SELECT COUNT(*)::int FROM repos WHERE deleted = FALSE AND archived = FALSE AND active = TRUE AND source = $1) AS universe,
         COALESCE((SELECT BOOL_AND(fork_gain IS NOT NULL) FROM valid), FALSE) AS fork_ready
     ),
     scored AS (
@@ -222,7 +222,7 @@ export async function getFilters() {
   const languages = await many(
     `SELECT language AS name, COUNT(*)::int AS count
      FROM repos
-     WHERE deleted = FALSE AND archived = FALSE AND source = $1
+     WHERE deleted = FALSE AND archived = FALSE AND active = TRUE AND source = $1
        AND language IS NOT NULL AND language <> ''
      GROUP BY language
      ORDER BY count DESC, language
@@ -232,7 +232,7 @@ export async function getFilters() {
   const topics = await many(
     `SELECT topic AS name, COUNT(*)::int AS count
      FROM repos r, LATERAL jsonb_array_elements_text(r.topics) AS topic
-     WHERE r.deleted = FALSE AND r.archived = FALSE AND r.source = $1
+     WHERE r.deleted = FALSE AND r.archived = FALSE AND r.active = TRUE AND r.source = $1
      GROUP BY topic
      ORDER BY count DESC, topic
      LIMIT 20`,

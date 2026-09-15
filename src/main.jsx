@@ -1,7 +1,7 @@
 import React,{useEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {SearchInput,SubscribeDialog,DesignSelect,TopicMultiSelect,TopicDialog} from './components.jsx';
-import {AccountSubscribeForm,AccountPage,AUTH_CHANGED_EVENT} from './subscription.jsx';
+import {AccountSubscribeForm,AccountPage,AUTH_CHANGED_EVENT,announceAuthChange} from './subscription.jsx';
 import {TYPES, boardNames, typeLabel, typePath, itemPath} from './catalog.js';
 import {ViewBar, TypeHome, TypeTrending, CategoryPage, ComparePage, SearchPage, ItemDetail, HeaderSearch, TagActions} from './pages.jsx';
 import {PricingPage,BillingResultPage,LegalPage} from './billing-ui.jsx';
@@ -101,6 +101,46 @@ function useFilterOptions(type='github-repo'){
   },[type]);
   return opts;
 }
+function AccountMenu({viewer,l,page,navigate}){
+  const [open,setOpen]=useState(false);
+  const rootRef=React.useRef(null);
+  const triggerRef=React.useRef(null);
+  const panelRef=React.useRef(null);
+  const zh=l==='zh';
+  useEffect(()=>{
+    if(!open)return;
+    const close=event=>{if(rootRef.current&&!rootRef.current.contains(event.target))setOpen(false)};
+    const key=event=>{if(event.key==='Escape'){setOpen(false);triggerRef.current?.focus()}};
+    addEventListener('mousedown',close);addEventListener('keydown',key);
+    requestAnimationFrame(()=>panelRef.current?.querySelector('[role="menuitem"]')?.focus());
+    return()=>{removeEventListener('mousedown',close);removeEventListener('keydown',key)};
+  },[open]);
+  useEffect(()=>setOpen(false),[page,l]);
+  const go=(event,target)=>{setOpen(false);navigate(event,target)};
+  const logout=async()=>{
+    setOpen(false);
+    try{await post('/api/auth/logout',{});announceAuthChange(null);updatePath(`/${l}/home`)}catch{}
+  };
+  const initial=String(viewer.email||'?').trim().charAt(0).toUpperCase();
+  const moveFocus=event=>{
+    if(!['ArrowDown','ArrowUp','Home','End'].includes(event.key))return;
+    event.preventDefault();
+    const items=[...panelRef.current.querySelectorAll('[role="menuitem"]')];
+    const current=items.indexOf(document.activeElement);
+    const next=event.key==='Home'?0:event.key==='End'?items.length-1:event.key==='ArrowDown'?(current+1)%items.length:(current-1+items.length)%items.length;
+    items[next]?.focus();
+  };
+  return <div className="account-menu" ref={rootRef}>
+    <button ref={triggerRef} type="button" className="account-menu-trigger" aria-haspopup="menu" aria-expanded={open} aria-label={`${zh?'账户菜单':'Account menu'}: ${viewer.email}`} onClick={()=>setOpen(value=>!value)}><span aria-hidden="true">{initial}</span></button>
+    {open&&<div className="account-menu-panel" role="menu" ref={panelRef} onKeyDown={moveFocus}>
+      <div className="account-menu-identity"><span>{zh?'已登录':'Signed in'}</span><strong title={viewer.email}>{viewer.email}</strong></div>
+      <a role="menuitem" href={`/${l}/account`} onClick={event=>go(event,`/${l}/account`)}>{zh?'账户设置':'Account settings'}</a>
+      <a role="menuitem" href={`/${l}/account?section=subscription`} onClick={event=>go(event,`/${l}/account?section=subscription`)}>{zh?'订阅与推送':'Subscription & delivery'}</a>
+      {viewer.isAdmin&&<a role="menuitem" href={`/${l}/admin`} onClick={event=>go(event,`/${l}/admin`)}>{zh?'网站管理':'Site administration'}</a>}
+      <button type="button" role="menuitem" className="account-menu-signout" onClick={logout}>{zh?'退出登录':'Sign out'}</button>
+    </div>}
+  </div>;
+}
 function App(){
   const [path,setPath]=useState(location.pathname+location.search);
   const [viewer,setViewer]=useState(undefined);
@@ -166,7 +206,7 @@ function App(){
   };
   const dismissLanguageSuggestion=()=>{sessionStorage.setItem('locale-suggestion-dismissed','1');setLanguageSuggestion(null)};
   const showViewBar=Boolean(type)&&!['search','method','verify','manage','unsubscribe','account'].includes(page);
-  return <><header className="site-header"><div className="header-inner"><a className="brand" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)}>Trend Top</a><HeaderSearch l={l} t={t} navigate={navigate} q={page==='search'?params().get('q')||'':''}/><nav className="header-actions" aria-label={l==='zh'?'站点导航':'Site navigation'}><a className="header-link" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)} aria-current={page==='home'?'page':undefined}>{l==='zh'?'首页':'Home'}</a><a className="header-link" href={subscribePath} onClick={openSubscribe}>{l==='zh'?'订阅':'Subscribe'}</a><a className="header-link" href={`/${l}/pricing`} onClick={e=>navigate(e,`/${l}/pricing`)} aria-current={page==='pricing'?'page':undefined}>{l==='zh'?'价格':'Pricing'}</a><a className="header-link" aria-current={page==='method'?'page':undefined} href={`/${l}/method`} onClick={e=>navigate(e,`/${l}/method`)}>{t.method}</a>{viewer?.isAdmin&&<a className="header-link" href={`/${l}/admin`} onClick={e=>navigate(e,`/${l}/admin`)} aria-current={page==='admin'?'page':undefined}>Admin</a>}{viewer?<a className="header-avatar" href={`/${l}/account`} onClick={e=>navigate(e,`/${l}/account`)} aria-current={page==='account'?'page':undefined} title={viewer.email} aria-label={`${l==='zh'?'账户':'Account'}: ${viewer.email}`}><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" strokeWidth="1.8"/><path d="M4 20.5c0-3.6 3.6-6 8-6s8 2.4 8 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></a>:<a className="header-link header-signin" href={`/${l}/account`} onClick={e=>navigate(e,`/${l}/account`)} aria-current={page==='account'?'page':undefined}>{l==='zh'?'登录':'Sign in'}</a>}</nav></div>{showViewBar&&<ViewBar l={l} type={type} page={page} query={page==='charts'?location.search.slice(1):chartsQuery} navigate={navigate}/>}</header>
+  return <><header className="site-header"><div className="header-inner"><a className="brand" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)}>Trend Top</a><HeaderSearch l={l} t={t} navigate={navigate} q={page==='search'?params().get('q')||'':''}/><nav className="header-actions" aria-label={l==='zh'?'站点导航':'Site navigation'}><a className="header-link" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)} aria-current={page==='home'?'page':undefined}>{l==='zh'?'首页':'Home'}</a><a className="header-link" href={subscribePath} onClick={openSubscribe}>{l==='zh'?'订阅':'Subscribe'}</a><a className="header-link" href={`/${l}/pricing`} onClick={e=>navigate(e,`/${l}/pricing`)} aria-current={page==='pricing'?'page':undefined}>{l==='zh'?'价格':'Pricing'}</a><a className="header-link" aria-current={page==='method'?'page':undefined} href={`/${l}/method`} onClick={e=>navigate(e,`/${l}/method`)}>{t.method}</a>{viewer?<AccountMenu viewer={viewer} l={l} page={page} navigate={navigate}/>:<a className="header-link header-signin" href={`/${l}/account`} onClick={e=>navigate(e,`/${l}/account`)} aria-current={page==='account'?'page':undefined}>{l==='zh'?'登录':'Sign in'}</a>}</nav></div>{showViewBar&&<ViewBar l={l} type={type} page={page} query={page==='charts'?location.search.slice(1):chartsQuery} navigate={navigate}/>}</header>
   {languageSuggestion&&<aside className="locale-suggestion" role="status"><span>{languageSuggestion==='zh'?'浏览器语言为中文，是否切换到简体中文？':'Your browser uses English. Switch to English?'}</span><button type="button" className="locale-choice" onClick={switchLanguage}>{languageSuggestion==='zh'?'切换中文':'Switch to English'}</button><button type="button" className="locale-dismiss" onClick={dismissLanguageSuggestion} aria-label={languageSuggestion==='zh'?'关闭语言提示':'Dismiss language suggestion'}>×</button></aside>}
   {page==='account'?<AccountPage l={l}/>:page==='pricing'?<PricingPage l={l} user={viewer} navigate={target=>updatePath(target)}/>:page==='billing'&&route.id==='success'?<BillingResultPage l={l} status="success"/>:page==='billing'&&route.id==='cancel'?<BillingResultPage l={l} status="cancel"/>:page==='terms'?<LegalPage l={l} kind="terms"/>:page==='privacy'?<LegalPage l={l} kind="privacy"/>:page==='admin'?<AdminPage l={l}/>:page==='verify'?<Verify l={l} t={t}/>:page==='manage'||page==='unsubscribe'?<Manage l={l} t={t} unsubscribe={page==='unsubscribe'}/>:page==='method'?<Method l={l} t={t}/>:page==='search'?<SearchPage l={l} t={t} q={params().get('q')||''} typeFilter={params().get('type')||''} navigate={navigate}/>:page==='home'?<><TypeHome l={l} t={t} navigate={navigate}/><SubscribeCallout l={l} t={t} data={{mailReady:true}} board="hot" type="github-repo"/></>:page==='trending'?<><TypeTrending l={l} t={t} type={type} navigate={navigate}/><SubscribeCallout l={l} t={t} data={{mailReady:true}} board="hot" type={type}/></>:page==='category'?<CategoryPage l={l} t={t} type={type} category={route.category} navigate={navigate}/>:page==='compare'?<ComparePage l={l} t={t} type={type} ids={params().get('ids')||''} navigate={navigate}/>:page==='detail'?<ItemDetail l={l} t={t} type={type} id={route.id} navigate={navigate}/>:page==='charts'?<React.Suspense fallback={<main className="simple-page">{t.loading}</main>}><AnalyticsPage l={l} names={namesForType} updatePath={updatePath} type={type} key={type}/></React.Suspense>:<Home l={l} t={t} rankingOnly={rankingPage} type={type} officialOnly={page==='official'} initialBoard={params().get('board')||(page==='official'?'official':'hot')} autoBoard={false} onChartsQueryChange={setFooterChartsQuery} key={path}/>}
   <SiteFooter l={l} t={t} onLanguageSwitch={switchLanguage}/></>;
@@ -203,6 +243,20 @@ function LanguageMenu({l,languages,onSwitch}){
     {open&&<ul className="language-menu-list" role="listbox" aria-label={l==='zh'?'选择语言':'Choose language'}>{languages.map(([code,label])=><li key={code} role="option" aria-selected={l===code} lang={code} tabIndex={0} onClick={()=>choose(code)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose(code)}}}><span>{label}</span>{l===code&&<span className="design-select-check" aria-hidden="true">✓</span>}</li>)}</ul>}
   </div>;
 }
+function FooterNetwork({l,navigate}){
+  const labels={skill:['Skills','Skills'],plugin:['插件','Plugins'],agent:['Agents','Agents'],components:['组件','Components'],website:['网站','Websites'],'github-repo':['仓库','Repositories']};
+  const move=event=>{
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+    const rect=event.currentTarget.getBoundingClientRect();
+    event.currentTarget.style.setProperty('--network-x',`${((event.clientX-rect.left)/rect.width-.5)*10}px`);
+    event.currentTarget.style.setProperty('--network-y',`${((event.clientY-rect.top)/rect.height-.5)*8}px`);
+  };
+  const reset=event=>{event.currentTarget.style.setProperty('--network-x','0px');event.currentTarget.style.setProperty('--network-y','0px')};
+  return <div className="footer-network" onMouseMove={move} onMouseLeave={reset} aria-label={l==='zh'?'六类开源内容':'Six open-source collections'}>
+    <div className="footer-network-core"><span>Trend Top</span><small>{l==='zh'?'六类信号':'six signals'}</small></div>
+    <div className="footer-network-nodes">{TYPES.map((type,index)=><a key={type} data-index={index+1} href={typePath(l,type)} onClick={event=>navigate(event,typePath(l,type))}><span>{String(index+1).padStart(2,'0')}</span><strong>{labels[type][l==='zh'?0:1]}</strong></a>)}</div>
+  </div>;
+}
 function SiteFooter({l,t,onLanguageSwitch}){
   const [siteSettings,setSiteSettings]=useState(null);
   useEffect(()=>{fetch('/api/site-settings').then(response=>response.ok?response.json():null).then(setSiteSettings).catch(()=>{})},[]);
@@ -216,8 +270,8 @@ function SiteFooter({l,t,onLanguageSwitch}){
   for(const [name,url] of Object.entries(siteSettings?.social||{})){if(url&&SOCIAL_ICONS[name])contactLinks.push({name,href:url,title:SOCIAL_ICONS[name][l],external:true})}
   const languages=[['en','English'],['zh','简体中文']];
   return <footer className="footer site-footer">
-    <div className="footer-main"><div className="footer-identity"><strong className="footer-wordmark">Trend Top</strong><p className="footer-tagline">{l==='zh'?'发现开源世界的新动向。':'Find what is moving in open source.'}</p>{contactLinks.length>0&&<ul className="footer-social" aria-label={l==='zh'?'联系方式':'Contact'}>{contactLinks.map(link=><li key={link.name}><a href={link.href} title={link.title} aria-label={link.title} {...(link.external?{target:'_blank',rel:'noreferrer'}:{})}><SocialIcon name={link.name}/></a></li>)}</ul>}</div></div>
-    <div className="footer-bottom"><div className="footer-bottom-copy"><p>{t.foot}</p><nav className="footer-legal" aria-label={l==='zh'?'法律信息':'Legal'}><a href={`/${l}/privacy`} onClick={e=>navigate(e,`/${l}/privacy`)}>{l==='zh'?'隐私':'Privacy'}</a><a href={`/${l}/terms`} onClick={e=>navigate(e,`/${l}/terms`)}>{l==='zh'?'条款':'Terms'}</a></nav></div><LanguageMenu l={l} languages={languages} onSwitch={onLanguageSwitch}/></div>
+    <div className="footer-main"><div className="footer-identity"><strong className="footer-wordmark">Trend Top</strong><p className="footer-tagline">{l==='zh'?'发现开源世界的新动向。':'Find what is moving in open source.'}</p>{contactLinks.length>0&&<ul className="footer-social" aria-label={l==='zh'?'联系方式':'Contact'}>{contactLinks.map(link=><li key={link.name}><a href={link.href} title={link.title} aria-label={link.title} {...(link.external?{target:'_blank',rel:'noreferrer'}:{})}><SocialIcon name={link.name}/></a></li>)}</ul>}</div><FooterNetwork l={l} navigate={navigate}/></div>
+    <div className="footer-bottom"><div className="footer-bottom-copy"><p>{t.foot}</p><nav className="footer-legal" aria-label={l==='zh'?'网站信息':'Site information'}><a href={`/${l}/pricing`} onClick={e=>navigate(e,`/${l}/pricing`)}>{l==='zh'?'价格':'Pricing'}</a><a href={`/${l}/privacy`} onClick={e=>navigate(e,`/${l}/privacy`)}>{l==='zh'?'隐私':'Privacy'}</a><a href={`/${l}/terms`} onClick={e=>navigate(e,`/${l}/terms`)}>{l==='zh'?'条款':'Terms'}</a></nav></div><LanguageMenu l={l} languages={languages} onSwitch={onLanguageSwitch}/></div>
   </footer>;
 }
 

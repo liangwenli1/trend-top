@@ -520,13 +520,17 @@ export function ItemDetail({ l, t, type, id, navigate }) {
       </div>
       {item.officialEvidence && <p>{l === 'zh' ? '官方依据：' : 'Official evidence: '}{item.officialEvidence}</p>}
       {note && <p>{l === 'zh' ? '和相邻选项的差别：' : 'How it differs: '}{note}</p>}
-      <div className="detail-metrics">
+      {type === 'website' && !item.stars && item.gain == null ? <p className="detail-data-pending">{l === 'zh' ? '网站独立指标正在积累中。' : 'Independent Website metrics are accumulating.'}</p> : <div className="detail-metrics">
         <div><small>{t.stars}</small><strong>{fmt(item.stars, l)}</strong></div>
         <div><small>{t.gain}</small><strong>{item.gain == null ? t.insufficient : `+${fmt(item.gain, l)}`}</strong></div>
         <div><small>{t.forks}</small><strong>{fmt(item.forks, l)}</strong></div>
-      </div>
+      </div>}
       {item.install && <p><code>{item.install}</code></p>}
-      {item.url && <a className="primary inline" href={item.url} target="_blank" rel="noopener noreferrer">{type === 'website' ? (l === 'zh' ? '打开网站' : 'Open site') : t.github} ↗</a>}
+      <div className="detail-source-actions">
+        {(item.websiteUrl || item.url) && <a className="primary inline" href={item.websiteUrl || item.url} target="_blank" rel="noopener noreferrer">{type === 'website' ? (l === 'zh' ? '访问网站' : 'Visit website') : t.github} ↗</a>}
+        {type === 'website' && item.sourceRepoUrl && item.sourceRepoUrl !== (item.websiteUrl || item.url) && <a className="ghost inline" href={item.sourceRepoUrl} target="_blank" rel="noopener noreferrer">{l === 'zh' ? '查看源码' : 'View source'} ↗</a>}
+      </div>
+      {type === 'website' && <p className="detail-provenance">{l === 'zh' ? '数据来源：' : 'Source: '}{item.sourceQuery?.startsWith('website-source:') ? (l === 'zh' ? '独立网站来源注册表' : 'Independent Website source registry') : (l === 'zh' ? '关联 GitHub 仓库' : 'Associated GitHub repository')}{item.lastFetchedAt ? ` · ${l === 'zh' ? '抓取于' : 'Fetched'} ${new Date(item.lastFetchedAt).toLocaleString(l === 'zh' ? 'zh-CN' : 'en-US')}` : ''}</p>}
       {(item.similar || []).length > 0 && (
         <>
           <h2 style={{ marginTop: 48 }}>{l === 'zh' ? `同类 ${item.similarCount} 条` : `${item.similarCount} similar`}</h2>

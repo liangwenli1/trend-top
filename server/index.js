@@ -20,6 +20,7 @@ import { registerAdminRoutes, requireAdmin } from './admin.js';
 import { publicSettings } from './settings.js';
 import { renderGainChart } from './png-chart.js';
 import { lastCompleteDay } from './db.js';
+import { performanceMiddleware } from './performance.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -27,6 +28,7 @@ app.disable('x-powered-by');
 app.set('trust proxy', process.env.TRUST_PROXY || 'loopback, linklocal, uniquelocal');
 registerCreemWebhookRoute(app);
 app.use(express.json({ limit: '20kb' }));
+app.use(performanceMiddleware);
 app.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 const publicCatalogCache = (_req, res, next) => {
   res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');

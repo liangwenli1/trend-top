@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { asJson, asNumber, many, one, query, ready, rebuildDerivedMetrics } from './db.js';
 import { sendMail } from './mail.js';
 import { buildDigest } from './digest.js';
+import { collectWebsiteSources } from './website-sources.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const token = () => crypto.randomBytes(24).toString('hex');
@@ -38,18 +39,20 @@ export function discoveryPlan(now = new Date()) {
   const created90 = dateBefore(90, now);
   const pushed180 = dateBefore(180, now);
   const queries = [
-    { q: `stars:>80000 pushed:>${pushed180} archived:false`, sort: 'updated', pages: 1, perPage: 100 },
-    { q: 'topic:design-system stars:>100 archived:false', sort: 'stars', pages: 1, perPage: 100 },
-    { q: `stars:50..80000 pushed:>${pushed180} archived:false`, sort: 'updated', pages: 5, perPage: 100 },
-    { q: `created:>${created90} stars:5..5000 archived:false`, sort: 'stars', pages: 3, perPage: 100 },
-    { q: 'topic:ai stars:>20 archived:false', sort: 'updated', pages: 3, perPage: 100 },
+    { family: 'popular', quota: 40, q: `stars:>80000 pushed:>${pushed180} archived:false`, sort: 'updated', pages: 1, perPage: 100 },
+    { family: 'targeted', quota: 80, q: 'topic:design-system stars:>100 archived:false', sort: 'stars', pages: 1, perPage: 100 },
+    { family: 'active', quota: 600, q: `stars:50..80000 pushed:>${pushed180} archived:false`, sort: 'updated', pages: 6, perPage: 100 },
+    { family: 'new', quota: 300, q: `created:>${created90} stars:5..5000 archived:false`, sort: 'stars', pages: 3, perPage: 100 },
+    { family: 'ai', quota: 180, q: 'topic:ai stars:>20 archived:false', sort: 'updated', pages: 2, perPage: 100 },
     ...languages.map(language => ({
+      family: 'language', quota: 80,
       q: `language:${language} stars:20..40000 pushed:>${pushed180} archived:false`,
       sort: 'updated',
       pages: 2,
       perPage: 100
     })),
     ...topics.map(topic => ({
+      family: 'topic', quota: 60,
       q: `topic:${topic} stars:>10 archived:false`,
       sort: 'updated',
       pages: 2,
@@ -135,12 +138,17 @@ function websiteUrl(repo) {
   return repo.html_url || `https://github.com/${repo.full_name}`;
 }
 
-async function upsertGithubRepo(repo, at) {
+function websiteEntityKey(repo) {
+  try { return `domain:${new URL(websiteUrl(repo)).hostname.toLowerCase().replace(/^www\./, '')}`; }
+  catch { return `repo:${String(repo.full_name || '').toLowerCase()}`; }
+}
+
+async function upsertGithubRepo(repo, at, sourceQuery = null) {
   await query(
     `INSERT INTO repos (
        id, full_name, description, language, topics, stars, forks,
-       created_at, pushed_at, updated_at, archived, deleted, source
-     ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,FALSE,'github')
+       created_at, pushed_at, updated_at, archived, deleted, source,last_seen_at,source_query,active,missed_runs
+     ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,FALSE,'github',$12,$13,TRUE,0)
      ON CONFLICT (id) DO UPDATE SET
        full_name = EXCLUDED.full_name,
        description = EXCLUDED.description,
@@ -152,7 +160,11 @@ async function upsertGithubRepo(repo, at) {
        updated_at = EXCLUDED.updated_at,
        archived = EXCLUDED.archived,
        deleted = FALSE,
-       source = 'github'`,
+       source = 'github',
+       last_seen_at = EXCLUDED.last_seen_at,
+       source_query = COALESCE(EXCLUDED.source_query,repos.source_query),
+       active = TRUE,
+       missed_runs = 0`,
     [
       repo.id,
       repo.full_name,
@@ -164,7 +176,9 @@ async function upsertGithubRepo(repo, at) {
       repo.created_at,
       repo.pushed_at,
       repo.updated_at,
-      Boolean(repo.archived)
+      Boolean(repo.archived),
+      at,
+      sourceQuery
     ]
   );
   await query(
@@ -175,7 +189,7 @@ async function upsertGithubRepo(repo, at) {
   );
 }
 
-async function upsertAsset(type, repo) {
+async function upsertAsset(type, repo, sourceQuery = null, at = new Date().toISOString()) {
   const slug = assetSlug(repo.full_name);
   const id = `${type}-${slug}`;
   const org = String(repo.full_name || '').split('/')[0];
@@ -186,9 +200,10 @@ async function upsertAsset(type, repo) {
     `INSERT INTO assets (
        id, type, slug, name, full_name, description, category, category_zh, category_en,
        official, official_evidence, cluster_id, url, install, language, topics, stars, forks,
-       created_at, pushed_at, recommend_rank, recommend_note_zh, recommend_note_en
+       created_at, pushed_at, recommend_rank, recommend_note_zh, recommend_note_en,
+       website_url,source_repo_url,last_fetched_at,last_seen_at,source_query,entity_key,ranking_signals,active,missed_runs
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18,$19,$20,$21,$22,$23
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$26,$27,$28,$29::jsonb,TRUE,0
      )
      ON CONFLICT (id) DO UPDATE SET
        name = EXCLUDED.name,
@@ -205,51 +220,116 @@ async function upsertAsset(type, repo) {
        topics = EXCLUDED.topics,
        stars = EXCLUDED.stars,
        forks = EXCLUDED.forks,
-       pushed_at = EXCLUDED.pushed_at`,
+       pushed_at = EXCLUDED.pushed_at,
+       website_url = EXCLUDED.website_url,
+       source_repo_url = EXCLUDED.source_repo_url,
+       last_fetched_at = EXCLUDED.last_fetched_at,
+       last_seen_at = EXCLUDED.last_seen_at,
+       source_query = COALESCE(EXCLUDED.source_query,assets.source_query),
+       entity_key = EXCLUDED.entity_key,
+       ranking_signals = EXCLUDED.ranking_signals,
+       active = TRUE,
+       missed_runs = 0`,
     [
       id, type, slug, String(repo.full_name).split('/')[1] || repo.full_name, repo.full_name,
       repo.description || '', category, category, category, official,
       official ? `Verified vendor org ${org}` : null, `${type}:${category}`,
       type === 'website' ? websiteUrl(repo) : (repo.html_url || `https://github.com/${repo.full_name}`), null, repo.language || '',
       JSON.stringify(topics), repo.stargazers_count || 0, repo.forks_count || 0,
-      repo.created_at, repo.pushed_at, null, null, null
+      repo.created_at, repo.pushed_at, null, null, null,
+      type === 'website' ? websiteUrl(repo) : null,
+      repo.html_url || `https://github.com/${repo.full_name}`,
+      at,
+      sourceQuery,
+      type === 'website' ? websiteEntityKey(repo) : `repo:${String(repo.full_name || '').toLowerCase()}`,
+      JSON.stringify({ associatedRepoStars: repo.stargazers_count || 0, associatedRepoForks: repo.forks_count || 0, contentUpdatedAt: repo.pushed_at || repo.updated_at || null, confidence: 'github-associated' })
     ]
   );
   return id;
 }
 
-async function collectTypedAssets(knownRepos) {
+async function recordQueryStat(runId, collectionType, spec, stat, error = null) {
+  await query(
+    `INSERT INTO sync_query_stats (run_id,collection_type,family,query_text,requested,returned,unique_count,accepted,rate_limited,error,created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [runId, collectionType, spec.family || collectionType, spec.q, stat.requested, stat.returned, stat.unique, stat.accepted, /rate limit|429|403/i.test(String(error || '')), error ? String(error).slice(0, 500) : null, new Date().toISOString()]
+  );
+}
+
+async function collectTypedAssets(knownRepos, runId, at, manualAssets = new Map()) {
   const counts = {};
   const extra = new Map();
+  const executedQueries = [];
   for (const type of ASSET_TYPES) {
     const found = new Map();
+    for (const repo of manualAssets.get(type) || []) {
+      repo._trendTopAssetSourceQuery = `manual:${type}`;
+      found.set(repo.id, repo);
+    }
     const queryBudget = Math.max(40, Math.ceil(MAX_ASSETS_PER_TYPE / ASSET_QUERIES[type].length));
     for (const spec of ASSET_QUERIES[type]) {
       let added = 0;
-      for (let page = 1; page <= spec.pages; page++) {
-        if (found.size >= MAX_ASSETS_PER_TYPE || added >= queryBudget) break;
-        const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(spec.q)}&sort=${encodeURIComponent(spec.sort)}&order=desc&per_page=${spec.perPage}&page=${page}`;
-        const body = await github(url);
-        for (const repo of body.items || []) {
-          if (!repo?.id || found.has(repo.id)) continue;
-          found.set(repo.id, repo);
-          added++;
+      const stat = { requested: 0, returned: 0, unique: 0, accepted: 0 };
+      try {
+        for (let page = 1; page <= spec.pages; page++) {
           if (found.size >= MAX_ASSETS_PER_TYPE || added >= queryBudget) break;
+          const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(spec.q)}&sort=${encodeURIComponent(spec.sort)}&order=desc&per_page=${spec.perPage}&page=${page}`;
+          stat.requested++;
+          const body = await github(url);
+          stat.returned += (body.items || []).length;
+          for (const repo of body.items || []) {
+            if (!repo?.id || found.has(repo.id)) continue;
+            stat.unique++;
+            repo._trendTopAssetSourceQuery = `asset:${type}:${spec.q}`;
+            found.set(repo.id, repo);
+            added++;stat.accepted++;
+            if (found.size >= MAX_ASSETS_PER_TYPE || added >= queryBudget) break;
+          }
+          await sleep(1200);
         }
-        await sleep(1200);
-      }
+        executedQueries.push(`asset:${type}:${spec.q}`);
+        await recordQueryStat(runId, type, { ...spec, family: `asset:${type}` }, stat);
+      } catch (error) { await recordQueryStat(runId, type, { ...spec, family: `asset:${type}` }, stat, error); throw error; }
     }
     for (const repo of knownRepos) {
       if (found.size >= MAX_ASSETS_PER_TYPE) break;
       if (inferAssetType(repo) === type) found.set(repo.id, repo);
     }
     for (const repo of found.values()) {
-      await upsertAsset(type, repo);
+      await upsertAsset(type, repo, repo._trendTopAssetSourceQuery || `inferred:${type}`, at);
       if (!knownRepos.some(item => item.id === repo.id)) extra.set(repo.id, repo);
     }
     counts[type] = found.size;
   }
-  return { counts, extra: [...extra.values()] };
+  return { counts, extra: [...extra.values()], executedQueries };
+}
+
+async function approvedCandidates() {
+  const rows = await many("SELECT * FROM catalog_candidates WHERE status='approved' ORDER BY id");
+  const repos = [], assets = new Map();
+  for (const row of rows) {
+    try {
+      const parsed = new URL(row.url);
+      const match = parsed.hostname.toLowerCase() === 'github.com' ? parsed.pathname.match(/^\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/) : null;
+      if (match) {
+        const repo = await github(`https://api.github.com/repos/${encodeURIComponent(match[1])}/${encodeURIComponent(match[2])}`);
+        if (row.type === 'github-repo') { repo._trendTopSourceQuery = 'manual:github-repo'; repos.push(repo); }
+        else { const list = assets.get(row.type) || []; list.push(repo); assets.set(row.type, list); }
+      } else if (row.type === 'website') {
+        const id = `manual-${row.id}`;
+        await query(
+          `INSERT INTO website_sources (id,name,url,collection_method,frequency_hours,trust_level,topics,active,metadata)
+           VALUES ($1,$2,$3,'page',24,'reviewed','[]'::jsonb,TRUE,$4::jsonb)
+           ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name,url=EXCLUDED.url,active=TRUE`,
+          [id, parsed.hostname.replace(/^www\./, ''), parsed.href, JSON.stringify({ candidateId: row.id, submittedBy: row.submitted_by })]
+        );
+      }
+      await query('UPDATE catalog_candidates SET notes=NULL WHERE id=$1', [row.id]);
+    } catch (error) {
+      await query('UPDATE catalog_candidates SET notes=$1 WHERE id=$2', [`Collection failed: ${String(error).slice(0, 400)}`, row.id]);
+    }
+  }
+  return { repos, assets };
 }
 
 async function copyRepoMetricsToAssets() {
@@ -345,6 +425,8 @@ export async function collect() {
   let found = 0, sampled = 0;
   try {
     const unique = new Map();
+    const manual = await approvedCandidates();
+    for (const repo of manual.repos) keepCandidate(unique, repo);
     const knownLimit = process.env.GITHUB_TOKEN ? 600 : 80;
     const known = await many(
       `SELECT id, full_name FROM repos
@@ -366,27 +448,60 @@ export async function collect() {
     }
 
     const plan = discoveryPlan();
+    const executedRepoQueries = [];
     for (const spec of plan.queries) {
-      for (let page = 1; page <= spec.pages; page++) {
-        if (unique.size >= MAX_REPOS) break;
-        const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(spec.q)}&sort=${encodeURIComponent(spec.sort)}&order=desc&per_page=${spec.perPage}&page=${page}`;
-        const body = await github(url);
-        for (const repo of body.items || []) keepCandidate(unique, repo);
-        await sleep(1200);
-      }
+      let added = 0;
+      const stat = { requested: 0, returned: 0, unique: 0, accepted: 0 };
+      try {
+        for (let page = 1; page <= spec.pages; page++) {
+          if (unique.size >= MAX_REPOS || added >= spec.quota) break;
+          const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(spec.q)}&sort=${encodeURIComponent(spec.sort)}&order=desc&per_page=${spec.perPage}&page=${page}`;
+          stat.requested++;
+          const body = await github(url);
+          stat.returned += (body.items || []).length;
+          for (const repo of body.items || []) {
+            if (!repo?.id || unique.has(repo.id)) continue;
+            stat.unique++;
+            if (keepCandidate(unique, repo)) {
+              repo._trendTopSourceQuery = spec.q;
+              stat.accepted++;added++;
+            }
+            if (unique.size >= MAX_REPOS || added >= spec.quota) break;
+          }
+          await sleep(1200);
+        }
+        executedRepoQueries.push(spec.q);
+        await recordQueryStat(runId, 'github-repo', spec, stat);
+      } catch (error) { await recordQueryStat(runId, 'github-repo', spec, stat, error); throw error; }
     }
 
     found = unique.size;
     const at = new Date().toISOString();
     for (const repo of unique.values()) {
-      await upsertGithubRepo(repo, at);
+      await upsertGithubRepo(repo, at, repo._trendTopSourceQuery || null);
       sampled++;
     }
 
-    const assets = await collectTypedAssets([...unique.values()]);
+    const assets = await collectTypedAssets([...unique.values()], runId, at, manual.assets);
     for (const repo of assets.extra) {
-      await upsertGithubRepo(repo, at);
+      await upsertGithubRepo(repo, at, repo._trendTopAssetSourceQuery || null);
       unique.set(repo.id, repo);
+    }
+
+    const websites = await collectWebsiteSources();
+    if (executedRepoQueries.length) {
+      await query(
+        `UPDATE repos SET missed_runs=missed_runs+1,active=CASE WHEN missed_runs+1>=3 THEN FALSE ELSE active END
+         WHERE source='github' AND source_query=ANY($1::text[]) AND (last_seen_at IS NULL OR last_seen_at<$2)`,
+        [executedRepoQueries, started]
+      );
+    }
+    if (assets.executedQueries.length) {
+      await query(
+        `UPDATE assets SET missed_runs=missed_runs+1,active=CASE WHEN missed_runs+1>=3 THEN FALSE ELSE active END
+         WHERE source_query=ANY($1::text[]) AND (last_seen_at IS NULL OR last_seen_at<$2)`,
+        [assets.executedQueries, started]
+      );
     }
 
     // Star history is a separate GitHub endpoint; if it breaks, keep the snapshots and still rebuild metrics.
@@ -403,7 +518,7 @@ export async function collect() {
       `UPDATE sync_runs SET finished_at = $1, status = $2, found = $3, sampled = $4, error = $5 WHERE id = $6`,
       [new Date().toISOString(), 'ok', found, sampled, historyError || (history.failed ? `${history.failed} star histories unavailable` : null), runId]
     );
-    return { found, sampled, history, historyError, assets: assets.counts };
+    return { found, sampled, history, historyError, assets: assets.counts, websites };
   } catch (e) {
     await query(
       `UPDATE sync_runs SET finished_at = $1, status = $2, found = $3, sampled = $4, error = $5 WHERE id = $6`,

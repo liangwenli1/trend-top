@@ -582,13 +582,23 @@ html.is-scrolling .analytics-page-nav,
 /* Editorial footer: a black closing band. Identity plus contact icons on the left, legal links and language toggle in the bottom row. */
 .site-footer{width:100%;max-width:none;min-height:0;margin:0;padding:clamp(48px,6svh,72px) 48px 36px;display:flex;flex-direction:column;align-items:stretch;justify-content:space-between;gap:40px;border:0;background:#111;color:#fff}
 .site-footer .footer-main,.site-footer .footer-bottom{width:100%;max-width:2304px;margin-inline:auto}
-.site-footer .footer-main{display:block}
+.site-footer .footer-main{display:grid;grid-template-columns:minmax(0,1fr) minmax(420px,.78fr);align-items:center;gap:clamp(48px,7vw,140px)}
 .site-footer .footer-identity{min-width:0}
 .site-footer .footer-wordmark{display:block;color:#fff;font-family:Georgia,'Times New Roman',serif;font-size:clamp(56px,5.6vw,112px);font-weight:400;line-height:1;letter-spacing:-.065em}
 .site-footer .footer-tagline{max-width:760px;margin:18px 0 0;color:#d0d0d0;font-size:clamp(19px,1.2vw,26px);line-height:1.35}
 .site-footer .footer-social{display:flex;flex-wrap:wrap;gap:12px;margin:26px 0 0;padding:0;list-style:none}
 .site-footer .footer-social a{display:inline-flex;align-items:center;justify-content:center;width:46px;height:46px;border:1px solid #555;color:#e5e5e5;text-decoration:none;transition:background .15s,color .15s,border-color .15s}
 .site-footer .footer-social a:hover,.site-footer .footer-social a:focus-visible{border-color:#fff;background:#fff;color:#111}
+.footer-network{--network-x:0px;--network-y:0px;position:relative;display:grid;grid-template-columns:150px minmax(0,1fr);align-items:stretch;gap:10px;min-height:250px;padding:10px;border:1px solid #444;background:#151515;overflow:hidden}
+.footer-network-core{display:flex;flex-direction:column;justify-content:center;padding:22px;border:1px solid #315fd9;background:#315fd9;color:#fff;transform:translate(var(--network-x),var(--network-y));transition:transform .3s cubic-bezier(.2,0,0,1)}
+.footer-network-core span{font-size:22px;font-weight:800;letter-spacing:-.04em}
+.footer-network-core small{margin-top:7px;color:#dce5ff;font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+.footer-network-nodes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;transform:translate(calc(var(--network-x) * -.55),calc(var(--network-y) * -.55));transition:transform .35s cubic-bezier(.2,0,0,1)}
+.footer-network-nodes a{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;padding:15px;border:1px solid #444;background:#111;color:#fff;text-decoration:none;transition:background .16s,border-color .16s,transform .18s}
+.footer-network-nodes a span{color:#818181;font:700 11px/1 ui-monospace,SFMono-Regular,Consolas,monospace}
+.footer-network-nodes a strong{overflow:hidden;font-size:14px;text-overflow:ellipsis;white-space:nowrap}
+.footer-network-nodes a:hover,.footer-network-nodes a:focus-visible{border-color:#fff;background:#fff;color:#111;transform:translateY(-2px)}
+.footer-network-nodes a:hover span,.footer-network-nodes a:focus-visible span{color:#315fd9}
 .site-footer .footer-bottom{display:flex;align-items:center;justify-content:space-between;gap:24px;padding-top:24px;border-top:1px solid #444}
 .site-footer .footer-bottom-copy{display:flex;flex-wrap:wrap;align-items:center;gap:10px 28px}
 .site-footer .footer-bottom p{max-width:none;margin:0;color:#bebebe;font-size:clamp(15px,.9vw,18px);line-height:1.5}
@@ -662,6 +672,8 @@ html.is-scrolling .analytics-page-nav,
 @media(prefers-reduced-motion:reduce){.design-select-content{animation:none}.design-select-chevron{transition:none}}
 @media(max-width:900px){
   .site-footer{gap:36px}
+  .site-footer .footer-main{grid-template-columns:1fr}
+  .footer-network{max-width:720px}
 }
 @media(max-width:700px){
   .site-footer{padding:44px 16px 28px;gap:32px}
@@ -669,10 +681,15 @@ html.is-scrolling .analytics-page-nav,
   .site-footer .footer-tagline{max-width:none;margin-top:14px;font-size:19px}
   .site-footer .footer-social{margin-top:20px}
   .site-footer .footer-social a{width:42px;height:42px}
+  .footer-network{grid-template-columns:1fr;min-height:0;padding:8px}
+  .footer-network-core{min-height:92px}
+  .footer-network-nodes{grid-template-columns:repeat(2,minmax(0,1fr))}
   .site-footer .footer-bottom{align-items:flex-start;flex-direction:column;gap:20px;padding-top:22px}
   .site-footer .footer-bottom p{font-size:15px}
   .site-footer .language-menu-trigger{min-height:44px;font-size:14px}
 }
+@media(max-width:420px){.footer-network-nodes{grid-template-columns:1fr}.footer-network-nodes a{min-height:48px}}
+@media(prefers-reduced-motion:reduce){.footer-network-core,.footer-network-nodes,.footer-network-nodes a{transform:none!important;transition:none}}
 @media(max-width:850px){
   .header-inner{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px 16px;min-height:0;padding-top:10px;padding-bottom:10px}
   .header-search{grid-column:1/-1;max-width:none}
@@ -698,12 +715,24 @@ html.is-scrolling .analytics-page-nav,
 @media(max-width:420px){.header-link{font-size:13px;padding:0 2px}}
 @media(max-width:340px){.header-link{font-size:12px;padding:0 1px}}
 @media(max-width:600px){.header-actions .header-signin{min-height:38px;max-width:120px;padding:0 12px}}
-/* Signed-in header control: a square account icon button, matching the site's square controls. */
-.header-actions .header-avatar{display:inline-flex;align-items:center;justify-content:center;flex:none;min-height:44px;padding:0 2px;border:0;background:none;color:#525252;text-decoration:none;transition:color .15s}
-.header-actions .header-avatar svg{width:22px;height:22px}
-.header-actions .header-avatar:hover,.header-actions .header-avatar:focus-visible,.header-actions .header-avatar[aria-current=page]{color:#111}
-.header-actions .header-avatar[aria-current=page] svg{stroke-width:2.2}
-@media(max-width:600px){.header-actions .header-avatar{min-height:42px}.header-actions .header-avatar svg{width:20px;height:20px}}
+/* Signed-in account menu keeps account and admin actions out of the primary navigation. */
+.account-menu{position:relative;flex:none}
+.account-menu-trigger{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border:1px solid #111;border-radius:0;background:#111;color:#fff;font-size:15px;font-weight:760;line-height:1;cursor:pointer}
+.account-menu-trigger:hover,.account-menu-trigger:focus-visible,.account-menu-trigger[aria-expanded=true]{border-color:#315fd9;background:#315fd9;color:#fff}
+.account-menu-panel{position:absolute;right:0;top:calc(100% + 9px);z-index:50;width:min(310px,calc(100vw - 32px));padding:8px;border:1px solid #111;background:#fff;box-shadow:0 18px 42px #0002;animation:select-enter .16s ease-out}
+.account-menu-identity{padding:12px 13px 14px;border-bottom:1px solid #dedede}
+.account-menu-identity span{display:block;margin-bottom:4px;color:#747474;font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.08em}
+.account-menu-identity strong{display:block;overflow:hidden;color:#111;font-size:14px;text-overflow:ellipsis;white-space:nowrap}
+.account-menu-panel>a,.account-menu-panel>button{display:flex;align-items:center;width:100%;min-height:46px;padding:0 13px;border:0;background:#fff;color:#111;font:inherit;font-size:15px;font-weight:650;text-align:left;text-decoration:none;cursor:pointer}
+.account-menu-panel>a:hover,.account-menu-panel>a:focus-visible,.account-menu-panel>button:hover,.account-menu-panel>button:focus-visible{background:#111;color:#fff;outline:0}
+.account-menu-signout{margin-top:6px!important;border-top:1px solid #dedede!important;color:#666!important}
+.account-menu-signout:hover,.account-menu-signout:focus-visible{color:#fff!important}
+@media(max-width:600px){.account-menu-trigger{width:40px;height:40px}.account-menu-panel{position:fixed;right:16px;top:106px}}
+@media(prefers-reduced-motion:reduce){.account-menu-panel{animation:none}}
+.detail-source-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.detail-source-actions .ghost{display:inline-flex;align-items:center;justify-content:center;min-height:52px;padding:12px 22px;text-decoration:none}
+.detail-data-pending{margin:26px 0;padding:18px 20px;border-left:3px solid #315fd9;background:#f5f7ff;color:#333;font-weight:650}
+.detail-provenance{margin-top:18px;color:#666!important;font-size:14px;line-height:1.5}
 
 /* Keep repository topics and languages in dedicated, centered columns. */
 .ranking-page .list-header,

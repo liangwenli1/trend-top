@@ -107,9 +107,29 @@ function hotScore(item, cohort, forkReady) {
 
 async function similarCounts() {
   const rows = await many(
-    `SELECT cluster_id, COUNT(*)::int AS n FROM assets WHERE cluster_id IS NOT NULL GROUP BY cluster_id`
+    `SELECT cluster_id, COUNT(*)::int AS n FROM assets WHERE cluster_id IS NOT NULL AND active=TRUE GROUP BY cluster_id`
   );
   return new Map(rows.map(r => [r.cluster_id, Math.max(0, asNumber(r.n) - 1)]));
+}
+
+function rankedTopics(row, frequency = null) {
+  const values = asJson(row.topics, []);
+  const haystack = `${row.full_name || ''} ${row.description || ''}`.toLowerCase();
+  const source = String(row.source_query || '').toLowerCase();
+  const category = String(row.category || '').toLowerCase();
+  return [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))].sort((left, right) => {
+    const score = value => {
+      const key = value.toLowerCase();
+      let total = key === category ? 8 : 0;
+      if (source.includes(key)) total += 6;
+      if (haystack.includes(key)) total += 4;
+      if (['ai', 'web', 'app', 'tool', 'tools'].includes(key)) total -= 3;
+      if (frequency?.has(key)) total += Math.max(0, 5 - Math.log2(frequency.get(key) + 1));
+      total += Math.min(3, key.length / 8);
+      return total;
+    };
+    return score(right) - score(left) || left.localeCompare(right);
+  });
 }
 
 function mapAsset(row, extras = {}) {
@@ -127,9 +147,16 @@ function mapAsset(row, extras = {}) {
     clusterId: row.cluster_id,
     similarCount: extras.similarCount || 0,
     url: row.url,
+    websiteUrl: row.website_url || (row.type === 'website' ? row.url : null),
+    sourceRepoUrl: row.source_repo_url || null,
+    faviconUrl: row.favicon_url || null,
+    lastFetchedAt: asIso(row.last_fetched_at),
+    sourceQuery: row.source_query || null,
+    entityKey: row.entity_key || null,
+    rankingSignals: asJson(row.ranking_signals, {}),
     install: row.install,
     language: row.language,
-    topics: asJson(row.topics, []),
+    topics: rankedTopics(row, extras.topicFrequency),
     stars: asNumber(row.stars) || 0,
     forks: asNumber(row.forks) || 0,
     created_at: asIso(row.created_at),
@@ -269,8 +296,8 @@ function decorateRepo(item) {
 
 export async function getTypeSummary() {
   const [rows, repos] = await Promise.all([
-    many('SELECT type, COUNT(*)::int AS n FROM assets GROUP BY type'),
-    one("SELECT COUNT(*)::int AS n FROM repos WHERE deleted = FALSE AND archived = FALSE")
+    many('SELECT type, COUNT(*)::int AS n FROM assets WHERE active=TRUE GROUP BY type'),
+    one("SELECT COUNT(*)::int AS n FROM repos WHERE deleted = FALSE AND archived = FALSE AND active=TRUE")
   ]);
   const counts = Object.fromEntries(rows.map(r => [r.type, asNumber(r.n) || 0]));
   counts['github-repo'] = asNumber(repos?.n) || 0;
@@ -293,19 +320,19 @@ export async function getCatalogFilters(type) {
   const [languages, categories, topics] = await Promise.all([
     many(
       `SELECT language AS name, COUNT(*)::int AS count FROM assets
-       WHERE type = $1 AND language IS NOT NULL AND language <> ''
+       WHERE type = $1 AND active=TRUE AND language IS NOT NULL AND language <> ''
        GROUP BY language ORDER BY count DESC, language LIMIT 20`,
       [type]
     ),
     many(
       `SELECT category AS id, MIN(category_zh) AS zh, MIN(category_en) AS en, COUNT(*)::int AS count
-       FROM assets WHERE type = $1 GROUP BY category ORDER BY count DESC, category`,
+       FROM assets WHERE type = $1 AND active=TRUE GROUP BY category ORDER BY count DESC, category`,
       [type]
     ),
     many(
       `SELECT topic AS name, COUNT(*)::int AS count
        FROM assets a, LATERAL jsonb_array_elements_text(a.topics) AS topic
-       WHERE a.type = $1 AND topic <> ''
+       WHERE a.type = $1 AND a.active=TRUE AND topic <> ''
        GROUP BY topic ORDER BY count DESC, topic LIMIT 80`,
       [type]
     )
@@ -344,7 +371,7 @@ export async function getCatalogRankings(type, query = {}) {
   const officialOnly = board === 'official' || query.official === '1' || query.official === 'true';
   const endpoint = await latestAssetDay();
   const params = [type];
-  let sql = 'SELECT * FROM assets WHERE type = $1';
+  let sql = 'SELECT * FROM assets WHERE type = $1 AND active=TRUE';
   if (language) {
     params.push(language);
     sql += ` AND lower(language) = lower($${params.length})`;
@@ -380,10 +407,13 @@ export async function getCatalogRankings(type, query = {}) {
   const rows = await many(sql, params);
   const similars = await similarCounts();
   const statsById = await periodStatsBatch(rows.map(row => row.id), period, endpoint);
+  const topicFrequency = new Map();
+  for (const row of rows) for (const value of asJson(row.topics, [])) { const key = String(value || '').trim().toLowerCase(); if (key) topicFrequency.set(key, (topicFrequency.get(key) || 0) + 1); }
   const now = endpoint.getTime();
   const scored = [];
   for (const row of rows) {
-    const stats = statsById.get(String(row.id)) || { gain: 0, prevGain: 0, anomaly: false };
+    const independentWebsite = type === 'website' && String(row.source_query || '').startsWith('website-source:');
+    const stats = independentWebsite ? { gain: null, prevGain: null, anomaly: false } : (statsById.get(String(row.id)) || { gain: 0, prevGain: 0, anomaly: false });
     const ageDays = Math.max(0, (now - new Date(row.created_at).getTime()) / 86400000);
     const pushDays = Math.max(0, (now - new Date(row.pushed_at).getTime()) / 86400000);
     if (board === 'new' && (ageDays > 90 || (asNumber(row.stars) || 0) < 5)) continue;
@@ -391,13 +421,21 @@ export async function getCatalogRankings(type, query = {}) {
       ...stats,
       ageDays: Math.round(ageDays),
       pushDays: Math.round(pushDays),
+      topicFrequency,
       similarCount: similars.get(row.cluster_id) || 0,
       sampledAt: endpoint.toISOString()
     }));
   }
   const cohort = scored.filter(x => x.gain != null && !x.anomaly);
   const forkReady = cohort.some(x => (x.forks || 0) > 0);
-  for (const item of scored) item.score = hotScore(item, cohort, forkReady);
+  for (const item of scored) {
+    if (type === 'website' && item.sourceQuery?.startsWith('website-source:')) {
+      const trust = item.rankingSignals?.trust === 'official' ? 88 : item.rankingSignals?.trust === 'curated' ? 72 : 56;
+      const updatedAt = item.rankingSignals?.contentUpdatedAt ? new Date(item.rankingSignals.contentUpdatedAt).getTime() : NaN;
+      const recency = Number.isFinite(updatedAt) ? Math.max(0, 100 - Math.max(0, Date.now() - updatedAt) / 86400000 * 2) : 45;
+      item.score = Math.round(trust * .7 + recency * .3);
+    } else item.score = hotScore(item, cohort, forkReady);
+  }
   const metric = boards[board].metric;
   const filtered = scored.filter(item => {
     if (metric === 'score') return item.score != null;
@@ -538,7 +576,7 @@ export async function getCatalogItem(type, id) {
     periodStats(row.id, 'week', endpoint),
     similarCounts(),
     row.cluster_id
-      ? many('SELECT * FROM assets WHERE cluster_id = $1 AND id <> $2 ORDER BY stars DESC', [row.cluster_id, row.id])
+      ? many('SELECT * FROM assets WHERE cluster_id = $1 AND id <> $2 AND active=TRUE ORDER BY stars DESC', [row.cluster_id, row.id])
       : Promise.resolve([]),
     many('SELECT day, star_created, stars FROM asset_daily WHERE asset_id = $1 ORDER BY day', [row.id])
   ]);

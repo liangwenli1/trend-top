@@ -234,12 +234,18 @@ export function AccountPage({ l }) {
   const [user, setUser] = useState(undefined);
   const [subscription, setSubscription] = useState(undefined);
   const [error, setError] = useState('');
+  const subscriptionRef = React.useRef(null);
   useEffect(() => { request('/api/auth/me').then(result => setUser(result.user)).catch(() => setUser(null)); }, []);
   useEffect(() => {
     if (!user) return;
     request('/api/subscription').then(result => setSubscription(result.subscription)).catch(e => setError(e.message));
   }, [user?.id]);
+  useEffect(() => {
+    if (!user || subscription === undefined || new URLSearchParams(location.search).get('section') !== 'subscription') return;
+    const frame = requestAnimationFrame(() => subscriptionRef.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }));
+    return () => cancelAnimationFrame(frame);
+  }, [user?.id, subscription]);
   const logout = async () => { try { await request('/api/auth/logout', 'POST', {}); setUser(null); setSubscription(undefined); announceAuthChange(null); } catch (e) { setError(e.message); } };
   const zh = l === 'zh';
-  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{user ? (zh ? '管理你的账户' : 'Manage your account') : (zh ? '登录或注册' : 'Sign in or register')}</h1><p>{zh ? '管理每日摘要、Pro 套餐与账单。' : 'Manage your daily digest, Pro plan, and billing.'}</p></div><div className="account-page-card">{user === undefined ? <p>{zh ? '加载中…' : 'Loading…'}</p> : user ? <><div className="account-user"><strong>{user.email}</strong><button type="button" className="ghost" onClick={logout}>{zh ? '退出登录' : 'Sign out'}</button></div>{subscription === undefined ? <p>{zh ? '加载订阅…' : 'Loading subscription…'}</p> : <SubscriptionSettings l={l} subscription={subscription} account onSaved={setSubscription}/>}<BillingCard l={l}/></> : <AuthForm l={l} initialMode="login" onAuthenticated={setUser}/>}</div>{error && <p role="alert">{error}</p>}</main>;
+  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{user ? (zh ? '管理你的账户' : 'Manage your account') : (zh ? '登录或注册' : 'Sign in or register')}</h1><p>{zh ? '在一个页面管理每日摘要、推送偏好、Pro 套餐与账单。' : 'Manage your daily digest, delivery preferences, Pro plan, and billing in one place.'}</p></div><div className="account-page-card">{user === undefined ? <p>{zh ? '加载中…' : 'Loading…'}</p> : user ? <><div className="account-user"><div><span>{zh ? '登录邮箱' : 'Signed-in email'}</span><strong>{user.email}</strong></div><button type="button" className="ghost" onClick={logout}>{zh ? '退出登录' : 'Sign out'}</button></div><section className="account-section" ref={subscriptionRef} id="account-subscription"><div className="account-section-heading"><p>{zh ? '订阅与推送' : 'Subscription & delivery'}</p><h2>{zh ? '你的每日摘要' : 'Your daily digest'}</h2></div>{subscription === undefined ? <p>{zh ? '加载订阅…' : 'Loading subscription…'}</p> : <SubscriptionSettings l={l} subscription={subscription} account onSaved={setSubscription}/>}</section><section className="account-section" id="account-billing"><div className="account-section-heading"><p>{zh ? '套餐与账单' : 'Plan & billing'}</p><h2>{zh ? '管理 Pro 套餐' : 'Manage your Pro plan'}</h2></div><BillingCard l={l}/></section></> : <AuthForm l={l} initialMode="login" onAuthenticated={setUser}/>}</div>{error && <p role="alert">{error}</p>}</main>;
 }

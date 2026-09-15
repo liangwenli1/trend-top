@@ -11,7 +11,11 @@ CREATE TABLE IF NOT EXISTS repos (
   updated_at TIMESTAMPTZ,
   archived BOOLEAN NOT NULL DEFAULT FALSE,
   deleted BOOLEAN NOT NULL DEFAULT FALSE,
-  source TEXT NOT NULL DEFAULT 'github'
+  source TEXT NOT NULL DEFAULT 'github',
+  last_seen_at TIMESTAMPTZ,
+  source_query TEXT,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  missed_runs INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -80,6 +84,16 @@ CREATE TABLE IF NOT EXISTS assets (
   recommend_rank INTEGER,
   recommend_note_zh TEXT,
   recommend_note_en TEXT,
+  website_url TEXT,
+  source_repo_url TEXT,
+  favicon_url TEXT,
+  last_fetched_at TIMESTAMPTZ,
+  last_seen_at TIMESTAMPTZ,
+  source_query TEXT,
+  entity_key TEXT,
+  ranking_signals JSONB NOT NULL DEFAULT '{}'::jsonb,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  missed_runs INTEGER NOT NULL DEFAULT 0,
   UNIQUE (type, slug)
 );
 
@@ -99,6 +113,50 @@ CREATE TABLE IF NOT EXISTS sync_runs (
   found INTEGER NOT NULL DEFAULT 0,
   sampled INTEGER NOT NULL DEFAULT 0,
   error TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sync_query_stats (
+  id SERIAL PRIMARY KEY,
+  run_id INTEGER NOT NULL,
+  collection_type TEXT NOT NULL,
+  family TEXT NOT NULL,
+  query_text TEXT NOT NULL,
+  requested INTEGER NOT NULL DEFAULT 0,
+  returned INTEGER NOT NULL DEFAULT 0,
+  unique_count INTEGER NOT NULL DEFAULT 0,
+  accepted INTEGER NOT NULL DEFAULT 0,
+  rate_limited BOOLEAN NOT NULL DEFAULT FALSE,
+  error TEXT,
+  created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS website_sources (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL UNIQUE,
+  source_repo_url TEXT,
+  collection_method TEXT NOT NULL DEFAULT 'page',
+  frequency_hours INTEGER NOT NULL DEFAULT 24,
+  trust_level TEXT NOT NULL DEFAULT 'community',
+  topics JSONB NOT NULL DEFAULT '[]'::jsonb,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  last_fetched_at TIMESTAMPTZ,
+  next_retry_at TIMESTAMPTZ,
+  failure_count INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE IF NOT EXISTS catalog_candidates (
+  id SERIAL PRIMARY KEY,
+  url TEXT NOT NULL,
+  type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  submitted_by TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL,
+  reviewed_at TIMESTAMPTZ,
+  UNIQUE (url, type)
 );
 
 CREATE TABLE IF NOT EXISTS subscriptions (
@@ -302,3 +360,6 @@ CREATE INDEX IF NOT EXISTS assets_type_idx ON assets (type);
 CREATE INDEX IF NOT EXISTS assets_category_idx ON assets (type, category);
 CREATE INDEX IF NOT EXISTS assets_cluster_idx ON assets (cluster_id);
 CREATE INDEX IF NOT EXISTS asset_daily_day_idx ON asset_daily (day);
+CREATE INDEX IF NOT EXISTS sync_query_stats_run_idx ON sync_query_stats (run_id, collection_type);
+CREATE INDEX IF NOT EXISTS website_sources_due_idx ON website_sources (active, last_fetched_at);
+CREATE INDEX IF NOT EXISTS catalog_candidates_status_idx ON catalog_candidates (status, created_at);

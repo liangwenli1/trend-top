@@ -4,7 +4,17 @@
 .account-page-head > p:last-child { color: #666; font-size: clamp(18px, 1.3vw, 23px); line-height: 1.5; }
 .account-kicker { margin: 0; color: #315fd9; font-size: 14px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
 .account-page-card { max-width: 850px; padding: clamp(22px, 3vw, 46px); border: 1px solid #dedede; background: #fff; }
-.account-user { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 30px; padding-bottom: 22px; border-bottom: 1px solid #dedede; font-size: 18px; }
+.account-user { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 30px; padding-bottom: 22px; border-bottom: 1px solid #dedede; font-size: 18px; }
+.account-user > div { min-width: 0; }
+.account-user span { display: block; margin-bottom: 5px; color: #737373; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.account-user strong { display: block; overflow-wrap: anywhere; }
+.account-section { scroll-margin-top: 116px; padding: 32px 0 8px; border-top: 1px solid #dedede; }
+.account-user + .account-section { border-top: 0; padding-top: 0; }
+.account-section + .account-section { margin-top: 42px; }
+.account-section-heading { margin-bottom: 24px; }
+.account-section-heading p { margin: 0 0 7px; color: #315fd9; font-size: 12px; font-weight: 780; letter-spacing: .09em; text-transform: uppercase; }
+.account-section-heading h2 { margin: 0; font-size: clamp(25px, 3vw, 36px); letter-spacing: -.035em; }
+.account-section .billing-account-card { margin-top: 0; }
 .account-tabs { display: flex; gap: 0; margin: 0 0 24px; border-bottom: 1px solid #dedede; }
 .account-tabs button { min-width: 120px; padding: 14px 18px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #666; font: inherit; font-weight: 700; cursor: pointer; }
 .account-tabs button[aria-current=page] { border-bottom-color: #315fd9; color: #171717; }

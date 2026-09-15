@@ -2,6 +2,7 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { trackDatabaseCall } from './performance.js';
 
 export const DAYS = { day: 1, week: 7, month: 30 };
 export const HISTORY_DAYS = 14;
@@ -97,6 +98,28 @@ async function init() {
   await adapter.exec('CREATE INDEX IF NOT EXISTS subscriptions_user_idx ON subscriptions (user_id)');
   // Rank snapshot of the last sent digest, used for the next digest's rank-change arrows.
   await adapter.exec('ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS snapshot JSONB');
+  // Live catalog provenance and lifecycle fields were added after the initial schema.
+  await adapter.exec('ALTER TABLE repos ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ');
+  await adapter.exec('ALTER TABLE repos ADD COLUMN IF NOT EXISTS source_query TEXT');
+  await adapter.exec('ALTER TABLE repos ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE');
+  await adapter.exec('ALTER TABLE repos ADD COLUMN IF NOT EXISTS missed_runs INTEGER NOT NULL DEFAULT 0');
+  await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS website_url TEXT');
+  await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS source_repo_url TEXT');
+  await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS favicon_url TEXT');
+  await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS last_fetched_at TIMESTAMPTZ');
+  await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ');
+  await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS source_query TEXT');
+  await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS entity_key TEXT');
+  await adapter.exec("ALTER TABLE assets ADD COLUMN IF NOT EXISTS ranking_signals JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE');
+  await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS missed_runs INTEGER NOT NULL DEFAULT 0');
+  await adapter.exec('ALTER TABLE website_sources ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ');
+  await adapter.exec('ALTER TABLE website_sources ADD COLUMN IF NOT EXISTS failure_count INTEGER NOT NULL DEFAULT 0');
+  await adapter.exec('CREATE INDEX IF NOT EXISTS repos_active_stars_idx ON repos (source, active, deleted, archived, stars DESC)');
+  await adapter.exec('CREATE INDEX IF NOT EXISTS repos_source_query_idx ON repos (source_query, last_seen_at)');
+  await adapter.exec('CREATE INDEX IF NOT EXISTS assets_type_active_stars_idx ON assets (type, active, stars DESC)');
+  await adapter.exec('CREATE INDEX IF NOT EXISTS assets_source_query_idx ON assets (source_query, last_seen_at)');
+  await adapter.exec('CREATE INDEX IF NOT EXISTS assets_entity_key_idx ON assets (entity_key)');
   if (dataSource() === 'demo') {
     await seedDemo();
     const { seedCatalog } = await import('./catalog.js');
@@ -118,7 +141,7 @@ async function db() {
 }
 
 export async function query(text, params = []) {
-  return (await db()).query(text, params);
+  return trackDatabaseCall(async () => (await db()).query(text, params));
 }
 
 export async function one(text, params = []) {
