@@ -271,7 +271,7 @@ function SiteFooter({l,t,onLanguageSwitch}){
   const languages=[['en','English'],['zh','简体中文']];
   return <footer className="footer site-footer">
     <div className="footer-main"><div className="footer-identity"><strong className="footer-wordmark">Trend Top</strong><p className="footer-tagline">{l==='zh'?'发现开源世界的新动向。':'Find what is moving in open source.'}</p>{contactLinks.length>0&&<ul className="footer-social" aria-label={l==='zh'?'联系方式':'Contact'}>{contactLinks.map(link=><li key={link.name}><a href={link.href} title={link.title} aria-label={link.title} {...(link.external?{target:'_blank',rel:'noreferrer'}:{})}><SocialIcon name={link.name}/></a></li>)}</ul>}</div><FooterNetwork l={l} navigate={navigate}/></div>
-    <div className="footer-bottom"><div className="footer-bottom-copy"><p>{t.foot}</p><nav className="footer-legal" aria-label={l==='zh'?'网站信息':'Site information'}><a href={`/${l}/pricing`} onClick={e=>navigate(e,`/${l}/pricing`)}>{l==='zh'?'价格':'Pricing'}</a><a href={`/${l}/privacy`} onClick={e=>navigate(e,`/${l}/privacy`)}>{l==='zh'?'隐私':'Privacy'}</a><a href={`/${l}/terms`} onClick={e=>navigate(e,`/${l}/terms`)}>{l==='zh'?'条款':'Terms'}</a></nav></div><LanguageMenu l={l} languages={languages} onSwitch={onLanguageSwitch}/></div>
+    <div className="footer-bottom"><div className="footer-bottom-copy"><p>{t.foot}</p><nav className="footer-legal" aria-label={l==='zh'?'法律信息':'Legal'}><a href={`/${l}/privacy`} onClick={e=>navigate(e,`/${l}/privacy`)}>{l==='zh'?'隐私':'Privacy'}</a><a href={`/${l}/terms`} onClick={e=>navigate(e,`/${l}/terms`)}>{l==='zh'?'条款':'Terms'}</a></nav></div><LanguageMenu l={l} languages={languages} onSwitch={onLanguageSwitch}/></div>
   </footer>;
 }
 
