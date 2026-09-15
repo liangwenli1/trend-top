@@ -383,14 +383,21 @@ export async function collect() {
       unique.set(repo.id, repo);
     }
 
-    const history = await syncStarHistory([...unique.values()].map(r => ({ id: r.id, full_name: r.full_name })));
+    // Star history is a separate GitHub endpoint; if it breaks, keep the snapshots and still rebuild metrics.
+    let history = { sampled: 0, failed: 0 }, historyError = null;
+    try {
+      history = await syncStarHistory([...unique.values()].map(r => ({ id: r.id, full_name: r.full_name })));
+    } catch (e) {
+      historyError = `star history aborted: ${String(e)}`;
+      console.error('[collect]', historyError);
+    }
     await rebuildDerivedMetrics();
     await copyRepoMetricsToAssets();
     await query(
       `UPDATE sync_runs SET finished_at = $1, status = $2, found = $3, sampled = $4, error = $5 WHERE id = $6`,
-      [new Date().toISOString(), 'ok', found, sampled, history.failed ? `${history.failed} star histories unavailable` : null, runId]
+      [new Date().toISOString(), 'ok', found, sampled, historyError || (history.failed ? `${history.failed} star histories unavailable` : null), runId]
     );
-    return { found, sampled, history, assets: assets.counts };
+    return { found, sampled, history, historyError, assets: assets.counts };
   } catch (e) {
     await query(
       `UPDATE sync_runs SET finished_at = $1, status = $2, found = $3, sampled = $4, error = $5 WHERE id = $6`,
