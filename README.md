@@ -22,11 +22,11 @@ Login state is shared across the header, account page, and digest dialog. After 
 
 ## Creem billing
 
-The paid product is one **Pro** tier with separate weekly and monthly recurring products. Public plans live at `/en/pricing` and `/zh/pricing`; account billing is shown separately from the free daily digest. Checkout, Customer Portal, signed webhook processing, idempotent provider events, local billing records, and the `pro` entitlement are implemented with Creem's REST API.
+The paid product is one **Pro** tier with separate monthly and yearly recurring products. Public plans live at `/en/pricing` and `/zh/pricing`; account billing is shown separately from the free daily digest. Checkout, Customer Portal, signed webhook processing, idempotent provider events, local billing records, and the `pro` entitlement are implemented with Creem's REST API.
 
-Open `/en/admin` or `/zh/admin` while signed in with an administrator account. Administrators are ordinary accounts whose email is listed in `ADMIN_EMAILS` (or `admin.emails` in `config.json`); the default is `zhangyuge.ghs@gmail.com`. There is no separate token sign-in. The administrator page controls checkout availability, mode, the displayed weekly/monthly prices for the English site (USD by default) and the Chinese site (CNY by default), both Creem product IDs, API base URL, API key, webhook secret, support email, and X/Facebook/Telegram links. Creem credentials are encrypted in `app_settings` using `AUTH_SECRET` (falling back to `ADMIN_TOKEN`) and are never returned to the browser. Keep that encryption secret stable across deployments. Environment variables in `.env.example` are optional bootstrap/fallback values.
+Open `/en/admin` or `/zh/admin` while signed in with an administrator account. Administrators are ordinary accounts whose email is listed in `ADMIN_EMAILS` (or `admin.emails` in `config.json`); the default is `zhangyuge.ghs@gmail.com`. There is no separate token sign-in. The administrator page controls checkout availability, mode, the displayed monthly/yearly prices for the English site (USD by default) and the Chinese site (CNY by default), both Creem product IDs, API base URL, API key, webhook secret, support email, and X/Facebook/Telegram links. Creem credentials are encrypted in `app_settings` using `AUTH_SECRET` (falling back to `ADMIN_TOKEN`) and are never returned to the browser. Keep that encryption secret stable across deployments. Environment variables in `.env.example` are optional bootstrap/fallback values.
 
-In Creem Test Mode, create two recurring products for the same Pro feature set: one weekly and one monthly. Save their IDs and test credentials in Admin, then register this webhook URL in Creem:
+In Creem Test Mode, create two recurring products for the same Pro feature set: one monthly and one yearly. Save their IDs and test credentials in Admin, then register this webhook URL in Creem:
 
 ```text
 https://YOUR_DOMAIN/api/webhooks/creem
