@@ -198,9 +198,9 @@ function LanguageMenu({l,languages,onSwitch}){
   return <div className="language-menu" ref={rootRef}>
     <button type="button" className="language-menu-trigger" aria-haspopup="listbox" aria-expanded={open} aria-label={l==='zh'?'界面语言':'Site language'} onClick={()=>setOpen(v=>!v)}>
       <span lang={current[0]}>{current[1]}</span>
-      <svg className="language-menu-chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      <span className="design-select-chevron" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="m4 7 5 5 5-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
     </button>
-    {open&&<ul className="language-menu-list" role="listbox" aria-label={l==='zh'?'选择语言':'Choose language'}>{languages.map(([code,label])=><li key={code} role="option" aria-selected={l===code} lang={code} tabIndex={0} onClick={()=>choose(code)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose(code)}}}><span>{label}</span>{l===code&&<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}</li>)}</ul>}
+    {open&&<ul className="language-menu-list" role="listbox" aria-label={l==='zh'?'选择语言':'Choose language'}>{languages.map(([code,label])=><li key={code} role="option" aria-selected={l===code} lang={code} tabIndex={0} onClick={()=>choose(code)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose(code)}}}><span>{label}</span>{l===code&&<span className="design-select-check" aria-hidden="true">✓</span>}</li>)}</ul>}
   </div>;
 }
 function SiteFooter({l,t,onLanguageSwitch}){
