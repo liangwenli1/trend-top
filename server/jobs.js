@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
-import { asNumber, many, one, query, ready, rebuildDerivedMetrics } from './db.js';
+import { asJson, asNumber, many, one, query, ready, rebuildDerivedMetrics } from './db.js';
 import { sendMail } from './mail.js';
 import { buildDigest } from './digest.js';
 
@@ -255,7 +255,7 @@ async function collectTypedAssets(knownRepos) {
 async function copyRepoMetricsToAssets() {
   await query(
     `INSERT INTO asset_daily (asset_id, day, star_created, stars)
-     SELECT a.id, d.day, COALESCE(d.star_created, 0), d.stars
+     SELECT a.id, d.day, d.star_created, d.stars
      FROM assets a
      JOIN repos r ON lower(r.full_name) = lower(a.full_name)
      JOIN daily_metrics d ON d.repo_id = r.id
@@ -266,9 +266,15 @@ async function copyRepoMetricsToAssets() {
   const today = new Date().toISOString().slice(0, 10);
   await query(
     `INSERT INTO asset_daily (asset_id, day, star_created, stars)
-     SELECT id, $1::date, 0, stars FROM assets
+     SELECT id, $1::date, NULL, stars FROM assets
      ON CONFLICT (asset_id, day) DO UPDATE SET stars = EXCLUDED.stars`,
     [today]
+  );
+  // The sample day and anything later is incomplete; keep the Star total but drop the fake zero gain.
+  await query(
+    `UPDATE asset_daily SET star_created = NULL
+     WHERE star_created IS NOT NULL
+       AND day >= (SELECT (timezone('UTC', MAX(sampled_at)))::date FROM snapshots WHERE source = 'github')`
   );
 }
 
@@ -446,7 +452,12 @@ export async function digest({ force = false } = {}) {
     if (!claim.rows.length) continue;
     try {
       const raw = decryptManageToken(sub.manage_hash);
-      const mail = await buildDigest(sub, raw);
+      const previous = await one(
+        `SELECT snapshot FROM deliveries WHERE subscription_id = $1 AND status = 'sent' AND snapshot IS NOT NULL
+         ORDER BY sent_at DESC LIMIT 1`,
+        [sub.id]
+      );
+      const mail = await buildDigest(sub, raw, { previous: asJson(previous?.snapshot, null) });
       if (!mail.sections.length) {
         await query('UPDATE deliveries SET status = $1, last_error = NULL WHERE id = $2', ['skipped', delivery.id]);
         continue;
@@ -456,8 +467,8 @@ export async function digest({ force = false } = {}) {
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
       }, `digest/${delivery.id}`);
       await query(
-        'UPDATE deliveries SET status = $1, sent_at = $2, last_error = NULL WHERE id = $3',
-        ['sent', now.toISOString(), delivery.id]
+        'UPDATE deliveries SET status = $1, sent_at = $2, last_error = NULL, snapshot = $4::jsonb WHERE id = $3',
+        ['sent', now.toISOString(), delivery.id, JSON.stringify(mail.snapshot || {})]
       );
       sent++;
     } catch (e) {
