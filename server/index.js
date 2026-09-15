@@ -4,8 +4,8 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { asIso, asJson, asNumber, dbKind, many, one, query, ready, rebuildDerivedMetrics } from './db.js';
-import { getRankings, getChart, getFilters, boards, aiEvidence } from './rankings.js';
+import { asDay, asIso, asJson, asNumber, dbKind, many, one, query, ready, rebuildDerivedMetrics } from './db.js';
+import { getRankings, getChart, getFilters, getStarSeries, boards, aiEvidence } from './rankings.js';
 import {
   isType, getTypeSummary, getCatalogFilters, getCatalogRankings,
   getCatalogChart, getCatalogItem, getSimilar, getCategories, getCategory, getCompare, searchCatalog
@@ -18,6 +18,8 @@ import { registerBillingRoutes } from './billing.js';
 import { registerCreemWebhookRoute } from './creem-webhook.js';
 import { registerAdminRoutes, requireAdmin } from './admin.js';
 import { publicSettings } from './settings.js';
+import { renderGainChart } from './png-chart.js';
+import { lastCompleteDay } from './db.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -119,6 +121,35 @@ app.get('/api/:type/items/:id', publicCatalogCache, async (req, res) => {
   const item = await getCatalogItem(req.params.type, req.params.id);
   if (!item) return fail(res, 404, 'Not found');
   res.json(item);
+});
+// Hosted PNG for the email digest: cumulative new Stars over the last N complete days.
+app.get('/api/digest-chart/:type/:id.png', async (req, res) => {
+  if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
+  const days = Math.max(7, Math.min(90, Number(req.query.days) || 30));
+  let counts = [];
+  if (req.params.type === 'github-repo') {
+    const repo = await one('SELECT id, created_at FROM repos WHERE id = $1 OR full_name = $2', [Number(req.params.id) || -1, req.params.id]);
+    if (!repo) return fail(res, 404, 'Not found');
+    if (demo) {
+      const rows = await many("SELECT day, star_created FROM daily_metrics WHERE repo_id = $1 AND source = 'demo' ORDER BY day DESC LIMIT $2", [repo.id, days]);
+      counts = rows.reverse().map(r => r.star_created == null ? null : asNumber(r.star_created));
+    } else {
+      const latest = await one("SELECT MAX(sampled_at) AS t FROM snapshots WHERE source = 'github'");
+      const endpoint = latest?.t ? new Date(latest.t) : new Date();
+      const series = await getStarSeries(repo.id, lastCompleteDay(endpoint), days, repo.created_at);
+      counts = series.points.map(point => point.count);
+    }
+  } else {
+    const row = await one('SELECT MAX(day) AS t FROM asset_daily WHERE asset_id = $1 AND star_created IS NOT NULL', [req.params.id]);
+    if (!row?.t) return fail(res, 404, 'Not found');
+    const end = new Date(`${asDay(row.t)}T00:00:00Z`), start = new Date(end.getTime() - (days - 1) * 86400000);
+    const rows = await many('SELECT day, star_created FROM asset_daily WHERE asset_id = $1 AND day BETWEEN $2::date AND $3::date', [req.params.id, start.toISOString().slice(0, 10), asDay(row.t)]);
+    const byDay = new Map(rows.map(r => [asDay(r.day), r.star_created == null ? null : asNumber(r.star_created)]));
+    counts = Array.from({ length: days }, (_, i) => byDay.get(new Date(start.getTime() + i * 86400000).toISOString().slice(0, 10)) ?? null);
+  }
+  const png = renderGainChart(counts, { width: 1088, height: 326 });
+  if (!png) return fail(res, 404, 'Insufficient history');
+  res.set('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400').type('image/png').send(png);
 });
 app.get('/api/repos/:id', publicCatalogCache, async (req, res) => {
   const repo = await one(
