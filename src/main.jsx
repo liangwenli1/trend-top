@@ -166,13 +166,44 @@ function App(){
   };
   const dismissLanguageSuggestion=()=>{sessionStorage.setItem('locale-suggestion-dismissed','1');setLanguageSuggestion(null)};
   const showViewBar=Boolean(type)&&!['search','method','verify','manage','unsubscribe','account'].includes(page);
-  return <><header className="site-header"><div className="header-inner"><a className="brand" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)}>Trend Top</a><HeaderSearch l={l} t={t} navigate={navigate} q={page==='search'?params().get('q')||'':''}/><nav className="header-actions" aria-label={l==='zh'?'站点导航':'Site navigation'}><a className="header-link" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)} aria-current={page==='home'?'page':undefined}>{l==='zh'?'首页':'Home'}</a><a className="header-link" href={subscribePath} onClick={openSubscribe}>{l==='zh'?'订阅':'Subscribe'}</a><a className="header-link" href={`/${l}/pricing`} onClick={e=>navigate(e,`/${l}/pricing`)} aria-current={page==='pricing'?'page':undefined}>{l==='zh'?'价格':'Pricing'}</a><a className="header-link" aria-current={page==='method'?'page':undefined} href={`/${l}/method`} onClick={e=>navigate(e,`/${l}/method`)}>{t.method}</a><a className="header-link header-signin" href={`/${l}/account`} onClick={e=>navigate(e,`/${l}/account`)} aria-current={page==='account'?'page':undefined} title={viewer?.email||undefined}>{viewer?.email||(l==='zh'?'登录':'Sign in')}</a></nav></div>{showViewBar&&<ViewBar l={l} type={type} page={page} query={page==='charts'?location.search.slice(1):chartsQuery} navigate={navigate}/>}</header>
+  return <><header className="site-header"><div className="header-inner"><a className="brand" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)}>Trend Top</a><HeaderSearch l={l} t={t} navigate={navigate} q={page==='search'?params().get('q')||'':''}/><nav className="header-actions" aria-label={l==='zh'?'站点导航':'Site navigation'}><a className="header-link" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)} aria-current={page==='home'?'page':undefined}>{l==='zh'?'首页':'Home'}</a><a className="header-link" href={subscribePath} onClick={openSubscribe}>{l==='zh'?'订阅':'Subscribe'}</a><a className="header-link" href={`/${l}/pricing`} onClick={e=>navigate(e,`/${l}/pricing`)} aria-current={page==='pricing'?'page':undefined}>{l==='zh'?'价格':'Pricing'}</a><a className="header-link" aria-current={page==='method'?'page':undefined} href={`/${l}/method`} onClick={e=>navigate(e,`/${l}/method`)}>{t.method}</a>{viewer?.isAdmin&&<a className="header-link" href={`/${l}/admin`} onClick={e=>navigate(e,`/${l}/admin`)} aria-current={page==='admin'?'page':undefined}>Admin</a>}{viewer?<a className="header-avatar" href={`/${l}/account`} onClick={e=>navigate(e,`/${l}/account`)} aria-current={page==='account'?'page':undefined} title={viewer.email} aria-label={`${l==='zh'?'账户':'Account'}: ${viewer.email}`}><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" strokeWidth="1.8"/><path d="M4 20.5c0-3.6 3.6-6 8-6s8 2.4 8 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></a>:<a className="header-link header-signin" href={`/${l}/account`} onClick={e=>navigate(e,`/${l}/account`)} aria-current={page==='account'?'page':undefined}>{l==='zh'?'登录':'Sign in'}</a>}</nav></div>{showViewBar&&<ViewBar l={l} type={type} page={page} query={page==='charts'?location.search.slice(1):chartsQuery} navigate={navigate}/>}</header>
   {languageSuggestion&&<aside className="locale-suggestion" role="status"><span>{languageSuggestion==='zh'?'浏览器语言为中文，是否切换到简体中文？':'Your browser uses English. Switch to English?'}</span><button type="button" className="locale-choice" onClick={switchLanguage}>{languageSuggestion==='zh'?'切换中文':'Switch to English'}</button><button type="button" className="locale-dismiss" onClick={dismissLanguageSuggestion} aria-label={languageSuggestion==='zh'?'关闭语言提示':'Dismiss language suggestion'}>×</button></aside>}
   {page==='account'?<AccountPage l={l}/>:page==='pricing'?<PricingPage l={l} user={viewer} navigate={target=>updatePath(target)}/>:page==='billing'&&route.id==='success'?<BillingResultPage l={l} status="success"/>:page==='billing'&&route.id==='cancel'?<BillingResultPage l={l} status="cancel"/>:page==='terms'?<LegalPage l={l} kind="terms"/>:page==='privacy'?<LegalPage l={l} kind="privacy"/>:page==='admin'?<AdminPage l={l}/>:page==='verify'?<Verify l={l} t={t}/>:page==='manage'||page==='unsubscribe'?<Manage l={l} t={t} unsubscribe={page==='unsubscribe'}/>:page==='method'?<Method l={l} t={t}/>:page==='search'?<SearchPage l={l} t={t} q={params().get('q')||''} typeFilter={params().get('type')||''} navigate={navigate}/>:page==='home'?<><TypeHome l={l} t={t} navigate={navigate}/><SubscribeCallout l={l} t={t} data={{mailReady:true}} board="hot" type="github-repo"/></>:page==='trending'?<><TypeTrending l={l} t={t} type={type} navigate={navigate}/><SubscribeCallout l={l} t={t} data={{mailReady:true}} board="hot" type={type}/></>:page==='category'?<CategoryPage l={l} t={t} type={type} category={route.category} navigate={navigate}/>:page==='compare'?<ComparePage l={l} t={t} type={type} ids={params().get('ids')||''} navigate={navigate}/>:page==='detail'?<ItemDetail l={l} t={t} type={type} id={route.id} navigate={navigate}/>:page==='charts'?<React.Suspense fallback={<main className="simple-page">{t.loading}</main>}><AnalyticsPage l={l} names={namesForType} updatePath={updatePath} type={type} key={type}/></React.Suspense>:<Home l={l} t={t} rankingOnly={rankingPage} type={type} officialOnly={page==='official'} initialBoard={params().get('board')||(page==='official'?'official':'hot')} autoBoard={false} onChartsQueryChange={setFooterChartsQuery} key={path}/>}
-  <SiteFooter l={l} t={t} onLanguageSwitch={switchLanguage} onSubscribe={openSubscribe} subscribePath={subscribePath} chartsQuery={chartsQuery} rankingQuery={rankingQuery} type={activeType}/></>;
+  <SiteFooter l={l} t={t} onLanguageSwitch={switchLanguage}/></>;
 }
 
-function SiteFooter({l,t,onLanguageSwitch,onSubscribe,subscribePath,chartsQuery='',rankingQuery='',type='github-repo'}){
+const SOCIAL_ICONS={
+  email:{zh:'邮件',en:'Email',stroke:['M3 5h18v14H3z','M3 5l9 7 9-7']},
+  x:{zh:'X',en:'X',path:'M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z'},
+  facebook:{zh:'Facebook',en:'Facebook',path:'M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z'},
+  telegram:{zh:'Telegram',en:'Telegram',path:'M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z'}
+};
+function SocialIcon({name}){
+  const icon=SOCIAL_ICONS[name];
+  if(!icon)return null;
+  return <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">{icon.stroke?icon.stroke.map(d=><path key={d} d={d} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>):<path d={icon.path} fill="currentColor"/>}</svg>;
+}
+function LanguageMenu({l,languages,onSwitch}){
+  const [open,setOpen]=useState(false);
+  const rootRef=React.useRef(null);
+  const current=languages.find(([code])=>code===l)||languages[0];
+  useEffect(()=>{
+    if(!open)return;
+    const close=e=>{if(rootRef.current&&!rootRef.current.contains(e.target))setOpen(false)};
+    const key=e=>{if(e.key==='Escape')setOpen(false)};
+    addEventListener('mousedown',close);addEventListener('keydown',key);
+    return()=>{removeEventListener('mousedown',close);removeEventListener('keydown',key)};
+  },[open]);
+  const choose=code=>{setOpen(false);if(code!==l)onSwitch()};
+  return <div className="language-menu" ref={rootRef}>
+    <button type="button" className="language-menu-trigger" aria-haspopup="listbox" aria-expanded={open} aria-label={l==='zh'?'界面语言':'Site language'} onClick={()=>setOpen(v=>!v)}>
+      <span lang={current[0]}>{current[1]}</span>
+      <svg className="language-menu-chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    </button>
+    {open&&<ul className="language-menu-list" role="listbox" aria-label={l==='zh'?'选择语言':'Choose language'}>{languages.map(([code,label])=><li key={code} role="option" aria-selected={l===code} lang={code} tabIndex={0} onClick={()=>choose(code)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose(code)}}}><span>{label}</span>{l===code&&<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}</li>)}</ul>}
+  </div>;
+}
+function SiteFooter({l,t,onLanguageSwitch}){
   const [siteSettings,setSiteSettings]=useState(null);
   useEffect(()=>{fetch('/api/site-settings').then(response=>response.ok?response.json():null).then(setSiteSettings).catch(()=>{})},[]);
   const navigate=(e,path,query)=>{
@@ -180,11 +211,13 @@ function SiteFooter({l,t,onLanguageSwitch,onSubscribe,subscribePath,chartsQuery=
     e.preventDefault();
     updatePath(path,query);
   };
+  const contactLinks=[];
+  if(siteSettings?.contact?.email)contactLinks.push({name:'email',href:`mailto:${siteSettings.contact.email}`,title:`${SOCIAL_ICONS.email[l]}: ${siteSettings.contact.email}`});
+  for(const [name,url] of Object.entries(siteSettings?.social||{})){if(url&&SOCIAL_ICONS[name])contactLinks.push({name,href:url,title:SOCIAL_ICONS[name][l],external:true})}
+  const languages=[['en','English'],['zh','简体中文']];
   return <footer className="footer site-footer">
-    <div className="footer-main"><div className="footer-identity"><strong className="footer-wordmark">Trend Top</strong><p className="footer-tagline">{l==='zh'?'发现开源世界的新动向。':'Find what is moving in open source.'}</p></div>
-      <nav className="footer-links" aria-label={l==='zh'?'页脚导航':'Footer navigation'}><a href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)}>{l==='zh'?'首页':'Home'}</a><a href={subscribePath} onClick={onSubscribe}>{l==='zh'?'订阅':'Subscribe'}</a><a href={`/${l}/pricing`} onClick={e=>navigate(e,`/${l}/pricing`)}>{l==='zh'?'价格':'Pricing'}</a><a href={`/${l}/account`} onClick={e=>navigate(e,`/${l}/account`)}>{l==='zh'?'账户':'Account'}</a><a href={`/${l}/privacy`} onClick={e=>navigate(e,`/${l}/privacy`)}>{l==='zh'?'隐私':'Privacy'}</a><a href={`/${l}/terms`} onClick={e=>navigate(e,`/${l}/terms`)}>{l==='zh'?'条款':'Terms'}</a><a href={`/${l}/method`} onClick={e=>navigate(e,`/${l}/method`)}>{t.method}</a><a href={`/${l}/admin`} onClick={e=>navigate(e,`/${l}/admin`)}>Admin</a></nav>
-    </div>
-    <div className="footer-bottom"><div><p>{t.foot}</p>{siteSettings&&<p className="footer-public-links">{siteSettings.contact?.email&&<a href={`mailto:${siteSettings.contact.email}`}>{siteSettings.contact.email}</a>}{Object.entries(siteSettings.social||{}).filter(([,url])=>url).map(([name,url])=><a key={name} href={url} target="_blank" rel="noreferrer">{name==='x'?'X':name[0].toUpperCase()+name.slice(1)}</a>)}</p>}</div><button className="language-switch" type="button" onClick={onLanguageSwitch} aria-label={l==='zh'?'Switch to English':'切换到简体中文'}>{t.languageSwitch}</button></div>
+    <div className="footer-main"><div className="footer-identity"><strong className="footer-wordmark">Trend Top</strong><p className="footer-tagline">{l==='zh'?'发现开源世界的新动向。':'Find what is moving in open source.'}</p>{contactLinks.length>0&&<ul className="footer-social" aria-label={l==='zh'?'联系方式':'Contact'}>{contactLinks.map(link=><li key={link.name}><a href={link.href} title={link.title} aria-label={link.title} {...(link.external?{target:'_blank',rel:'noreferrer'}:{})}><SocialIcon name={link.name}/></a></li>)}</ul>}</div></div>
+    <div className="footer-bottom"><div className="footer-bottom-copy"><p>{t.foot}</p><nav className="footer-legal" aria-label={l==='zh'?'法律信息':'Legal'}><a href={`/${l}/privacy`} onClick={e=>navigate(e,`/${l}/privacy`)}>{l==='zh'?'隐私':'Privacy'}</a><a href={`/${l}/terms`} onClick={e=>navigate(e,`/${l}/terms`)}>{l==='zh'?'条款':'Terms'}</a></nav></div><LanguageMenu l={l} languages={languages} onSwitch={onLanguageSwitch}/></div>
   </footer>;
 }
 
@@ -273,7 +306,7 @@ function SubscribeCallout({l,t,data,board,type='github-repo'}){
         <p className="subscribe-cta-panel-label">{zh?'由你决定收到什么':'MAKE IT YOURS'}</p>
         <ol className="subscribe-cta-steps">{steps.map((step,index)=><li key={step}><span>{String(index+1).padStart(2,'0')}</span>{step}</li>)}</ol>
         <SubscribeDialog trigger={<button className="primary subscribe-cta-button" type="button">{zh?'设置每日摘要':'Set up your digest'} <span aria-hidden="true">↗</span></button>} title={zh?'设置每日摘要':'Set up your daily digest'} description={data?.mailReady?(zh?'注册并验证邮箱后，可以随时登录管理订阅。':'Register and verify your email, then manage your digest from your account.'):t.mailPending}>{data?.mailReady?<AccountSubscribeForm l={l} currentBoard={board} currentType={type}/>:null}</SubscribeDialog>
-        <p className="subscribe-cta-fineprint">{zh?'注册后启用；每天最多一封，随时可以暂停或退订。':'Activate after registration. At most one email per day; pause or unsubscribe anytime.'}</p>
+        <p className="subscribe-cta-fineprint">{zh?'Pro 功能；每天最多一封，随时可以暂停或退订。':'Included with Pro. At most one email per day; pause or unsubscribe anytime.'}</p>
       </div>
     </div>
   </section>;
