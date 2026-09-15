@@ -39,6 +39,12 @@ export function asJson(value, fallback) {
   return value;
 }
 
+// GitHub's daily Star buckets are only complete for days strictly before the sample day
+// (collection runs at 02:00 UTC), so live windows end on the previous UTC day.
+export function lastCompleteDay(sampledAt) {
+  return new Date(utcDay(sampledAt).getTime() - 86400000);
+}
+
 export function utcDay(date) {
   const d = date instanceof Date ? date : new Date(date);
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -89,6 +95,8 @@ async function init() {
   await adapter.exec("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS user_id TEXT");
   await adapter.exec("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS types JSONB NOT NULL DEFAULT '[\"github-repo\"]'::jsonb");
   await adapter.exec('CREATE INDEX IF NOT EXISTS subscriptions_user_idx ON subscriptions (user_id)');
+  // Rank snapshot of the last sent digest, used for the next digest's rank-change arrows.
+  await adapter.exec('ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS snapshot JSONB');
   if (dataSource() === 'demo') {
     await seedDemo();
     const { seedCatalog } = await import('./catalog.js');
@@ -194,18 +202,18 @@ export async function seedDemo() {
 
 export async function expandStarHistoryToDaily(repoId = null) {
   const rows = repoId == null
-    ? await many('SELECT repo_id, week_start, days_json FROM star_history')
-    : await many('SELECT repo_id, week_start, days_json FROM star_history WHERE repo_id=$1', [repoId]);
+    ? await many('SELECT repo_id, week_start, days_json, sampled_at FROM star_history')
+    : await many('SELECT repo_id, week_start, days_json, sampled_at FROM star_history WHERE repo_id=$1', [repoId]);
   const values = [];
   for (const row of rows) {
     const days = asJson(row.days_json, []);
     const weekStart = Number(row.week_start);
+    // Buckets on or after the sample day are still filling; never store them as zero gains.
+    const sampleDay = row.sampled_at ? utcDay(new Date(row.sampled_at)).toISOString().slice(0, 10) : null;
     days.forEach((count, i) => {
-      values.push({
-        repo_id: asNumber(row.repo_id),
-        day: new Date((weekStart + i * 86400) * 1000).toISOString().slice(0, 10),
-        count: Number(count) || 0
-      });
+      const day = new Date((weekStart + i * 86400) * 1000).toISOString().slice(0, 10);
+      if (sampleDay && day >= sampleDay) return;
+      values.push({ repo_id: asNumber(row.repo_id), day, count: Number(count) || 0 });
     });
   }
   for (const group of chunk(values, 150)) {
@@ -224,6 +232,14 @@ export async function expandStarHistoryToDaily(repoId = null) {
   }
   const params = repoId == null ? [] : [repoId];
   const repoFilter = repoId == null ? '' : 'AND d.repo_id=$1';
+  // Rows written by earlier runs for the (then incomplete) sample day revert to unknown.
+  await query(
+    `UPDATE daily_metrics d
+     SET star_created = NULL
+     FROM (SELECT repo_id, (timezone('UTC', MAX(sampled_at)))::date AS sample_day FROM star_history GROUP BY repo_id) h
+     WHERE h.repo_id=d.repo_id AND d.source='github' AND d.day >= h.sample_day AND d.star_created IS NOT NULL ${repoFilter}`,
+    params
+  );
   await query(
     `UPDATE daily_metrics d
      SET stars = GREATEST(0, r.stars - COALESCE((
@@ -254,7 +270,7 @@ export async function rebuildPeriodMetrics() {
   const latestRow = await one('SELECT MAX(sampled_at) AS t FROM snapshots WHERE source=$1', [source]);
   const endpoint = latestRow?.t ? new Date(latestRow.t) : new Date();
   const live = source === 'github';
-  const currentDay = utcDay(endpoint);
+  const currentDay = live ? lastCompleteDay(endpoint) : utcDay(endpoint);
   for (const [period, days] of Object.entries(DAYS)) {
     const startDate = live
       ? new Date(currentDay.getTime() - (days - 1) * 86400000)
