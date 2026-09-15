@@ -1,1 +1,47 @@
-.billing-page,.billing-result,.admin-page{max-width:1400px;margin:0 auto;padding:72px 48px 120px}.billing-hero{max-width:900px;margin-bottom:48px}.billing-hero>p:first-child,.billing-kicker{font-weight:800;letter-spacing:.14em;color:#315fd9;text-transform:uppercase}.billing-hero h1,.billing-result h1,.admin-page h1{margin:12px 0 18px;font-size:clamp(44px,6vw,88px);line-height:.95;letter-spacing:-.055em}.billing-hero>p:last-child,.billing-result>p,.admin-page header>p:last-child{max-width:760px;color:#666;font-size:20px;line-height:1.55}.pricing-card{min-height:500px;padding:42px;display:flex;flex-direction:column;justify-content:space-between;border:1px solid #ddd;border-top:5px solid #315fd9}.pricing-single{max-width:1120px}.pricing-main{display:grid;grid-template-columns:1fr 1fr;gap:72px}.pricing-card h2{font-size:36px;margin:12px 0}.billing-cycle{display:flex;margin:26px 0 34px}.billing-cycle button{width:auto;min-width:130px;min-height:48px;padding:0 18px;border:1px solid #111;border-right:0;border-radius:0;background:#fff;font-weight:750}.billing-cycle button:last-child{border-right:1px solid #111}.billing-cycle button[aria-pressed=true]{background:#111;color:#fff}.billing-price{font-size:46px;font-weight:800;letter-spacing:-.04em}.billing-price small{font-size:17px;color:#666;letter-spacing:0}.pricing-card ul{list-style:none;padding:0;margin:42px 0}.pricing-card li{padding:15px 0;border-top:1px solid #e5e5e5;font-weight:650}.pricing-card>.primary{width:100%;min-height:62px}.billing-renewal{margin-top:24px;color:#666}.billing-link{display:inline-flex;align-items:center;justify-content:center;min-height:50px;padding:0 22px;margin:16px 10px 0 0;text-decoration:none}.billing-account-card{margin-top:32px;padding:30px;border:1px solid #dcdcdc;border-top:5px solid #315fd9}.billing-account-card h2{font-size:30px;margin:8px 0 20px}.billing-account-status{display:flex;justify-content:space-between;padding:18px 0;border-block:1px solid #e5e5e5}.billing-result{min-height:70vh;padding-top:130px}.legal-page{max-width:920px}.legal-page h1{font-size:64px}.legal-page h2{margin-top:48px;font-size:28px}.legal-page p{font-size:18px;line-height:1.7;color:#555}.admin-page{max-width:1280px}.admin-page header{margin-bottom:40px}.admin-login{max-width:620px;border:1px solid #ddd;padding:34px}.admin-login label,.admin-settings label{display:flex;flex-direction:column;gap:9px;font-weight:700}.admin-login input,.admin-settings input,.admin-settings select{min-height:54px;border:1px solid #bbb;border-radius:0;background:#fff;padding:0 15px;font:inherit}.admin-login button{margin-top:20px}.admin-settings section{border-top:1px solid #ddd;padding:34px 0}.admin-settings h2{font-size:30px}.admin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.admin-grid label:has(input[type=checkbox]){flex-direction:row;align-items:center}.admin-grid input[type=checkbox]{min-height:auto;width:20px;height:20px}.admin-settings>.primary{min-height:58px;min-width:240px}@media(max-width:760px){.billing-page,.billing-result,.admin-page{padding:48px 20px 80px}.admin-grid,.pricing-main{grid-template-columns:1fr;gap:12px}.billing-hero h1,.billing-result h1,.admin-page h1{font-size:46px}.pricing-card{min-height:470px;padding:28px}.billing-cycle button{min-width:0;flex:1}}
+.billing-page,.billing-result,.admin-page{max-width:1400px;margin:0 auto;padding:56px 48px 100px}
+.billing-hero{max-width:820px;margin-bottom:36px}
+.billing-hero>p:first-child,.billing-kicker{margin:0;font-size:13px;font-weight:800;letter-spacing:.14em;color:#315fd9;text-transform:uppercase}
+.billing-hero h1,.billing-result h1,.admin-page h1{margin:10px 0 14px;font-size:clamp(34px,4.2vw,58px);line-height:1.02;letter-spacing:-.05em}
+.billing-hero>p:last-child,.billing-result>p,.admin-page header>p:last-child{max-width:720px;color:#666;font-size:17px;line-height:1.55}
+.pricing-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:40px;align-items:start;max-width:1200px}
+.pricing-card{padding:30px;display:flex;flex-direction:column;border:1px solid #ddd;border-top:4px solid #315fd9;background:#fff}
+.pricing-card h2{margin:8px 0 0;font-size:26px;letter-spacing:-.03em}
+.billing-cycle{display:flex;margin:20px 0 22px}
+.billing-cycle button{width:auto;min-width:110px;min-height:42px;padding:0 16px;border:1px solid #111;border-right:0;border-radius:0;background:#fff;font-size:14px;font-weight:700}
+.billing-cycle button:last-child{border-right:1px solid #111}
+.billing-cycle button[aria-pressed=true]{background:#111;color:#fff}
+.billing-price{font-size:36px;font-weight:800;letter-spacing:-.04em}
+.billing-price small{font-size:15px;font-weight:600;color:#666;letter-spacing:0}
+.pricing-card ul{list-style:none;padding:0;margin:22px 0 26px}
+.pricing-card li{padding:11px 0;border-top:1px solid #e5e5e5;font-size:15px;font-weight:600;line-height:1.4}
+.pricing-card li:last-child{border-bottom:1px solid #e5e5e5}
+.pricing-card>.primary{width:100%;min-height:52px;font-size:16px}
+.pricing-benefits h2{margin:6px 0 18px;font-size:22px;letter-spacing:-.03em}
+.pricing-benefits dl{margin:0}
+.pricing-benefits dl>div{padding:16px 0;border-top:1px solid #e5e5e5}
+.pricing-benefits dl>div:last-child{border-bottom:1px solid #e5e5e5}
+.pricing-benefits dt{margin:0 0 5px;font-size:16px;font-weight:750}
+.pricing-benefits dd{margin:0;color:#666;font-size:15px;line-height:1.55}
+.billing-renewal{max-width:720px;margin-top:22px;color:#666;font-size:14px;line-height:1.5}
+.billing-link{display:inline-flex;align-items:center;justify-content:center;min-height:50px;padding:0 22px;margin:16px 10px 0 0;text-decoration:none}
+.billing-account-card{margin-top:32px;padding:30px;border:1px solid #dcdcdc;border-top:5px solid #315fd9}
+.billing-account-card h2{font-size:30px;margin:8px 0 20px}
+.billing-account-status{display:flex;justify-content:space-between;padding:18px 0;border-block:1px solid #e5e5e5}
+.billing-result{min-height:70vh;padding-top:130px}
+.legal-page{max-width:920px}
+.legal-page h1{font-size:clamp(36px,5vw,64px)}
+.legal-page h2{margin-top:48px;font-size:28px}
+.legal-page p{font-size:18px;line-height:1.7;color:#555}
+.admin-page{max-width:1280px}
+.admin-page header{margin-bottom:40px}
+.admin-login{max-width:620px;border:1px solid #ddd;padding:34px}
+.admin-login .billing-link{margin:0}
+.admin-settings label{display:flex;flex-direction:column;gap:9px;font-weight:700}
+.admin-settings input,.admin-settings select{min-height:54px;border:1px solid #bbb;border-radius:0;background:#fff;padding:0 15px;font:inherit}
+.admin-settings section{border-top:1px solid #ddd;padding:34px 0}
+.admin-settings h2{font-size:30px}
+.admin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.admin-grid label:has(input[type=checkbox]){flex-direction:row;align-items:center}
+.admin-grid input[type=checkbox]{min-height:auto;width:20px;height:20px}
+.admin-settings>.primary{min-height:58px;min-width:240px}
+@media(max-width:760px){.billing-page,.billing-result,.admin-page{padding:40px 20px 72px}.admin-grid,.pricing-layout{grid-template-columns:1fr;gap:24px}.billing-hero h1,.billing-result h1,.admin-page h1{font-size:36px}.pricing-card{padding:22px}.billing-cycle button{min-width:0;flex:1}}
