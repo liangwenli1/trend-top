@@ -8,13 +8,13 @@ const api = async (url, options) => {
   return result;
 };
 const post = (url, body = {}) => api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-const money = (amount, currency, locale) => amount ? new Intl.NumberFormat(locale === 'zh' ? 'zh-CN' : 'en-US', { style: 'currency', currency }).format(amount / 100) : null;
+const money = (amount, currency, locale) => amount ? new Intl.NumberFormat(locale === 'zh' ? 'zh-CN' : 'en-US', { style: 'currency', currency: currency || 'USD' }).format(amount) : null;
 
 export function PricingPage({ l, user, navigate }) {
   const zh = l === 'zh';
   const [data, setData] = useState(null), [message, setMessage] = useState(''), [busy, setBusy] = useState('');
   const [cycle, setCycle] = useState('month');
-  useEffect(() => { api('/api/billing/plans').then(setData).catch(error => setMessage(error.message)); }, []);
+  useEffect(() => { api(`/api/billing/plans?locale=${l}`).then(setData).catch(error => setMessage(error.message)); }, [l]);
   const checkout = async plan => {
     if (!user) { window.sessionStorage.setItem('billing-next-plan', plan.key); navigate(`/${l}/account`); return; }
     setBusy(plan.key); setMessage('');
