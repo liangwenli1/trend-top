@@ -598,13 +598,11 @@ html.is-scrolling .analytics-page-nav,
 .site-footer .language-menu{position:relative;flex:none}
 .site-footer .language-menu-trigger{display:inline-flex;align-items:center;gap:10px;min-height:46px;padding:0 16px;border:1px solid #777;border-radius:0;background:transparent;color:#fff;font:inherit;font-size:15px;font-weight:600;cursor:pointer}
 .site-footer .language-menu-trigger:hover,.site-footer .language-menu-trigger[aria-expanded=true]{border-color:#fff;background:#fff;color:#111}
-.site-footer .language-menu-chevron{transition:transform .15s}
-.site-footer .language-menu-trigger[aria-expanded=true] .language-menu-chevron{transform:rotate(180deg)}
-.site-footer .language-menu-list{position:absolute;right:0;bottom:calc(100% + 8px);z-index:5;min-width:180px;margin:0;padding:6px 0;list-style:none;border:1px solid #444;background:#1a1a1a;box-shadow:0 12px 32px rgba(0,0,0,.45)}
-.site-footer .language-menu-list li{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:42px;padding:0 16px;color:#e5e5e5;font-size:15px;font-weight:600;cursor:pointer}
-.site-footer .language-menu-list li:hover,.site-footer .language-menu-list li:focus-visible{background:#fff;color:#111;outline:none}
-.site-footer .language-menu-list li[aria-selected=true]{color:#fff}
-.site-footer .language-menu-list li[aria-selected=true]:hover{color:#111}
+.site-footer .language-menu-trigger[aria-expanded=true] .design-select-chevron{transform:rotate(180deg)}
+.site-footer .language-menu-list{position:absolute;right:0;bottom:calc(100% + 7px);z-index:5;min-width:180px;margin:0;padding:6px;list-style:none;border:1px solid #111;border-radius:2px;background:#fff;box-shadow:0 16px 35px #0002;animation:select-enter .18s ease-out}
+.site-footer .language-menu-list li{position:relative;display:flex;align-items:center;min-height:44px;padding:9px 36px 9px 13px;color:#111;font-size:16px;font-weight:560;line-height:1.3;cursor:pointer;user-select:none;outline:none}
+.site-footer .language-menu-list li:hover,.site-footer .language-menu-list li:focus-visible{background:#111;color:#fff}
+.site-footer .language-menu-list li[aria-selected=true]:not(:hover):not(:focus-visible){background:#efefef;font-weight:700}
 .brand{justify-self:start;width:max-content;text-decoration:none}
 .header-inner{position:relative;display:grid;grid-template-columns:1fr minmax(220px,440px) 1fr;align-items:center;gap:24px}
 .header-actions{position:static;left:auto;top:auto;transform:none;margin-left:0;justify-self:end;gap:clamp(18px,2vw,34px)}
@@ -701,10 +699,11 @@ html.is-scrolling .analytics-page-nav,
 @media(max-width:340px){.header-link{font-size:12px;padding:0 1px}}
 @media(max-width:600px){.header-actions .header-signin{min-height:38px;max-width:120px;padding:0 12px}}
 /* Signed-in header control: a square account icon button, matching the site's square controls. */
-.header-actions .header-avatar{display:inline-flex;align-items:center;justify-content:center;flex:none;width:42px;height:42px;border:1px solid #111;border-radius:0;background:#fff;color:#111;text-decoration:none;transition:background .15s,color .15s,border-color .15s}
-.header-actions .header-avatar:hover,.header-actions .header-avatar:focus-visible{background:#111;color:#fff}
-.header-actions .header-avatar[aria-current=page]{background:#111;color:#fff}
-@media(max-width:600px){.header-actions .header-avatar{width:38px;height:38px}.header-actions .header-avatar svg{width:20px;height:20px}}
+.header-actions .header-avatar{display:inline-flex;align-items:center;justify-content:center;flex:none;min-height:44px;padding:0 2px;border:0;background:none;color:#525252;text-decoration:none;transition:color .15s}
+.header-actions .header-avatar svg{width:22px;height:22px}
+.header-actions .header-avatar:hover,.header-actions .header-avatar:focus-visible,.header-actions .header-avatar[aria-current=page]{color:#111}
+.header-actions .header-avatar[aria-current=page] svg{stroke-width:2.2}
+@media(max-width:600px){.header-actions .header-avatar{min-height:42px}.header-actions .header-avatar svg{width:20px;height:20px}}
 
 /* Keep repository topics and languages in dedicated, centered columns. */
 .ranking-page .list-header,
