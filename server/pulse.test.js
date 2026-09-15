@@ -80,6 +80,8 @@ test('discovery plan paginates, rotates, and lowers the star floor', () => {
   assert.ok(plan.queries.some(q => q.pages >= 2));
   assert.ok(plan.queries.some(q => /stars:5\.\./.test(q.q)));
   assert.ok(plan.queries.some(q => /stars:50\.\./.test(q.q)));
+  assert.ok(plan.queries.some(q => /stars:>80000/.test(q.q)));
+  assert.ok(plan.queries.some(q => /topic:design-system/.test(q.q)));
   assert.equal(plan.languages.length, 5);
   assert.equal(plan.topics.length, 6);
   assert.equal(plan.maxRepos, 2000);

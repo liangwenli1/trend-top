@@ -24,6 +24,10 @@ app.disable('x-powered-by');
 registerCreemWebhookRoute(app);
 app.use(express.json({ limit: '20kb' }));
 app.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+const publicCatalogCache = (_req, res, next) => {
+  res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+  next();
+};
 const demo = (process.env.DATA_MODE || 'demo') === 'demo';
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const validZone = z => { try { new Intl.DateTimeFormat('en', { timeZone: z }); return true; } catch { return false; } };
@@ -65,56 +69,56 @@ app.get('/api/health', async (_req, res) => {
   await ready;
   res.json({ ok: true, mode: demo ? 'demo' : 'live', db: dbKind() });
 });
-app.get('/api/boards', (_req, res) => res.json({ boards, mode: demo ? 'demo' : 'live' }));
+app.get('/api/boards', publicCatalogCache, (_req, res) => res.json({ boards, mode: demo ? 'demo' : 'live' }));
 registerAuthRoutes(app);
 registerSubscriptionRoutes(app);
 registerBillingRoutes(app);
 registerAdminRoutes(app);
-app.get('/api/site-settings', async (_req, res) => res.json(await publicSettings()));
-app.get('/api/filters', async (_req, res) => res.json(await getFilters()));
-app.get('/api/rankings', async (req, res) => res.json({ ...await getRankings(req.query), mailReady: demo || mailReady() }));
-app.get('/api/chart', async (req, res) => res.json(await getChart(req.query)));
-app.get('/api/types', async (_req, res) => res.json(await getTypeSummary()));
-app.get('/api/search', async (req, res) => res.json(await searchCatalog(req.query.q, req.query.type)));
-app.get('/api/:type/filters', async (req, res) => {
+app.get('/api/site-settings', publicCatalogCache, async (_req, res) => res.json(await publicSettings()));
+app.get('/api/filters', publicCatalogCache, async (_req, res) => res.json(await getFilters()));
+app.get('/api/rankings', publicCatalogCache, async (req, res) => res.json({ ...await getRankings(req.query), mailReady: demo || mailReady() }));
+app.get('/api/chart', publicCatalogCache, async (req, res) => res.json(await getChart(req.query)));
+app.get('/api/types', publicCatalogCache, async (_req, res) => res.json(await getTypeSummary()));
+app.get('/api/search', publicCatalogCache, async (req, res) => res.json(await searchCatalog(req.query.q, req.query.type)));
+app.get('/api/:type/filters', publicCatalogCache, async (req, res) => {
   if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
   res.json(await getCatalogFilters(req.params.type));
 });
-app.get('/api/:type/trending', async (req, res) => {
+app.get('/api/:type/trending', publicCatalogCache, async (req, res) => {
   if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
   res.json({ ...await getCatalogRankings(req.params.type, { ...req.query, period: req.query.period || 'day', board: req.query.board || 'hot' }), mailReady: demo || mailReady() });
 });
-app.get('/api/:type/rankings', async (req, res) => {
+app.get('/api/:type/rankings', publicCatalogCache, async (req, res) => {
   if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
   res.json({ ...await getCatalogRankings(req.params.type, req.query), mailReady: demo || mailReady() });
 });
-app.get('/api/:type/charts', async (req, res) => {
+app.get('/api/:type/charts', publicCatalogCache, async (req, res) => {
   if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
   res.json(await getCatalogChart(req.params.type, req.query));
 });
-app.get('/api/:type/categories/:slug', async (req, res) => {
+app.get('/api/:type/categories/:slug', publicCatalogCache, async (req, res) => {
   if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
   res.json(await getCategory(req.params.type, req.params.slug, req.query));
 });
-app.get('/api/:type/categories', async (req, res) => {
+app.get('/api/:type/categories', publicCatalogCache, async (req, res) => {
   if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
   res.json(await getCategories(req.params.type));
 });
-app.get('/api/:type/compare', async (req, res) => {
+app.get('/api/:type/compare', publicCatalogCache, async (req, res) => {
   if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
   res.json(await getCompare(req.params.type, req.query.ids));
 });
-app.get('/api/:type/items/:id/similar', async (req, res) => {
+app.get('/api/:type/items/:id/similar', publicCatalogCache, async (req, res) => {
   if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
   res.json(await getSimilar(req.params.type, req.params.id));
 });
-app.get('/api/:type/items/:id', async (req, res) => {
+app.get('/api/:type/items/:id', publicCatalogCache, async (req, res) => {
   if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
   const item = await getCatalogItem(req.params.type, req.params.id);
   if (!item) return fail(res, 404, 'Not found');
   res.json(item);
 });
-app.get('/api/repos/:id', async (req, res) => {
+app.get('/api/repos/:id', publicCatalogCache, async (req, res) => {
   const repo = await one(
     'SELECT * FROM repos WHERE id = $1 OR full_name = $2',
     [Number(req.params.id) || -1, req.params.id]

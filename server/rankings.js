@@ -323,8 +323,8 @@ export async function getRankings({
   };
 }
 
-export async function getChart(query) {
-  const sample = await getRankings({ ...query, limit: 50, page: 1 });
+export async function getChart(query, sampleOverride = null) {
+  const sample = sampleOverride || await getRankings({ ...query, limit: 50, page: 1 });
   const ranking = { ...sample, items: sample.items.slice(0, 5), limit: 5 };
   const languageCounts = new Map();
   for (const item of sample.items) {

@@ -32,7 +32,8 @@ export function AnalyticsPage({l,names,updatePath,type='github-repo'}){
     const query=new URLSearchParams({board,period,...filters});
     history.replaceState({},'',`/${l}/${type}/charts?${query}`);window.dispatchEvent(new PopStateEvent('popstate'));
     setLoading(true);setError(false);
-    Promise.all([fetch(`/api/${type}/charts?${query}`,{signal:controller.signal}),fetch(`/api/${type}/rankings?${query}&page=1&limit=50`,{signal:controller.signal})]).then(async responses=>{if(responses.some(r=>!r.ok))throw Error('charts');return Promise.all(responses.map(r=>r.json()))}).then(([chart,ranking])=>setData({chart,ranking})).catch(e=>{if(e.name!=='AbortError')setError(true)}).finally(()=>{if(!controller.signal.aborted)setLoading(false)});
+    const chartQuery=new URLSearchParams(query);chartQuery.set('includeRanking','1');
+    fetch(`/api/${type}/charts?${chartQuery}`,{signal:controller.signal}).then(async response=>{if(!response.ok)throw Error('charts');return response.json()}).then(chart=>setData({chart,ranking:chart.ranking})).catch(e=>{if(e.name!=='AbortError')setError(true)}).finally(()=>{if(!controller.signal.aborted)setLoading(false)});
     return()=>controller.abort();
   },[board,period,filters,l,revision,type]);
   const chart=data?.chart, ranking=data?.ranking, items=ranking?.items||[];

@@ -19,7 +19,7 @@ const LANGUAGES = [
 const TOPICS = [
   'ai', 'llm', 'agents', 'machine-learning', 'developer-tools', 'react', 'nextjs', 'rust',
   'python', 'golang', 'kubernetes', 'cli', 'web', 'database', 'security', 'devtools', 'mcp',
-  'inference', 'rag', 'coding-agent'
+  'inference', 'rag', 'coding-agent', 'design-system', 'design-tools', 'design-md'
 ];
 
 function rotate(list, take, now = new Date()) {
@@ -38,6 +38,8 @@ export function discoveryPlan(now = new Date()) {
   const created90 = dateBefore(90, now);
   const pushed180 = dateBefore(180, now);
   const queries = [
+    { q: `stars:>80000 pushed:>${pushed180} archived:false`, sort: 'updated', pages: 1, perPage: 100 },
+    { q: 'topic:design-system stars:>100 archived:false', sort: 'stars', pages: 1, perPage: 100 },
     { q: `stars:50..80000 pushed:>${pushed180} archived:false`, sort: 'updated', pages: 5, perPage: 100 },
     { q: `created:>${created90} stars:5..5000 archived:false`, sort: 'stars', pages: 3, perPage: 100 },
     { q: 'topic:ai stars:>20 archived:false', sort: 'updated', pages: 3, perPage: 100 },
@@ -98,6 +100,8 @@ const ASSET_QUERIES = {
     { q: 'topic:ui-library language:TypeScript archived:false stars:>30', sort: 'updated', pages: 2, perPage: 100 }
   ],
   website: [
+    { q: 'awesome-design-md in:name archived:false', sort: 'stars', pages: 1, perPage: 100 },
+    { q: 'topic:awesome-list topic:design-system archived:false', sort: 'stars', pages: 2, perPage: 100 },
     { q: 'awesome-mcp in:name archived:false', sort: 'stars', pages: 2, perPage: 100 },
     { q: 'mcp directory in:readme archived:false stars:>20', sort: 'stars', pages: 2, perPage: 100 },
     { q: 'skills.sh in:readme archived:false', sort: 'updated', pages: 2, perPage: 50 },
@@ -118,6 +122,17 @@ function inferAssetType(repo) {
 
 function assetSlug(fullName) {
   return String(fullName || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'item';
+}
+
+function websiteUrl(repo) {
+  const value = String(repo?.homepage || '').trim();
+  if (value) {
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;
+    } catch {}
+  }
+  return repo.html_url || `https://github.com/${repo.full_name}`;
 }
 
 async function upsertGithubRepo(repo, at) {
@@ -195,7 +210,7 @@ async function upsertAsset(type, repo) {
       id, type, slug, String(repo.full_name).split('/')[1] || repo.full_name, repo.full_name,
       repo.description || '', category, category, category, official,
       official ? `Verified vendor org ${org}` : null, `${type}:${category}`,
-      repo.html_url || `https://github.com/${repo.full_name}`, null, repo.language || '',
+      type === 'website' ? websiteUrl(repo) : (repo.html_url || `https://github.com/${repo.full_name}`), null, repo.language || '',
       JSON.stringify(topics), repo.stargazers_count || 0, repo.forks_count || 0,
       repo.created_at, repo.pushed_at, null, null, null
     ]
@@ -208,21 +223,25 @@ async function collectTypedAssets(knownRepos) {
   const extra = new Map();
   for (const type of ASSET_TYPES) {
     const found = new Map();
-    for (const repo of knownRepos) {
-      if (inferAssetType(repo) === type) found.set(repo.id, repo);
-    }
+    const queryBudget = Math.max(40, Math.ceil(MAX_ASSETS_PER_TYPE / ASSET_QUERIES[type].length));
     for (const spec of ASSET_QUERIES[type]) {
+      let added = 0;
       for (let page = 1; page <= spec.pages; page++) {
-        if (found.size >= MAX_ASSETS_PER_TYPE) break;
+        if (found.size >= MAX_ASSETS_PER_TYPE || added >= queryBudget) break;
         const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(spec.q)}&sort=${encodeURIComponent(spec.sort)}&order=desc&per_page=${spec.perPage}&page=${page}`;
         const body = await github(url);
         for (const repo of body.items || []) {
           if (!repo?.id || found.has(repo.id)) continue;
           found.set(repo.id, repo);
-          if (found.size >= MAX_ASSETS_PER_TYPE) break;
+          added++;
+          if (found.size >= MAX_ASSETS_PER_TYPE || added >= queryBudget) break;
         }
         await sleep(1200);
       }
+    }
+    for (const repo of knownRepos) {
+      if (found.size >= MAX_ASSETS_PER_TYPE) break;
+      if (inferAssetType(repo) === type) found.set(repo.id, repo);
     }
     for (const repo of found.values()) {
       await upsertAsset(type, repo);

@@ -1,4 +1,8 @@
 import { spawn } from 'node:child_process';
+import pg from 'pg';
+
+const { Pool } = pg;
+const pool = process.env.DATABASE_URL ? new Pool({ connectionString: process.env.DATABASE_URL }) : null;
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const run = task => new Promise(resolve => {
@@ -6,20 +10,39 @@ const run = task => new Promise(resolve => {
   const child = spawn('node', ['server/jobs.js', task], { stdio: 'inherit' });
   child.on('exit', (code, signal) => {
     if (code) console.error(`[scheduler] ${task} exited ${code}${signal ? ` ${signal}` : ''}`);
-    resolve();
+    resolve(code === 0);
   });
 });
 
-let lastCollectDay = '';
+async function latestSuccessfulCollectDay() {
+  if (!pool) return '';
+  try {
+    const result = await pool.query("SELECT MAX(finished_at) AS finished_at FROM sync_runs WHERE status = 'ok'");
+    return result.rows[0]?.finished_at ? new Date(result.rows[0].finished_at).toISOString().slice(0, 10) : '';
+  } catch (error) {
+    console.error('[scheduler] could not read last collection time', error.message);
+    return '';
+  }
+}
+
+let lastCollectAttemptHour = '';
+let fallbackCollectDay = '';
 let lastDigestHour = '';
-console.log('[scheduler] waiting for collect at 02:00 UTC and digest each hour');
+console.log('[scheduler] collect after 02:00 UTC with missed-run recovery; digest each hour');
 for (;;) {
   const now = new Date();
   const utcDay = now.toISOString().slice(0, 10);
   const utcHour = now.toISOString().slice(0, 13);
-  if (now.getUTCHours() === 2 && now.getUTCMinutes() < 10 && lastCollectDay !== utcDay) {
-    lastCollectDay = utcDay;
-    await run('collect');
+  const collectionDue = pool
+    ? now.getUTCHours() >= 2 && lastCollectAttemptHour !== utcHour
+    : now.getUTCHours() === 2 && now.getUTCMinutes() < 10 && fallbackCollectDay !== utcDay;
+  if (collectionDue) {
+    const latestDay = pool ? await latestSuccessfulCollectDay() : '';
+    if (!pool || latestDay !== utcDay) {
+      lastCollectAttemptHour = utcHour;
+      fallbackCollectDay = utcDay;
+      await run('collect');
+    }
   }
   if (now.getUTCMinutes() < 10 && lastDigestHour !== utcHour) {
     lastDigestHour = utcHour;

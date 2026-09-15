@@ -267,9 +267,11 @@ function decorateRepo(item) {
 }
 
 export async function getTypeSummary() {
-  const rows = await many('SELECT type, COUNT(*)::int AS n FROM assets GROUP BY type');
+  const [rows, repos] = await Promise.all([
+    many('SELECT type, COUNT(*)::int AS n FROM assets GROUP BY type'),
+    one("SELECT COUNT(*)::int AS n FROM repos WHERE deleted = FALSE AND archived = FALSE")
+  ]);
   const counts = Object.fromEntries(rows.map(r => [r.type, asNumber(r.n) || 0]));
-  const repos = await one("SELECT COUNT(*)::int AS n FROM repos WHERE deleted = FALSE AND archived = FALSE");
   counts['github-repo'] = asNumber(repos?.n) || 0;
   return {
     types: TYPES.map(id => ({
@@ -287,24 +289,26 @@ export async function getCatalogFilters(type) {
     const base = await getRepoFilters();
     return { ...base, categories: base.topics };
   }
-  const languages = await many(
-    `SELECT language AS name, COUNT(*)::int AS count FROM assets
-     WHERE type = $1 AND language IS NOT NULL AND language <> ''
-     GROUP BY language ORDER BY count DESC, language LIMIT 20`,
-    [type]
-  );
-  const categories = await many(
-    `SELECT category AS id, MIN(category_zh) AS zh, MIN(category_en) AS en, COUNT(*)::int AS count
-     FROM assets WHERE type = $1 GROUP BY category ORDER BY count DESC, category`,
-    [type]
-  );
-  const topics = await many(
-    `SELECT topic AS name, COUNT(*)::int AS count
-     FROM assets a, LATERAL jsonb_array_elements_text(a.topics) AS topic
-     WHERE a.type = $1 AND topic <> ''
-     GROUP BY topic ORDER BY count DESC, topic LIMIT 80`,
-    [type]
-  );
+  const [languages, categories, topics] = await Promise.all([
+    many(
+      `SELECT language AS name, COUNT(*)::int AS count FROM assets
+       WHERE type = $1 AND language IS NOT NULL AND language <> ''
+       GROUP BY language ORDER BY count DESC, language LIMIT 20`,
+      [type]
+    ),
+    many(
+      `SELECT category AS id, MIN(category_zh) AS zh, MIN(category_en) AS en, COUNT(*)::int AS count
+       FROM assets WHERE type = $1 GROUP BY category ORDER BY count DESC, category`,
+      [type]
+    ),
+    many(
+      `SELECT topic AS name, COUNT(*)::int AS count
+       FROM assets a, LATERAL jsonb_array_elements_text(a.topics) AS topic
+       WHERE a.type = $1 AND topic <> ''
+       GROUP BY topic ORDER BY count DESC, topic LIMIT 80`,
+      [type]
+    )
+  ]);
   return {
     languages: languages.map(r => r.name),
     topics: topics.map(r => r.name),
@@ -431,12 +435,13 @@ export async function getCatalogRankings(type, query = {}) {
   };
 }
 
-export async function getCatalogChart(type, query = {}) {
+export async function getCatalogChart(type, query = {}, sampleOverride = null) {
+  const sample = sampleOverride || await getCatalogRankings(type, { ...query, limit: 50, page: 1 });
+  const includeRanking = query.includeRanking === '1' || query.includeRanking === 'true' || query.includeRanking === true;
   if (type === 'github-repo') {
-    const chart = await getRepoChart(query);
-    return { ...chart, type };
+    const chart = await getRepoChart(query, sample);
+    return { ...chart, type, ...(includeRanking ? { ranking: sample } : {}) };
   }
-  const sample = await getCatalogRankings(type, { ...query, limit: 50, page: 1 });
   const ranking = { ...sample, items: sample.items.slice(0, 5), limit: 5 };
   const languageCounts = new Map();
   for (const item of sample.items) {
@@ -479,7 +484,8 @@ export async function getCatalogChart(type, query = {}) {
     points,
     languages,
     languageSampleCount: sample.items.length,
-    insufficient: points.filter(x => x.gain != null).length < 2
+    insufficient: points.filter(x => x.gain != null).length < 2,
+    ...(includeRanking ? { ranking: sample } : {})
   };
 }
 
@@ -490,12 +496,15 @@ export async function getCatalogItem(type, id) {
       [Number(id) || -1, id]
     );
     if (!repo) return null;
-    const ranking = await getRepoRankings({ board: 'stars', limit: 50, q: repo.full_name.split('/')[1] || repo.full_name });
+    const [ranking, snapshotRows] = await Promise.all([
+      getRepoRankings({ board: 'stars', limit: 50, q: repo.full_name.split('/')[1] || repo.full_name }),
+      many(
+        'SELECT sampled_at, stars, forks FROM snapshots WHERE repo_id = $1 ORDER BY sampled_at DESC LIMIT 31',
+        [repo.id]
+      )
+    ]);
     const item = ranking.items.find(x => x.id === asNumber(repo.id) || x.full_name === repo.full_name);
-    const snapshots = (await many(
-      'SELECT sampled_at, stars, forks FROM snapshots WHERE repo_id = $1 ORDER BY sampled_at DESC LIMIT 31',
-      [repo.id]
-    )).reverse();
+    const snapshots = snapshotRows.reverse();
     return {
       ...decorateRepo({
         ...repo,
@@ -519,20 +528,21 @@ export async function getCatalogItem(type, id) {
       mode: dataSource() === 'demo' ? 'demo' : 'live'
     };
   }
-  const row = await one('SELECT * FROM assets WHERE type = $1 AND (id = $2 OR slug = $3)', [type, id, id]);
+  const [row, endpoint] = await Promise.all([
+    one('SELECT * FROM assets WHERE type = $1 AND (id = $2 OR slug = $3)', [type, id, id]),
+    latestAssetDay()
+  ]);
   if (!row) return null;
-  const endpoint = await latestAssetDay();
-  const week = await periodStats(row.id, 'week', endpoint);
-  const similars = await similarCounts();
-  const similarRows = row.cluster_id
-    ? await many('SELECT * FROM assets WHERE cluster_id = $1 AND id <> $2 ORDER BY stars DESC', [row.cluster_id, row.id])
-    : [];
+  const [week, similars, similarRows, series] = await Promise.all([
+    periodStats(row.id, 'week', endpoint),
+    similarCounts(),
+    row.cluster_id
+      ? many('SELECT * FROM assets WHERE cluster_id = $1 AND id <> $2 ORDER BY stars DESC', [row.cluster_id, row.id])
+      : Promise.resolve([]),
+    many('SELECT day, star_created, stars FROM asset_daily WHERE asset_id = $1 ORDER BY day', [row.id])
+  ]);
   const ageDays = Math.round(Math.max(0, (endpoint - new Date(row.created_at)) / 86400000));
   const pushDays = Math.round(Math.max(0, (endpoint - new Date(row.pushed_at)) / 86400000));
-  const series = await many(
-    'SELECT day, star_created, stars FROM asset_daily WHERE asset_id = $1 ORDER BY day',
-    [row.id]
-  );
   return {
     ...mapAsset(row, {
       ...week,
@@ -566,13 +576,18 @@ export async function getCategories(type) {
 }
 
 export async function getCategory(type, slug, query = {}) {
-  const ranking = await getCatalogRankings(type, { ...query, topic: slug, category: slug, limit: 20, page: 1 });
-  const chart = await getCatalogChart(type, { ...query, topic: slug, category: slug });
+  const categoryQuery = { ...query, topic: slug, category: slug };
+  const [sample, categories] = await Promise.all([
+    getCatalogRankings(type, { ...categoryQuery, limit: 50, page: 1 }),
+    getCategories(type)
+  ]);
+  const ranking = { ...sample, items: sample.items.slice(0, 20), limit: 20 };
+  const chart = await getCatalogChart(type, categoryQuery, sample);
   const recommend = ranking.items
     .filter(item => item.recommendRank)
     .sort((a, b) => a.recommendRank - b.recommendRank)
     .slice(0, 4);
-  const meta = (await getCategories(type)).items.find(x => x.id === slug);
+  const meta = categories.items.find(x => x.id === slug);
   return {
     type,
     category: slug,
@@ -585,11 +600,7 @@ export async function getCategory(type, slug, query = {}) {
 
 export async function getCompare(type, ids) {
   const list = [...new Set((Array.isArray(ids) ? ids : String(ids || '').split(',')).map(x => x.trim()).filter(Boolean))].slice(0, 3);
-  const items = [];
-  for (const id of list) {
-    const item = await getCatalogItem(type, id);
-    if (item) items.push(item);
-  }
+  const items = (await Promise.all(list.map(id => getCatalogItem(type, id)))).filter(Boolean);
   if (items.length === 1) {
     const item = items[0];
     const seen = new Set([String(item.slug || ''), String(item.id)]);
@@ -614,11 +625,12 @@ export async function searchCatalog(q, type) {
   const queryText = String(q || '').trim();
   if (!queryText) return { items: [] };
   const types = type && isType(type) ? [type] : TYPES;
-  const items = [];
-  for (const current of types) {
-    const ranking = await getCatalogRankings(current, { q: queryText, limit: 8, page: 1, board: 'stars' });
-    items.push(...ranking.items.map(item => ({ ...item, type: current })));
-  }
+  const rankings = await Promise.all(types.map(current =>
+    getCatalogRankings(current, { q: queryText, limit: 8, page: 1, board: 'stars' })
+  ));
+  const items = rankings.flatMap((ranking, index) =>
+    ranking.items.map(item => ({ ...item, type: types[index] }))
+  );
   items.sort((a, b) => (b.stars || 0) - (a.stars || 0));
   return { q: queryText, items: items.slice(0, 20) };
 }

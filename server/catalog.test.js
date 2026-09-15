@@ -67,4 +67,6 @@ test('github-repo catalog still ranks live demo repos', async () => {
   assert.equal(ranking.items[0].type, 'github-repo');
   const chart = await getCatalogChart('github-repo', { board: 'hot', period: 'week' });
   assert.ok(chart.bars.length > 0);
+  const combined = await getCatalogChart('github-repo', { board: 'hot', period: 'week', includeRanking: '1' });
+  assert.ok(combined.ranking.items.length > 0);
 });
