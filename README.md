@@ -1,86 +1,101 @@
-# Trend Top
+# crawler 平台 Helm Charts
 
-A runnable bilingual discovery site for open-source skills, plugins, agents, components, websites, and GitHub repositories, with daily verified email digests. The default is **DEMO mode**: metadata and 33 days of metrics are illustrative synthetic samples. The interface and API label them as demo data. They are not GitHub's current rankings.
+解耦自 `crawler-worker-python/deploy/helm/crawler-platform` 单一 umbrella chart。
+按 devops-capability「一服务一 chart」约定，拆为 1 个 bootstrap + 7 个微服务 chart，
+每个 chart 独立打包（`helm_package.sh`）、独立 release（`helm_install`）。
 
-The site stores metrics in **PostgreSQL** when `DATABASE_URL` is set, and falls back to embedded **PGlite** for local demo and tests. Rankings are computed in SQL from pre-aggregated `period_metrics`. The first live collect expands 12 weeks of official Star history into daily rows, so day/week/month Star gains work immediately. Fork net still needs a second daily snapshot.
+## 设计要点：解耦后的共享面
 
-## Run locally
+umbrella 内的共享资源（ConfigMap / 外部 Secret 引用 / 初始化 Job）抽到 **bootstrap chart `crawler-platform`**：
 
-Requires Node 22+.
+- ConfigMap `crawler-platform-config`：全部业务进程的非敏感共享配置（Kafka/RMQ/Mongo/Redis/Sonyflake/OTel）。
+- 初始化 Job（helm hook，`pre-install`/`pre-upgrade`）：PG migrate（weight -5）→ Kafka topics / RMQ topology（weight -3）。
+- 外部 Secret `crawler-platform-secrets`：**由基建预建**（ExternalSecrets/SealedSecrets），chart 只按名引用，不持久化密码。
 
-```bash
-cp .env.example .env
-npm install
-npm run dev
-```
+各业务 chart 通过 `envFrom: configMapRef` + `secretKeyRef` **按名引用**上述 ConfigMap / Secret —— 这是解耦的核心。
+滚动更新不再用 umbrella 的 `checksum/config`（跨 release 拿不到），改用本仓约定的 `forceUpdate` 时间戳注解。
 
-Open `http://localhost:5173/en/home` for the English default, or use `/zh/home` for Chinese. The API runs on port 3001. Build and serve one production-style process with `npm run build` then `npm start` at `http://localhost:3001/`. The homepage introduces the product with a six-type collection snapshot, a repository growth example from the chart API, and a short guide before the type picker. The first discovery layer is asset type: `/en/skill`, `/en/plugin`, `/en/agent`, `/en/components`, `/en/website`, and `/en/github-repo`, each with `/ranking`, `/charts`, `/official`, `/c/:category`, `/compare`, and item detail. Legacy `/en/ranking` and `/en/charts` redirect to the repository type. Language and topic filters load from `GET /api/{type}/filters`.
+## 镜像 ↔ build playbook（2 个镜像）
 
-Register or sign in at `http://localhost:5173/en/account`. Registration sends a six-digit email code; in demo mode, read it from `http://localhost:5173/api/demo-outbox`. A verified account can select any of the six content types, boards, programming languages, topics, delivery time, and time zone. Leave language or topic empty to include all. Change, pause, resume, or unsubscribe from the account page. Run `npm run digest -- --force` to produce a sample daily digest and inspect the outbox again. `--force` bypasses the send hour only, not the once-per-local-day rule. The email includes compact growth charts and a sign-in link; it does not send when no selected board has data.
+| 镜像 | build playbook | 构建方式 | 被哪些 chart 使用 |
+|---|---|---|---|
+| `crawler/crawler-backend-go` | `build_crawler-backend-go.yml` | `build_golang` (buildx) | crawler-api / -status-manager / -data-consumer / -admin-api + bootstrap 的 migrate Job |
+| `crawler/crawler` | `build_crawler.yml` | `build_python` | crawler-worker-http / -general / -ifood |
 
-Login state is shared across the header, account page, and digest dialog. After registration or sign-in, the black header action shows the verified email address and the digest dialog identifies the same account without a reload.
+## chart ↔ deploy playbook（8 个）
 
-## Creem billing
+| chart | 工作负载 | 端口 | 特殊资源 | deploy playbook |
+|---|---|---|---|---|
+| `crawler-platform` | 3×Job(hook) + ConfigMap | — | 初始化 / 共享配置 | `deploy_crawler-platform.yml` |
+| `crawler-api` | StatefulSet | 8080 | Service(headless+ClusterIP) + Ingress + HPA + PDB | `deploy_crawler-api.yml` |
+| `crawler-status-manager` | Deployment | 8082 | Service + PDB | `deploy_crawler-status-manager.yml` |
+| `crawler-data-consumer` | Deployment | 8083 | Service + PDB | `deploy_crawler-data-consumer.yml` |
+| `crawler-admin-api` | Deployment | 8081 | Service(ClusterIP) + **NetworkPolicy** + PDB（无 Ingress） | `deploy_crawler-admin-api.yml` |
+| `crawler-worker-http` | Deployment | 8080 | Service + 探针 | `deploy_crawler-worker-http.yml` |
+| `crawler-worker-general` | Deployment | — | **KEDA** ScaledObject+TriggerAuth + PDB | `deploy_crawler-worker-general.yml` |
+| `crawler-worker-ifood` | Deployment | — | IPIPGO 代理 env + 加重资源 + KEDA(可选) + PDB | `deploy_crawler-worker-ifood.yml` |
 
-The paid product is one **Pro** tier with separate weekly and monthly recurring products. Public plans live at `/en/pricing` and `/zh/pricing`; account billing is shown separately from the free daily digest. Checkout, Customer Portal, signed webhook processing, idempotent provider events, local billing records, and the `pro` entitlement are implemented with Creem's REST API.
+> 注：源 umbrella 的 `rmq-twitter`、`mongo-lease` 两个 worker 触发器本次未迁移（按需再加）。
 
-Open `/en/admin` or `/zh/admin` while signed in with an administrator account. Administrators are ordinary accounts whose email is listed in `ADMIN_EMAILS` (or `admin.emails` in `config.json`); the default is `zhangyuge.ghs@gmail.com`. There is no separate token sign-in. The administrator page controls checkout availability, mode, currency, weekly/monthly amounts, both Creem product IDs, API base URL, API key, webhook secret, support email, and X/Facebook/Telegram links. Creem credentials are encrypted in `app_settings` using `AUTH_SECRET` (falling back to `ADMIN_TOKEN`) and are never returned to the browser. Keep that encryption secret stable across deployments. Environment variables in `.env.example` are optional bootstrap/fallback values.
+## 部署顺序（重要）
 
-In Creem Test Mode, create two recurring products for the same Pro feature set: one weekly and one monthly. Save their IDs and test credentials in Admin, then register this webhook URL in Creem:
+1. **前置（基建一次性）**：在目标 namespace 预建
+   - docker-registry 拉取 Secret `harbor`；
+   - 外部 Secret `crawler-platform-secrets`（含 `POSTGRES_DSN` / `REDIS_ADDRS` / `REDIS_PASSWORD` / `MONGO_URI` / `RABBITMQ_URL` + `RABBITMQ_MGMT_URL/USER/PASS`）；
+   - 如启用 KEDA：集群已装 KEDA Operator；如启用 ifood：Secret `crawler-ifood-proxy`（`IPIPGO_USER`/`IPIPGO_PASSWORD`）。
+2. **bootstrap 先行**：`deploy_crawler-platform.yml` —— 落地 ConfigMap + 跑完 migrate / kafka-topic-init / rmq-topology-init。
+   - `crawler_rmq_channels` 必须覆盖将要启用的 worker channel（如同时上 ifood，需加 `- ifood`）。
+3. **再部业务**：其余 7 个 `deploy_*` playbook（彼此无强依赖，可并行）。
 
-```text
-https://YOUR_DOMAIN/api/webhooks/creem
-```
-
-The webhook route is registered before `express.json()` so its HMAC-SHA256 signature is checked against the exact raw request body. Provider events are deduplicated in `creem_webhook_events`; failed events can be retried, and older subscription payloads do not overwrite newer provider state. Redirect query parameters never grant access.
-
-Switching to production requires production products, API key, webhook secret, `mode=prod`, `https://api.creem.io`, an HTTPS `PUBLIC_URL`, and a real end-to-end payment test. Prices use the smallest currency unit in Admin: for USD, `900` displays as `$9.00`.
-
-## Live data and mail
-
-Use PostgreSQL in production (`DATABASE_URL=postgres://...`). Leave it unset to keep the embedded PGlite database under `./data/pglite`. Set `DATA_MODE=live`, `GITHUB_TOKEN`, `PUBLIC_URL`, and long random `ADMIN_TOKEN` and `AUTH_SECRET` values in `.env`. For email, set `RESEND_API_KEY` and `RESEND_FROM` using an address on a [verified Resend domain](https://resend.com/docs/api-reference/emails/send-email), or configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM`. Resend takes priority when both providers are configured. Never expose these values to the frontend. `ADMIN_TOKEN` also encrypts unsubscribe links at rest; retain it across restarts.
-
-Live registration and email subscriptions require a working provider and a public `PUBLIC_URL` so recipients can receive verification codes and open the account or unsubscribe links. A Resend API key alone is insufficient: `RESEND_FROM` must use a verified sender domain. The demo outbox supports full local registration and digest testing without external mail. Existing subscriptions are adopted by a newly verified account with the same email address.
-
-Run `npm run collect` at about 02:00 UTC daily with a system scheduler. Run `npm run digest` hourly. After a schema change or a restore, `npm run backfill` rebuilds `daily_metrics` and `period_metrics`. The collector paginates GitHub search, rotates languages and topics each day, lowers the star floor to catch newcomers, caps mega-repos, refreshes up to 250 known repositories per run (50 without a token), stores current snapshots, fetches the last 12 weekly Star-history buckets, expands those buckets into daily Star-created rows, and rebuilds period metrics in SQL. `npm run history` refreshes official Star history without running discovery. The sample is a bounded candidate universe (up to 2,000 repositories and 400 assets per type), not all of GitHub. `GET /api/admin` and `POST /api/admin/collect`, `/digest`, or `/backfill` require an administrator account session (the same cookie as the account page) for status and manual reruns; use `./deploy.sh collect` from the server shell instead of curl.
-
-For example, in a cron-compatible scheduler (UTC):
-
-```text
-0 2 * * * cd /path/to/site && npm run collect
-5 * * * * cd /path/to/site && npm run digest
-```
-
-Database tables migrate automatically on startup. Keep the Postgres volume (or `data/pglite`) on persistent storage. Email delivery failures are recorded and retried up to three times. Resend digest requests use a stable idempotency key to avoid duplicate sends during retries within Resend's 24-hour window. A delivery is claimed atomically before send, so overlapping workers cannot both send it. If a worker crashes during send, the record remains `sending` for operator review rather than risking an automatic duplicate.
-
-## Docker
-
-Same layout as meridian-travel-guide: secrets live in `/opt/trend-top/config.json`, not in git. Host port **3010** and an internal Postgres (not published) avoid the existing 3000 / 5432 / 8000 bindings.
-
-On the VPS:
+## 打包 / 升级
 
 ```bash
-sudo mkdir -p /opt/trend-top
-sudo cp config.json /opt/trend-top/config.json
-sudo nano /opt/trend-top/config.json   # fill every CHANGE_ME_* field
-./deploy.sh -d --build
-./deploy.sh collect
+# 单 chart 打包并推 nexus（product=crawler）
+sh helm_package.sh crawler-api crawler
+
+# 或经 upgrade_helm_chart role 批量（版本变化才重打包上传）
+# vars: { app_list: [crawler-platform, crawler-api, ...], nexus_domain: nexus.xiaoxitech.com }
 ```
 
-`deploy.sh` reads the config, exports `POSTGRES_PASSWORD` and `APP_PORT`, then runs `docker compose up`. The app is published on port **3010** (all interfaces). Optional `deploy/nginx.conf` proxies that port. The scheduler collects at 02:00 UTC and sends the digest each hour.
+deploy playbook 经 `helm_install` role：release 名 = chart 名 = `app_name`，
+values 由 `charts/crawler/<app_name>/values.yaml.j2` 经 Ansible 渲染后传入 `helm upgrade --install`。
 
-## Ranking methodology
+## rpc 子系统（spider_platform/rpc，独立于 crawler-platform 解耦面）
 
-`hot` = 45% log-scaled period Star gain + 20% Star gain divided by starting Stars plus 100 + 15% log-scaled Fork gain + 20% recent push recency. Each input is percentile-normalized against the filtered candidate set in SQL (`period_metrics` + window functions). In live mode, Star gain is **new Stars created** in GitHub's official history day buckets, expanded into `daily_metrics` on collect so 1/7/30-day windows are complete after the first run. This is not the net difference in total Stars and its day boundaries may differ from UTC. Fork gain remains a net difference between our daily snapshots. While Fork gain is unavailable, its 15% component is omitted and the remaining weights are renormalized. Demo mode uses synthetic snapshot net changes for both. The period can be 1, 7, or 30 days; snapshot boundaries require a match within 6 hours. Anomalous gains over three times a previous comparable period (and over 100 Stars) get no hot score pending review. `rising` sorts absolute gain; `new` limits age to 90 days and minimum 20 Stars; `ai` filters by published topic keyword evidence before hot ranking; `stars` and `forks` sort current cumulative totals. Search, language, topic, age and pagination act on these result sets. Without complete history, gains and score are null, shown as “数据不足 / Insufficient data.”
+RPC gateway + 浏览器 Worker 框架（TikTok worker），源真相 `rpc/deploy/k8s/`。
+**不依赖** `crawler-platform` bootstrap（无 PG/Kafka/RMQ/共享 ConfigMap），配置由各 chart
+自建 ConfigMap 承载；仅复用 namespace 里预建的镜像拉取 Secret `harbor`。
 
-The activity component is **push recency**, a proxy, not PR/issue/release activity. Scores are relative to the sampled candidate universe and selected filters. API sampling is approximate, delayed, and subject to GitHub limits. The site says “recently trending,” not “real-time.” The live cumulative and daily charts use official new-Star history for the leading repository; the demo charts show synthetic net changes. Bars compare the top five using the same metric and window. The donut groups programming languages in the first 50 repositories of the selected ranking and filters, with remaining languages combined as Other. When a selected live board lacks usable history, Stars/Forks total boards show current totals instead. Charts are rendered with [Recharts](https://recharts.github.io/en-US/).
+| chart | 工作负载 | 端口 | 特殊资源 | build / deploy playbook |
+|---|---|---|---|---|
+| `crawler-rpc-gateway` | Deployment（**固定 1 副本 + Recreate**，注册表在进程内存） | 8765(ws) / 8766(http) | Service(ClusterIP) + 自建 ConfigMap | `build_crawler-rpc-gateway.yml` / `deploy_crawler-rpc-gateway.yml` |
+| `crawler-worker-rpc` | Deployment（默认 3 副本 × 3 浏览器） | —（只外连 gateway WS） | 自建 ConfigMap + /dev/shm(Memory 2Gi) + /opt emptyDir + pgrep 探针 + PDB | `build_crawler-worker-rpc.yml` / `deploy_crawler-worker-rpc.yml` |
 
-## Design and component provenance
+- 两个镜像同仓（`spider_platform/rpc`）不同 Dockerfile（`deploy/server/`、`deploy/worker/`），
+  构建上下文均为仓库根；build 走 `build_python`，push 到 `nj-cp-harbor.xx6.cn/crawler/*`
+ （基座任务显式传 `product=crawler`，勿挂 crawler-test.env）。
+- **部署顺序**：先 `deploy_crawler-rpc-gateway.yml` 再 `deploy_crawler-worker-rpc.yml` ——
+  worker chart 按 `ws://crawler-rpc-gateway.<release ns>.svc.cluster.local:8765` 回连注册。
+- worker 扩容改 `crawler_worker_rpc_replica_count`（每副本固定 3 浏览器，资源按此配）；
+  gateway 副本数不开放。CLOAK_PROXY 走 ConfigMap 明文（内网口径，源真相如此），
+  出口不能是被屏蔽地区（如 HK）。
 
-`DESIGN.md` combines the [Wired guide in awesome-design-md](https://github.com/VoltAgent/awesome-design-md/blob/main/design-md/wired/DESIGN.md) for high-contrast editorial typography, a black footer band, and square controls with the [Apple guide's](https://github.com/VoltAgent/awesome-design-md/blob/main/design-md/apple/DESIGN.md) viewport-sized section rhythm and single-color emphasis. Trend Top uses its own restrained blue for chart series and active navigation. Scroll snapping and fade/slide transitions are implemented for this site; no brand artwork was copied.
+## cookies 子系统（spider_platform/cookies，独立于 crawler-platform 解耦面）
 
-Three adapted 21st.dev component patterns are integrated in `src/components.jsx`: [float_ui Radix tabs](https://21st.dev/community/components/float_ui/tabs-2/tabs-with-background-color) for board navigation, [float_ui Radix dialog](https://21st.dev/community/components/float_ui/modal-dialog/modal-with-newsletter) for subscription, and [HextaUI clearable input](https://21st.dev/community/components/preetsuthar17/input) for search. All dropdowns now use [Radix Select](https://www.radix-ui.com/primitives/docs/components/select) with a shared visual treatment; the menu, selected row, and focus state are rendered by the app instead of the operating system. No preview assets or branding were copied. Credits remain here in the developer README rather than in the user-facing interface. The components use keyboard-operable Radix primitives, proper labels and focus styles; mobile layouts are checked separately.
+cookie 池生产者 cookiegen（in-process controller + worker 池），源真相 `cookies/deploy/cookiegen.yaml`。
+**不依赖** `crawler-platform` bootstrap；配置由 chart 自建 ConfigMap + Secret 承载，
+仅复用 namespace 里预建的镜像拉取 Secret `harbor`。
 
-## Roadmap
+| chart | 工作负载 | 端口 | 特殊资源 | build / deploy playbook |
+|---|---|---|---|---|
+| `crawler-cookies` | Deployment（**固定 1 副本 + Recreate**，N 副本 = N 倍产量且互不协调） | 9090(metrics) | 自建 ConfigMap + Secret（REDIS_PASSWORD）+ metrics Service（prometheus.io 注解） | `build_crawler-cookies.yml` / `deploy_crawler-cookies.yml` |
 
-Next: add current PR/release signals for a separate maintenance board; use GitHub issue labels for contribution opportunities; add release alerts; enhance anti-manipulation review and administrator controls. These are not currently claimed as implemented.
+- 镜像 `crawler/crawler-cookies`（仓库 `spider_platform/cookies`，根 Dockerfile，uv 多阶段、无浏览器）；
+  build 走 `build_python`，push 到 `nj-cp-harbor.xx6.cn/crawler/*`（基座任务显式传 `product=crawler`，勿挂 crawler-test.env）。
+- **依赖**：namespace 内已有 **Redis Cluster**（`crawler_cookies_redis_addrs` 逗号分隔 host:port 起始节点，
+  须与 crawler 消费端同池 `serp:cookies`）与已部署的 `crawler-sgss-server`（SG_SS_API_URL 指向同 ns :8999）。
+  代码 `redis_client.py` 恒走 RedisCluster，仅读 `REDIS_ADDRS` / `REDIS_PASSWORD`；密码经 crawler-test.json
+  传 `crawler_cookies_redis_password`（勿提交 git）。
+- 池水位 target / max_concurrency **不在 chart 配**，走 Redis 热配置（重启不丢、可热调）：
+  `redis-cli HSET cookiegen:config:serp:cookies target 1000 max_concurrency 10`；
+  换站点改 `crawler_cookies_site`（入口 `python -m cookiegen.sites.<site>`）。
