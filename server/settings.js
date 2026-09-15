@@ -14,13 +14,13 @@ const normalizePrices = (input, fallback) => Object.fromEntries(LOCALES.map(loca
   const source = input?.[locale] || {}, base = fallback?.[locale] || {};
   return [locale, {
     currency: currencyCode(source.currency ?? base.currency, DEFAULT_CURRENCY[locale]),
-    weekly: amount(source.weekly ?? base.weekly),
-    monthly: amount(source.monthly ?? base.monthly)
+    monthly: amount(source.monthly ?? base.monthly),
+    yearly: amount(source.yearly ?? base.yearly)
   }];
 }));
 // Settings saved before per-locale prices stored one currency plus integer cents.
 const legacyPrices = billing => billing && !billing.prices && (billing.weeklyPrice || billing.monthlyPrice)
-  ? { en: { currency: currencyCode(billing.currency, 'USD'), weekly: amount(Number(billing.weeklyPrice || 0) / 100), monthly: amount(Number(billing.monthlyPrice || 0) / 100) } }
+  ? { en: { currency: currencyCode(billing.currency, 'USD'), monthly: amount(Number(billing.monthlyPrice || 0) / 100), yearly: 0 } }
   : null;
 const configSecret = () => {
   const source = process.env.AUTH_SECRET || process.env.ADMIN_TOKEN;
@@ -51,11 +51,11 @@ export function defaultSettings() {
         enabled: false,
         mode,
         prices: normalizePrices({
-          en: { currency: process.env.CREEM_CURRENCY, weekly: process.env.CREEM_PRICE_PRO_WEEKLY, monthly: process.env.CREEM_PRICE_PRO_MONTHLY },
-          zh: { currency: process.env.CREEM_CURRENCY_ZH, weekly: process.env.CREEM_PRICE_PRO_WEEKLY_ZH, monthly: process.env.CREEM_PRICE_PRO_MONTHLY_ZH }
+          en: { currency: process.env.CREEM_CURRENCY, monthly: process.env.CREEM_PRICE_PRO_MONTHLY, yearly: process.env.CREEM_PRICE_PRO_YEARLY },
+          zh: { currency: process.env.CREEM_CURRENCY_ZH, monthly: process.env.CREEM_PRICE_PRO_MONTHLY_ZH, yearly: process.env.CREEM_PRICE_PRO_YEARLY_ZH }
         }),
-        weeklyProductId: process.env.CREEM_PRODUCT_PRO_WEEKLY || '',
         monthlyProductId: process.env.CREEM_PRODUCT_PRO_MONTHLY || '',
+        yearlyProductId: process.env.CREEM_PRODUCT_PRO_YEARLY || '',
         apiBaseUrl: cleanUrl(process.env.CREEM_API_BASE_URL || (mode === 'prod' ? 'https://api.creem.io' : 'https://test-api.creem.io')),
         graceDays: Math.max(0, Math.min(30, Number(process.env.BILLING_GRACE_DAYS || 3)))
       },
@@ -75,7 +75,8 @@ export async function getSettings() {
   const row = await one('SELECT public_data, secret_data FROM app_settings WHERE key=$1', [SETTING_KEY]);
   if (!row) return defaults;
   const stored = asJson(row.public_data, {});
-  const { currency: _c, weeklyPrice: _w, monthlyPrice: _m, ...storedBilling } = stored.billing || {};
+  // Older settings stored one currency with integer cents and a weekly product; both are dropped here.
+  const { currency: _c, weeklyPrice: _w, monthlyPrice: _m, weeklyProductId: _wp, ...storedBilling } = stored.billing || {};
   return {
     public: {
       billing: { ...defaults.public.billing, ...storedBilling, prices: normalizePrices(stored.billing?.prices || legacyPrices(stored.billing), defaults.public.billing.prices) },
@@ -95,7 +96,7 @@ export async function saveSettings(input) {
     billing: {
       enabled: Boolean(billing.enabled), mode,
       prices: normalizePrices(billing.prices, current.public.billing.prices),
-      weeklyProductId: String(billing.weeklyProductId || '').trim().slice(0, 160), monthlyProductId: String(billing.monthlyProductId || '').trim().slice(0, 160),
+      monthlyProductId: String(billing.monthlyProductId || '').trim().slice(0, 160), yearlyProductId: String(billing.yearlyProductId || '').trim().slice(0, 160),
       apiBaseUrl: cleanUrl(billing.apiBaseUrl || (mode === 'prod' ? 'https://api.creem.io' : 'https://test-api.creem.io')),
       graceDays: Math.max(0, Math.min(30, Number(billing.graceDays ?? 3)))
     },
