@@ -10,6 +10,7 @@ process.env.DATA_MODE = 'demo';
 process.env.PGLITE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'trend-top-billing-'));
 process.env.ADMIN_TOKEN = 'test-admin-token-with-enough-entropy';
 process.env.AUTH_SECRET = 'test-auth-secret-with-enough-entropy';
+process.env.ADMIN_EMAILS = 'admin@example.invalid';
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = (input, options) => {
@@ -30,9 +31,15 @@ test('admin configures one Pro tier, checkout and signed webhook activate it ide
     return { response, status: response.status, data: await response.json() };
   };
   try {
-    const login = await call('/api/admin/auth/login', 'POST', { token: process.env.ADMIN_TOKEN });
+    const adminEmail = 'admin@example.invalid', adminPassword = 'an admin test password';
+    await call('/api/auth/register', 'POST', { email: adminEmail, password: adminPassword, locale: 'en' });
+    const adminCode = (await one('SELECT text FROM outbox WHERE to_email=$1 ORDER BY id DESC LIMIT 1', [adminEmail])).text.match(/code: (\d{6})/)[1];
+    const login = await call('/api/auth/register/verify', 'POST', { email: adminEmail, code: adminCode });
     adminCookie = login.response.headers.get('set-cookie').split(';')[0];
     assert.equal(login.status, 200);
+    assert.equal(login.data.user.isAdmin, true);
+    assert.equal((await call('/api/admin/auth/me', 'GET', undefined, adminCookie)).data.admin, true);
+    assert.equal((await call('/api/admin/settings', 'GET')).status, 401);
     const configured = await call('/api/admin/settings', 'PUT', {
       billing: { enabled: true, mode: 'test', currency: 'USD', weeklyPrice: 300, monthlyPrice: 900, weeklyProductId: 'prod_week', monthlyProductId: 'prod_month', apiBaseUrl: 'https://test-api.creem.io', graceDays: 3 },
       contact: { email: 'support@example.com' }, social: { x: 'https://x.com/trendtop', facebook: '', telegram: '' },
@@ -50,6 +57,8 @@ test('admin configures one Pro tier, checkout and signed webhook activate it ide
     const code = (await one('SELECT text FROM outbox WHERE to_email=$1 ORDER BY id DESC LIMIT 1', [email])).text.match(/code: (\d{6})/)[1];
     const verified = await call('/api/auth/register/verify', 'POST', { email, code });
     userCookie = verified.response.headers.get('set-cookie').split(';')[0];
+    assert.equal(verified.data.user.isAdmin, false);
+    assert.equal((await call('/api/admin/settings', 'GET', undefined, userCookie)).status, 403);
     const checkout = await call('/api/billing/checkout', 'POST', { planKey: 'pro_weekly' }, userCookie);
     assert.equal(checkout.status, 201);
     assert.equal(checkout.data.checkoutUrl, 'https://checkout.creem.io/ch_test_1');
