@@ -41,7 +41,7 @@ test('admin configures one Pro tier, checkout and signed webhook activate it ide
     assert.equal((await call('/api/admin/auth/me', 'GET', undefined, adminCookie)).data.admin, true);
     assert.equal((await call('/api/admin/settings', 'GET')).status, 401);
     const configured = await call('/api/admin/settings', 'PUT', {
-      billing: { enabled: true, mode: 'test', currency: 'USD', weeklyPrice: 300, monthlyPrice: 900, weeklyProductId: 'prod_week', monthlyProductId: 'prod_month', apiBaseUrl: 'https://test-api.creem.io', graceDays: 3 },
+      billing: { enabled: true, mode: 'test', prices: { en: { currency: 'USD', weekly: '2.99', monthly: 9.5 }, zh: { currency: 'CNY', weekly: 20, monthly: 68 } }, weeklyProductId: 'prod_week', monthlyProductId: 'prod_month', apiBaseUrl: 'https://test-api.creem.io', graceDays: 3 },
       contact: { email: 'support@example.com' }, social: { x: 'https://x.com/trendtop', facebook: '', telegram: '' },
       secrets: { creemApiKey: 'creem_test_key', creemWebhookSecret: 'webhook_test_secret' }
     }, adminCookie);
@@ -51,6 +51,10 @@ test('admin configures one Pro tier, checkout and signed webhook activate it ide
     const plans = await call('/api/billing/plans');
     assert.deepEqual(plans.data.plans.map(plan => plan.key), ['pro_weekly', 'pro_monthly']);
     assert.ok(plans.data.plans.every(plan => plan.available));
+    assert.deepEqual(plans.data.plans.map(plan => [plan.price, plan.currency]), [[2.99, 'USD'], [9.5, 'USD']]);
+    const zhPlans = await call('/api/billing/plans?locale=zh');
+    assert.deepEqual(zhPlans.data.plans.map(plan => [plan.price, plan.currency]), [[20, 'CNY'], [68, 'CNY']]);
+    assert.equal((await call('/api/site-settings')).data.billing.weeklyPrice, undefined);
 
     const email = 'buyer@example.invalid', password = 'a secure test password';
     await call('/api/auth/register', 'POST', { email, password, locale: 'en' });
