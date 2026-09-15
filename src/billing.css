@@ -44,4 +44,18 @@
 .admin-grid label:has(input[type=checkbox]){flex-direction:row;align-items:center}
 .admin-grid input[type=checkbox]{min-height:auto;width:20px;height:20px}
 .admin-settings>.primary{min-height:58px;min-width:240px}
-@media(max-width:760px){.billing-page,.billing-result,.admin-page{padding:40px 20px 72px}.admin-grid,.pricing-layout{grid-template-columns:1fr;gap:24px}.billing-hero h1,.billing-result h1,.admin-page h1{font-size:36px}.pricing-card{padding:22px}.billing-cycle button{min-width:0;flex:1}}
+.admin-section-hint{margin:-6px 0 18px;color:#666;font-size:15px}
+.admin-grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.admin-viewer{margin:8px 0 0;color:#666}
+.dialog-content.admin-dialog{width:min(92vw,520px);border:1px solid #111;border-radius:0;padding:30px}
+.admin-dialog h2{margin:8px 0 12px;font-size:26px;letter-spacing:-.03em}
+.admin-dialog-body p{margin:0 0 14px;color:#444;font-size:16px;line-height:1.55}
+.admin-dialog-body ul{margin:0;padding:0;list-style:none;border-top:1px solid #e5e5e5}
+.admin-dialog-body li{padding:10px 0;border-bottom:1px solid #e5e5e5;font-size:15px;font-weight:600}
+.admin-dialog-actions{display:flex;justify-content:flex-end;gap:12px;margin-top:24px}
+.admin-dialog-actions .primary,.admin-dialog-actions .ghost{min-height:48px;padding:0 22px;font-size:15px}
+.admin-result-ok,.admin-result-error{display:flex;align-items:flex-start;gap:12px;font-weight:600}
+.admin-result-ok span,.admin-result-error span{display:inline-grid;place-items:center;flex:none;width:28px;height:28px;font-size:16px;font-weight:800;color:#fff;background:#315fd9}
+.admin-result-error span{background:#a53e3e}
+.admin-result-error{color:#a53e3e}
+@media(max-width:760px){.billing-page,.billing-result,.admin-page{padding:40px 20px 72px}.admin-grid,.admin-grid-3,.pricing-layout{grid-template-columns:1fr;gap:24px}.billing-hero h1,.billing-result h1,.admin-page h1{font-size:36px}.pricing-card{padding:22px}.billing-cycle button{min-width:0;flex:1}}
