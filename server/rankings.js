@@ -1,5 +1,5 @@
 import {
-  asDay, asIso, asJson, asNumber, dataSource, DAYS, many, one, utcDay
+  asDay, asIso, asJson, asNumber, dataSource, DAYS, lastCompleteDay, many, one, utcDay
 } from './db.js';
 
 export const boards = {
@@ -254,7 +254,7 @@ export async function getRankings({
   const latestTime = latestRow?.t || null;
   const endpoint = latestTime ? new Date(latestTime) : new Date();
   const live = source === 'github';
-  const currentDay = utcDay(endpoint);
+  const currentDay = live ? lastCompleteDay(endpoint) : utcDay(endpoint);
   const days = DAYS[period];
   const start = live
     ? new Date(currentDay.getTime() - (days - 1) * 86400000)
@@ -353,7 +353,7 @@ export async function getChart(query, sampleOverride = null) {
     const days = DAYS[ranking.period];
     if (ranking.growthBasis === 'star_created') {
       const repo = await one('SELECT created_at FROM repos WHERE id = $1', [leader.id]);
-      const series = await getStarSeries(leader.id, new Date(ranking.updatedAt), days, repo?.created_at);
+      const series = await getStarSeries(leader.id, dataSource() === 'github' ? lastCompleteDay(new Date(ranking.updatedAt)) : new Date(ranking.updatedAt), days, repo?.created_at);
       if (series.complete) {
         let cumulative = 0;
         points = [
