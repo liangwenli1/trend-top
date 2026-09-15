@@ -9,7 +9,7 @@ delete process.env.DATABASE_URL;
 process.env.DATA_MODE = 'demo';
 process.env.PGLITE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pulse-core-'));
 
-const { ready, query, one, many, expandStarHistoryToDaily, applySnapshotsToDaily, rebuildDerivedMetrics } = await import('./db.js');
+const { ready, query, one, many, asDay, expandStarHistoryToDaily, applySnapshotsToDaily, rebuildDerivedMetrics } = await import('./db.js');
 const { getRankings, getStarSeries } = await import('./rankings.js');
 const { digest, encryptManageToken, discoveryPlan, keepCandidate } = await import('./jobs.js');
 await ready;
@@ -61,6 +61,29 @@ test('official Star history expands into complete daily metrics', async () => {
   }
 });
 
+test('star history never stores the incomplete sample day as a zero gain', async () => {
+  const id = 999997;
+  const week = Date.parse('2026-09-13T00:00:00Z') / 1000;
+  await query(
+    `INSERT INTO star_history (repo_id, week_start, total, days_json, sampled_at) VALUES ($1, $2, $3, $4::jsonb, $5)`,
+    [id, week, 3, JSON.stringify([1, 2, 0, 0, 0, 0, 0]), '2026-09-15T02:05:00Z']
+  );
+  await expandStarHistoryToDaily(id);
+  const days = await many(`SELECT day, star_created FROM daily_metrics WHERE repo_id = $1 AND source = 'github' ORDER BY day`, [id]);
+  assert.deepEqual(days.map(row => [asDay(row.day), Number(row.star_created)]), [['2026-09-13', 1], ['2026-09-14', 2]]);
+  const series = await getStarSeries(id, new Date('2026-09-14T00:00:00Z'), 2, '2020-01-01T00:00:00Z');
+  assert.deepEqual(series.points.map(point => point.count), [1, 2]);
+});
+
+test('digest chart renders a PNG only with enough known days', async () => {
+  const { renderGainChart } = await import('./png-chart.js');
+  assert.equal(renderGainChart([5, null, null]), null);
+  const png = renderGainChart([1, 4, 0, 9, 2, 7, 3], { width: 120, height: 60 });
+  assert.deepEqual([...png.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  assert.equal(png.readUInt32BE(16), 120);
+  assert.equal(png.readUInt32BE(20), 60);
+});
+
 test('daily snapshot rebuild keeps only the latest snapshot for each UTC day', async () => {
   const id = 999998;
   await query(
@@ -110,7 +133,21 @@ test('daily digest is one combined message and is idempotent', async () => {
   assert.match(out[0].text, /Trending now/);
   assert.match(out[0].text, /Fastest rising/);
   assert.match(out[0].text, /unsubscribe/i);
-  assert.equal((await one('SELECT status FROM deliveries WHERE subscription_id = $1', [id])).status, 'sent');
+  assert.match(out[0].html, /email-logo\.png/);
+  assert.match(out[0].html, /api\/digest-chart\/github-repo\//);
+  const delivery = await one('SELECT status, snapshot FROM deliveries WHERE subscription_id = $1', [id]);
+  assert.equal(delivery.status, 'sent');
+  const snapshot = typeof delivery.snapshot === 'string' ? JSON.parse(delivery.snapshot) : delivery.snapshot;
+  assert.ok(Array.isArray(snapshot['github-repo:hot']) && snapshot['github-repo:hot'].length > 0);
+  // A later digest compares against that snapshot and marks movement.
+  const { buildDigest } = await import('./digest.js');
+  const sub = await one('SELECT * FROM subscriptions WHERE id = $1', [id]);
+  const shuffled = { 'github-repo:hot': [...snapshot['github-repo:hot']].reverse(), 'github-repo:rising': ['nobody/nothing'] };
+  const next = await buildDigest(sub, raw, { previous: shuffled });
+  const hot = next.sections.find(section => section.board === 'hot');
+  assert.ok(hot.items.some(item => typeof item.change === 'number' && item.change !== 0));
+  assert.ok(next.sections.find(section => section.board === 'rising').items.every(item => item.change === 'new'));
+  assert.match(next.html, /NEW|&#9650;|&#9660;/);
 });
 
 test('daily digest skips an empty selection instead of sending an empty email', async () => {
