@@ -14,7 +14,8 @@
     "token": "CHANGE_ME_GITHUB_TOKEN"
   },
   "admin": {
-    "token": "CHANGE_ME_ADMIN_TOKEN"
+    "token": "CHANGE_ME_ADMIN_TOKEN",
+    "emails": ["zhangyuge.ghs@gmail.com"]
   },
   "smtp": {
     "host": "smtp.resend.com",
