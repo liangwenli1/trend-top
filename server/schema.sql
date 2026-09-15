@@ -266,6 +266,7 @@ CREATE TABLE IF NOT EXISTS deliveries (
   attempts INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
   sent_at TIMESTAMPTZ,
+  snapshot JSONB,
   UNIQUE (subscription_id, local_date)
 );
 
