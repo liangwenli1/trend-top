@@ -14,9 +14,14 @@ import { mailReady, sendVerification } from './mail.js';
 import { collect, digest, encryptManageToken, decryptManageToken, token, hash } from './jobs.js';
 import { registerAuthRoutes } from './auth.js';
 import { registerSubscriptionRoutes } from './subscriptions.js';
+import { registerBillingRoutes } from './billing.js';
+import { registerCreemWebhookRoute } from './creem-webhook.js';
+import { registerAdminRoutes } from './admin.js';
+import { publicSettings } from './settings.js';
 
 const app = express();
 app.disable('x-powered-by');
+registerCreemWebhookRoute(app);
 app.use(express.json({ limit: '20kb' }));
 app.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 const demo = (process.env.DATA_MODE || 'demo') === 'demo';
@@ -63,6 +68,9 @@ app.get('/api/health', async (_req, res) => {
 app.get('/api/boards', (_req, res) => res.json({ boards, mode: demo ? 'demo' : 'live' }));
 registerAuthRoutes(app);
 registerSubscriptionRoutes(app);
+registerBillingRoutes(app);
+registerAdminRoutes(app);
+app.get('/api/site-settings', async (_req, res) => res.json(await publicSettings()));
 app.get('/api/filters', async (_req, res) => res.json(await getFilters()));
 app.get('/api/rankings', async (req, res) => res.json({ ...await getRankings(req.query), mailReady: demo || mailReady() }));
 app.get('/api/chart', async (req, res) => res.json(await getChart(req.query)));

@@ -1,9 +1,11 @@
 import React,{useEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {SearchInput,SubscribeDialog,DesignSelect,TopicMultiSelect,TopicDialog} from './components.jsx';
-import {AccountSubscribeForm,AccountPage} from './subscription.jsx';
+import {AccountSubscribeForm,AccountPage,AUTH_CHANGED_EVENT} from './subscription.jsx';
 import {TYPES, boardNames, typeLabel, typePath, itemPath} from './catalog.js';
 import {ViewBar, TypeHome, TypeTrending, CategoryPage, ComparePage, SearchPage, ItemDetail, HeaderSearch, TagActions} from './pages.jsx';
+import {PricingPage,BillingResultPage,LegalPage} from './billing-ui.jsx';
+import {AdminPage} from './admin-page.jsx';
 import './style.css';
 import './ollama.css';
 import './home.css';
@@ -101,9 +103,21 @@ function useFilterOptions(type='github-repo'){
 }
 function App(){
   const [path,setPath]=useState(location.pathname+location.search);
+  const [viewer,setViewer]=useState(undefined);
   const [languageSuggestion,setLanguageSuggestion]=useState(null);
   const [footerChartsQuery,setFooterChartsQuery]=useState('');
   useEffect(()=>{const on=()=>setPath(location.pathname+location.search);addEventListener('popstate',on);return()=>removeEventListener('popstate',on)},[]);
+  useEffect(()=>{
+    let live=true;
+    api('/api/auth/me').then(result=>{if(live)setViewer(result.user||null)}).catch(()=>{if(live)setViewer(null)});
+    const update=event=>{
+      const user=event.detail?.user||null;
+      setViewer(user);
+      if(user&&sessionStorage.getItem('billing-next-plan')){sessionStorage.removeItem('billing-next-plan');updatePath(`/${lang()}/pricing`)}
+    };
+    addEventListener(AUTH_CHANGED_EVENT,update);
+    return()=>{live=false;removeEventListener(AUTH_CHANGED_EVENT,update)};
+  },[]);
   useEffect(()=>{if(legacyRedirect()) setPath(location.pathname+location.search);},[path]);
   useEffect(()=>{
     let idleTimer;
@@ -152,13 +166,15 @@ function App(){
   };
   const dismissLanguageSuggestion=()=>{sessionStorage.setItem('locale-suggestion-dismissed','1');setLanguageSuggestion(null)};
   const showViewBar=Boolean(type)&&!['search','method','verify','manage','unsubscribe','account'].includes(page);
-  return <><header className="site-header"><div className="header-inner"><a className="brand" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)}>Trend Top</a><HeaderSearch l={l} t={t} navigate={navigate} q={page==='search'?params().get('q')||'':''}/><nav className="header-actions" aria-label={l==='zh'?'站点导航':'Site navigation'}><a className="header-link" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)} aria-current={page==='home'?'page':undefined}>{l==='zh'?'首页':'Home'}</a><a className="header-link" href={subscribePath} onClick={openSubscribe}>{l==='zh'?'订阅':'Subscribe'}</a><a className="header-link" aria-current={page==='method'?'page':undefined} href={`/${l}/method`} onClick={e=>navigate(e,`/${l}/method`)}>{t.method}</a><a className="header-link header-signin" href={`/${l}/account`} onClick={e=>navigate(e,`/${l}/account`)} aria-current={page==='account'?'page':undefined}>{l==='zh'?'登录':'Sign in'}</a></nav></div>{showViewBar&&<ViewBar l={l} type={type} page={page} query={page==='charts'?location.search.slice(1):chartsQuery} navigate={navigate}/>}</header>
+  return <><header className="site-header"><div className="header-inner"><a className="brand" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)}>Trend Top</a><HeaderSearch l={l} t={t} navigate={navigate} q={page==='search'?params().get('q')||'':''}/><nav className="header-actions" aria-label={l==='zh'?'站点导航':'Site navigation'}><a className="header-link" href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)} aria-current={page==='home'?'page':undefined}>{l==='zh'?'首页':'Home'}</a><a className="header-link" href={subscribePath} onClick={openSubscribe}>{l==='zh'?'订阅':'Subscribe'}</a><a className="header-link" href={`/${l}/pricing`} onClick={e=>navigate(e,`/${l}/pricing`)} aria-current={page==='pricing'?'page':undefined}>{l==='zh'?'价格':'Pricing'}</a><a className="header-link" aria-current={page==='method'?'page':undefined} href={`/${l}/method`} onClick={e=>navigate(e,`/${l}/method`)}>{t.method}</a><a className="header-link header-signin" href={`/${l}/account`} onClick={e=>navigate(e,`/${l}/account`)} aria-current={page==='account'?'page':undefined} title={viewer?.email||undefined}>{viewer?.email||(l==='zh'?'登录':'Sign in')}</a></nav></div>{showViewBar&&<ViewBar l={l} type={type} page={page} query={page==='charts'?location.search.slice(1):chartsQuery} navigate={navigate}/>}</header>
   {languageSuggestion&&<aside className="locale-suggestion" role="status"><span>{languageSuggestion==='zh'?'浏览器语言为中文，是否切换到简体中文？':'Your browser uses English. Switch to English?'}</span><button type="button" className="locale-choice" onClick={switchLanguage}>{languageSuggestion==='zh'?'切换中文':'Switch to English'}</button><button type="button" className="locale-dismiss" onClick={dismissLanguageSuggestion} aria-label={languageSuggestion==='zh'?'关闭语言提示':'Dismiss language suggestion'}>×</button></aside>}
-  {page==='account'?<AccountPage l={l}/>:page==='verify'?<Verify l={l} t={t}/>:page==='manage'||page==='unsubscribe'?<Manage l={l} t={t} unsubscribe={page==='unsubscribe'}/>:page==='method'?<Method l={l} t={t}/>:page==='search'?<SearchPage l={l} t={t} q={params().get('q')||''} typeFilter={params().get('type')||''} navigate={navigate}/>:page==='home'?<><TypeHome l={l} t={t} navigate={navigate}/><SubscribeCallout l={l} t={t} data={{mailReady:true}} board="hot" type="github-repo"/></>:page==='trending'?<><TypeTrending l={l} t={t} type={type} navigate={navigate}/><SubscribeCallout l={l} t={t} data={{mailReady:true}} board="hot" type={type}/></>:page==='category'?<CategoryPage l={l} t={t} type={type} category={route.category} navigate={navigate}/>:page==='compare'?<ComparePage l={l} t={t} type={type} ids={params().get('ids')||''} navigate={navigate}/>:page==='detail'?<ItemDetail l={l} t={t} type={type} id={route.id} navigate={navigate}/>:page==='charts'?<React.Suspense fallback={<main className="simple-page">{t.loading}</main>}><AnalyticsPage l={l} names={namesForType} updatePath={updatePath} type={type} key={type}/></React.Suspense>:<Home l={l} t={t} rankingOnly={rankingPage} type={type} officialOnly={page==='official'} initialBoard={params().get('board')||(page==='official'?'official':'hot')} autoBoard={false} onChartsQueryChange={setFooterChartsQuery} key={path}/>}
+  {page==='account'?<AccountPage l={l}/>:page==='pricing'?<PricingPage l={l} user={viewer} navigate={target=>updatePath(target)}/>:page==='billing'&&route.id==='success'?<BillingResultPage l={l} status="success"/>:page==='billing'&&route.id==='cancel'?<BillingResultPage l={l} status="cancel"/>:page==='terms'?<LegalPage l={l} kind="terms"/>:page==='privacy'?<LegalPage l={l} kind="privacy"/>:page==='admin'?<AdminPage l={l}/>:page==='verify'?<Verify l={l} t={t}/>:page==='manage'||page==='unsubscribe'?<Manage l={l} t={t} unsubscribe={page==='unsubscribe'}/>:page==='method'?<Method l={l} t={t}/>:page==='search'?<SearchPage l={l} t={t} q={params().get('q')||''} typeFilter={params().get('type')||''} navigate={navigate}/>:page==='home'?<><TypeHome l={l} t={t} navigate={navigate}/><SubscribeCallout l={l} t={t} data={{mailReady:true}} board="hot" type="github-repo"/></>:page==='trending'?<><TypeTrending l={l} t={t} type={type} navigate={navigate}/><SubscribeCallout l={l} t={t} data={{mailReady:true}} board="hot" type={type}/></>:page==='category'?<CategoryPage l={l} t={t} type={type} category={route.category} navigate={navigate}/>:page==='compare'?<ComparePage l={l} t={t} type={type} ids={params().get('ids')||''} navigate={navigate}/>:page==='detail'?<ItemDetail l={l} t={t} type={type} id={route.id} navigate={navigate}/>:page==='charts'?<React.Suspense fallback={<main className="simple-page">{t.loading}</main>}><AnalyticsPage l={l} names={namesForType} updatePath={updatePath} type={type} key={type}/></React.Suspense>:<Home l={l} t={t} rankingOnly={rankingPage} type={type} officialOnly={page==='official'} initialBoard={params().get('board')||(page==='official'?'official':'hot')} autoBoard={false} onChartsQueryChange={setFooterChartsQuery} key={path}/>}
   <SiteFooter l={l} t={t} onLanguageSwitch={switchLanguage} onSubscribe={openSubscribe} subscribePath={subscribePath} chartsQuery={chartsQuery} rankingQuery={rankingQuery} type={activeType}/></>;
 }
 
 function SiteFooter({l,t,onLanguageSwitch,onSubscribe,subscribePath,chartsQuery='',rankingQuery='',type='github-repo'}){
+  const [siteSettings,setSiteSettings]=useState(null);
+  useEffect(()=>{fetch('/api/site-settings').then(response=>response.ok?response.json():null).then(setSiteSettings).catch(()=>{})},[]);
   const navigate=(e,path,query)=>{
     if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
     e.preventDefault();
@@ -166,9 +182,9 @@ function SiteFooter({l,t,onLanguageSwitch,onSubscribe,subscribePath,chartsQuery=
   };
   return <footer className="footer site-footer">
     <div className="footer-main"><div className="footer-identity"><strong className="footer-wordmark">Trend Top</strong><p className="footer-tagline">{l==='zh'?'发现开源世界的新动向。':'Find what is moving in open source.'}</p></div>
-      <nav className="footer-links" aria-label={l==='zh'?'页脚导航':'Footer navigation'}><a href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)}>{l==='zh'?'首页':'Home'}</a><a href={subscribePath} onClick={onSubscribe}>{l==='zh'?'订阅':'Subscribe'}</a><a href={`/${l}/account`} onClick={e=>navigate(e,`/${l}/account`)}>{l==='zh'?'账户':'Account'}</a><a href={`/${l}/method`} onClick={e=>navigate(e,`/${l}/method`)}>{t.method}</a></nav>
+      <nav className="footer-links" aria-label={l==='zh'?'页脚导航':'Footer navigation'}><a href={`/${l}/home`} onClick={e=>navigate(e,`/${l}/home`)}>{l==='zh'?'首页':'Home'}</a><a href={subscribePath} onClick={onSubscribe}>{l==='zh'?'订阅':'Subscribe'}</a><a href={`/${l}/pricing`} onClick={e=>navigate(e,`/${l}/pricing`)}>{l==='zh'?'价格':'Pricing'}</a><a href={`/${l}/account`} onClick={e=>navigate(e,`/${l}/account`)}>{l==='zh'?'账户':'Account'}</a><a href={`/${l}/privacy`} onClick={e=>navigate(e,`/${l}/privacy`)}>{l==='zh'?'隐私':'Privacy'}</a><a href={`/${l}/terms`} onClick={e=>navigate(e,`/${l}/terms`)}>{l==='zh'?'条款':'Terms'}</a><a href={`/${l}/method`} onClick={e=>navigate(e,`/${l}/method`)}>{t.method}</a><a href={`/${l}/admin`} onClick={e=>navigate(e,`/${l}/admin`)}>Admin</a></nav>
     </div>
-    <div className="footer-bottom"><p>{t.foot}</p><button className="language-switch" type="button" onClick={onLanguageSwitch} aria-label={l==='zh'?'Switch to English':'切换到简体中文'}>{t.languageSwitch}</button></div>
+    <div className="footer-bottom"><div><p>{t.foot}</p>{siteSettings&&<p className="footer-public-links">{siteSettings.contact?.email&&<a href={`mailto:${siteSettings.contact.email}`}>{siteSettings.contact.email}</a>}{Object.entries(siteSettings.social||{}).filter(([,url])=>url).map(([name,url])=><a key={name} href={url} target="_blank" rel="noreferrer">{name==='x'?'X':name[0].toUpperCase()+name.slice(1)}</a>)}</p>}</div><button className="language-switch" type="button" onClick={onLanguageSwitch} aria-label={l==='zh'?'Switch to English':'切换到简体中文'}>{t.languageSwitch}</button></div>
   </footer>;
 }
 

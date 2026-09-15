@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { DesignSelect, TopicMultiSelect } from './components.jsx';
 import { TYPES, typeLabel } from './catalog.js';
+import { BillingCard } from './billing-ui.jsx';
 import './account.css';
 
 const boardLabels = {
@@ -24,6 +25,9 @@ const request = async (url, method = 'GET', body) => {
   if (!response.ok) throw new Error(result.error || 'Request failed');
   return result;
 };
+
+export const AUTH_CHANGED_EVENT = 'trend-top:auth-changed';
+export const announceAuthChange = user => window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT, { detail: { user: user || null } }));
 
 const emptyCode = () => Array(6).fill('');
 
@@ -100,9 +104,11 @@ export function AuthForm({ l, onAuthenticated, initialMode = 'register' }) {
         setMessage(zh ? '验证码已发送，10 分钟内有效。' : 'Code sent. It expires in 10 minutes.');
       } else if (mode === 'verify') {
         const result = await request('/api/auth/register/verify', 'POST', { email, code });
+        announceAuthChange(result.user);
         onAuthenticated(result.user);
       } else if (mode === 'login') {
         const result = await request('/api/auth/login', 'POST', { email, password });
+        announceAuthChange(result.user);
         onAuthenticated(result.user);
       } else if (mode === 'reset-request') {
         await request('/api/auth/password/reset/request', 'POST', { email, locale: l });
@@ -209,7 +215,12 @@ function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSa
 export function AccountSubscribeForm({ l, currentType, currentBoard }) {
   const [user, setUser] = useState(undefined);
   const [subscription, setSubscription] = useState(undefined);
-  useEffect(() => { request('/api/auth/me').then(result => setUser(result.user)).catch(() => setUser(null)); }, []);
+  useEffect(() => {
+    request('/api/auth/me').then(result => setUser(result.user)).catch(() => setUser(null));
+    const update = event => setUser(event.detail?.user || null);
+    addEventListener(AUTH_CHANGED_EVENT, update);
+    return () => removeEventListener(AUTH_CHANGED_EVENT, update);
+  }, []);
   useEffect(() => {
     if (!user) return;
     request('/api/subscription').then(result => setSubscription(result.subscription)).catch(() => setSubscription(null));
@@ -228,7 +239,7 @@ export function AccountPage({ l }) {
     if (!user) return;
     request('/api/subscription').then(result => setSubscription(result.subscription)).catch(e => setError(e.message));
   }, [user?.id]);
-  const logout = async () => { try { await request('/api/auth/logout', 'POST', {}); setUser(null); setSubscription(undefined); } catch (e) { setError(e.message); } };
+  const logout = async () => { try { await request('/api/auth/logout', 'POST', {}); setUser(null); setSubscription(undefined); announceAuthChange(null); } catch (e) { setError(e.message); } };
   const zh = l === 'zh';
-  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{user ? (zh ? '管理你的每日摘要' : 'Manage your daily digest') : (zh ? '登录或注册' : 'Sign in or register')}</h1><p>{zh ? '选择六类开源内容、榜单与发送时间，随时修改或退订。' : 'Choose content types, boards, and delivery time. Change or stop your digest anytime.'}</p></div><div className="account-page-card">{user === undefined ? <p>{zh ? '加载中…' : 'Loading…'}</p> : user ? <><div className="account-user"><strong>{user.email}</strong><button type="button" className="ghost" onClick={logout}>{zh ? '退出登录' : 'Sign out'}</button></div>{subscription === undefined ? <p>{zh ? '加载订阅…' : 'Loading subscription…'}</p> : <SubscriptionSettings l={l} subscription={subscription} account onSaved={setSubscription}/>}</> : <AuthForm l={l} initialMode="login" onAuthenticated={setUser}/>}</div>{error && <p role="alert">{error}</p>}</main>;
+  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{user ? (zh ? '管理你的账户' : 'Manage your account') : (zh ? '登录或注册' : 'Sign in or register')}</h1><p>{zh ? '管理免费摘要、Pro 套餐与账单。' : 'Manage your free digest, Pro plan, and billing.'}</p></div><div className="account-page-card">{user === undefined ? <p>{zh ? '加载中…' : 'Loading…'}</p> : user ? <><div className="account-user"><strong>{user.email}</strong><button type="button" className="ghost" onClick={logout}>{zh ? '退出登录' : 'Sign out'}</button></div>{subscription === undefined ? <p>{zh ? '加载订阅…' : 'Loading subscription…'}</p> : <SubscriptionSettings l={l} subscription={subscription} account onSaved={setSubscription}/>}<BillingCard l={l}/></> : <AuthForm l={l} initialMode="login" onAuthenticated={setUser}/>}</div>{error && <p role="alert">{error}</p>}</main>;
 }

@@ -1,6 +1,8 @@
 # Product decisions and acceptance
 
-The public product name is **Trend Top**. v0.3 is type-first. The five types are `skill`, `plugin`, `components`, `website`, and `github-repo`. Each type has Trending, rankings, and charts. Category pages present a recommended set of 2–4 options plus the full ranking. The site does not pick a single winner. Official marks and similar/duplicate counts are facts the user can use when choosing.
+The public product name is **Trend Top**. v0.3 is type-first. The six types are `skill`, `plugin`, `agent`, `components`, `website`, and `github-repo`. Each type has Trending, rankings, and charts. Category pages present a recommended set of 2–4 options plus the full ranking. The site does not pick a single winner. Official marks and similar/duplicate counts are facts the user can use when choosing.
+
+The free product includes discovery, rankings, charts, and the account-managed daily email digest. The paid product is one Pro tier sold in weekly and monthly recurring cycles through Creem. The two products share the same entitlement (`pro`) and differ only by billing period. Canceling Pro does not cancel the free digest. Exact Pro-only feature gates remain disabled until the product owner defines which capabilities are paid; the billing lifecycle can be tested without falsely restricting existing features.
 
 Old `/ranking` and `/charts` URLs redirect to `/github-repo/ranking` and `/github-repo/charts`. Repository scoring, mail, and demo/live labelling from v0.2 still apply to `github-repo`.
 

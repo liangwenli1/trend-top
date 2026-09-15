@@ -18,6 +18,24 @@ Open `http://localhost:5173/en/home` for the English default, or use `/zh/home` 
 
 Register or sign in at `http://localhost:5173/en/account`. Registration sends a six-digit email code; in demo mode, read it from `http://localhost:5173/api/demo-outbox`. A verified account can select any of the six content types, boards, programming languages, topics, delivery time, and time zone. Leave language or topic empty to include all. Change, pause, resume, or unsubscribe from the account page. Run `npm run digest -- --force` to produce a sample daily digest and inspect the outbox again. `--force` bypasses the send hour only, not the once-per-local-day rule. The email includes compact growth charts and a sign-in link; it does not send when no selected board has data.
 
+Login state is shared across the header, account page, and digest dialog. After registration or sign-in, the black header action shows the verified email address and the digest dialog identifies the same account without a reload.
+
+## Creem billing
+
+The paid product is one **Pro** tier with separate weekly and monthly recurring products. Public plans live at `/en/pricing` and `/zh/pricing`; account billing is shown separately from the free daily digest. Checkout, Customer Portal, signed webhook processing, idempotent provider events, local billing records, and the `pro` entitlement are implemented with Creem's REST API.
+
+Open `/en/admin` or `/zh/admin` and sign in with the deployment's `ADMIN_TOKEN`. The administrator page controls checkout availability, mode, currency, weekly/monthly amounts, both Creem product IDs, API base URL, API key, webhook secret, support email, and X/Facebook/Telegram links. Creem credentials are encrypted in `app_settings` using `AUTH_SECRET` (falling back to `ADMIN_TOKEN`) and are never returned to the browser. Keep that encryption secret stable across deployments. Environment variables in `.env.example` are optional bootstrap/fallback values.
+
+In Creem Test Mode, create two recurring products for the same Pro feature set: one weekly and one monthly. Save their IDs and test credentials in Admin, then register this webhook URL in Creem:
+
+```text
+https://YOUR_DOMAIN/api/webhooks/creem
+```
+
+The webhook route is registered before `express.json()` so its HMAC-SHA256 signature is checked against the exact raw request body. Provider events are deduplicated in `creem_webhook_events`; failed events can be retried, and older subscription payloads do not overwrite newer provider state. Redirect query parameters never grant access.
+
+Switching to production requires production products, API key, webhook secret, `mode=prod`, `https://api.creem.io`, an HTTPS `PUBLIC_URL`, and a real end-to-end payment test. Prices use the smallest currency unit in Admin: for USD, `900` displays as `$9.00`.
+
 ## Live data and mail
 
 Use PostgreSQL in production (`DATABASE_URL=postgres://...`). Leave it unset to keep the embedded PGlite database under `./data/pglite`. Set `DATA_MODE=live`, `GITHUB_TOKEN`, `PUBLIC_URL`, and long random `ADMIN_TOKEN` and `AUTH_SECRET` values in `.env`. For email, set `RESEND_API_KEY` and `RESEND_FROM` using an address on a [verified Resend domain](https://resend.com/docs/api-reference/emails/send-email), or configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM`. Resend takes priority when both providers are configured. Never expose these values to the frontend. `ADMIN_TOKEN` also encrypts unsubscribe links at rest; retain it across restarts.

@@ -601,7 +601,7 @@ html.is-scrolling .analytics-page-nav,
 .header-search-clear{border:0;background:none;color:#737373;font-size:18px;line-height:1;cursor:pointer}
 .header-link{display:inline-flex;align-items:center;min-height:44px;font-size:16px;white-space:nowrap}
 .header-link[aria-current=page]{color:#111;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:7px}
-.header-actions .header-signin{min-height:44px;padding:0 18px;border:1px solid #111;border-radius:0;background:#111;color:#fff;font-weight:700;text-decoration:none}
+.header-actions .header-signin{min-height:44px;max-width:240px;padding:0 18px;border:1px solid #111;border-radius:0;background:#111;color:#fff;font-weight:700;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .header-actions .header-signin:hover,.header-actions .header-signin:focus-visible{border-color:#315fd9;background:#315fd9;color:#fff}
 .header-actions .header-signin[aria-current=page]{color:#fff;text-decoration:none}
 .hero-ranking-link{display:inline-flex;align-items:center;min-height:52px;padding:10px 2px;border-bottom:2px solid #111;color:#111;font-size:17px;font-weight:680;line-height:1.3;text-decoration:none}
@@ -680,7 +680,7 @@ html.is-scrolling .analytics-page-nav,
   #subscribe{scroll-margin-top:106px}
 }
 @media(max-width:600px){
-  .header-actions{justify-content:space-between;gap:0}
+  .header-actions{grid-column:1/-1;width:100%;justify-content:space-between;gap:0}
   .header-link{min-height:42px;padding:0 4px}
   html:has(.page-deck){scroll-padding-top:110px}
   .page-deck .page-scene{min-height:calc(100svh - 110px)}
@@ -689,7 +689,8 @@ html.is-scrolling .analytics-page-nav,
 @media(max-width:700px){.page-deck>.subscribe-cta{min-height:0;padding:54px 0 62px}}
 @media(max-width:420px){.header-link{font-size:13px;padding:0 2px}}
 @media(max-width:340px){.header-link{font-size:12px;padding:0 1px}}
-@media(max-width:600px){.header-actions .header-signin{min-height:38px;padding:0 12px}}
+@media(max-width:600px){.header-actions .header-signin{min-height:38px;max-width:120px;padding:0 12px}}
+.footer-public-links{display:flex;flex-wrap:wrap;gap:18px;margin-top:14px}.footer-public-links a{color:inherit;text-underline-offset:4px}
 
 /* Keep repository topics and languages in dedicated, centered columns. */
 .ranking-page .list-header,

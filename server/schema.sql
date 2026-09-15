@@ -149,6 +149,115 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   created_at TIMESTAMPTZ NOT NULL
 );
 
+-- Paid plans are kept separate from the free email digest in `subscriptions`.
+CREATE TABLE IF NOT EXISTS billing_customers (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE,
+  creem_customer_id TEXT NOT NULL UNIQUE,
+  email TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS billing_checkouts (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  request_id TEXT NOT NULL UNIQUE,
+  creem_checkout_id TEXT UNIQUE,
+  plan_key TEXT NOT NULL,
+  creem_product_id TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  status TEXT NOT NULL,
+  creem_customer_id TEXT,
+  creem_subscription_id TEXT,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  provider_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS billing_subscriptions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  creem_subscription_id TEXT NOT NULL UNIQUE,
+  creem_customer_id TEXT NOT NULL,
+  creem_product_id TEXT NOT NULL,
+  plan_key TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  status TEXT NOT NULL,
+  units INTEGER NOT NULL DEFAULT 1,
+  price INTEGER,
+  currency TEXT,
+  current_period_start_at TIMESTAMPTZ,
+  current_period_end_at TIMESTAMPTZ,
+  next_transaction_at TIMESTAMPTZ,
+  last_transaction_id TEXT,
+  last_transaction_at TIMESTAMPTZ,
+  canceled_at TIMESTAMPTZ,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  provider_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  provider_updated_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS billing_transactions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  creem_transaction_id TEXT NOT NULL UNIQUE,
+  creem_order_id TEXT,
+  creem_subscription_id TEXT,
+  creem_customer_id TEXT,
+  amount INTEGER,
+  tax_amount INTEGER,
+  refunded_amount INTEGER,
+  currency TEXT,
+  status TEXT,
+  mode TEXT NOT NULL,
+  provider_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS creem_webhook_events (
+  event_id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  mode TEXT,
+  payload JSONB NOT NULL,
+  status TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  received_at TIMESTAMPTZ NOT NULL,
+  processed_at TIMESTAMPTZ,
+  last_error TEXT
+);
+
+CREATE TABLE IF NOT EXISTS user_entitlements (
+  user_id TEXT NOT NULL,
+  feature_key TEXT NOT NULL,
+  plan_key TEXT,
+  state TEXT NOT NULL,
+  source_sub_id TEXT,
+  starts_at TIMESTAMPTZ,
+  ends_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (user_id, feature_key)
+);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  public_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  secret_data TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  token_hash TEXT PRIMARY KEY,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS deliveries (
   id SERIAL PRIMARY KEY,
   subscription_id TEXT NOT NULL,
@@ -183,6 +292,11 @@ CREATE INDEX IF NOT EXISTS daily_metrics_source_day_idx ON daily_metrics (source
 CREATE INDEX IF NOT EXISTS period_metrics_source_period_idx ON period_metrics (source, period);
 CREATE INDEX IF NOT EXISTS deliveries_sub_date_idx ON deliveries (subscription_id, local_date);
 CREATE INDEX IF NOT EXISTS auth_sessions_user_idx ON auth_sessions (user_id);
+CREATE INDEX IF NOT EXISTS billing_checkouts_user_idx ON billing_checkouts (user_id, created_at);
+CREATE INDEX IF NOT EXISTS billing_subscriptions_user_idx ON billing_subscriptions (user_id, updated_at);
+CREATE INDEX IF NOT EXISTS billing_transactions_user_idx ON billing_transactions (user_id, created_at);
+CREATE INDEX IF NOT EXISTS creem_webhook_status_idx ON creem_webhook_events (status, received_at);
+CREATE INDEX IF NOT EXISTS admin_sessions_expires_idx ON admin_sessions (expires_at);
 CREATE INDEX IF NOT EXISTS assets_type_idx ON assets (type);
 CREATE INDEX IF NOT EXISTS assets_category_idx ON assets (type, category);
 CREATE INDEX IF NOT EXISTS assets_cluster_idx ON assets (cluster_id);
