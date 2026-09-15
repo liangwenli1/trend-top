@@ -447,6 +447,9 @@ html:has(.page-deck){scroll-snap-type:y proximity;scroll-padding-top:77px}
 .analytics-tooltip{display:grid;gap:5px;max-width:290px;padding:13px 15px;border:1px solid #ddd;border-radius:9px;background:#fff;box-shadow:0 10px 30px #0001;font-size:16px;line-height:1.4}
 .analytics-tooltip strong{overflow-wrap:anywhere}
 .analytics-tooltip span{color:#666}
+.analytics-language-tooltip{display:flex;align-items:baseline;gap:10px;width:max-content;max-width:none;padding:8px 10px;border-radius:0;font-size:14px;white-space:nowrap}
+.analytics-language-tooltip strong{white-space:nowrap}
+.analytics-language-tooltip span{color:#315fd9;font-weight:700;font-variant-numeric:tabular-nums}
 .analytics-tile-links{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
 .analytics-tile-links a{display:inline-flex;align-items:center;max-width:100%;min-height:42px;padding:8px 15px;border:1px solid #e5e5e5;border-radius:999px;background:#fafafa;color:#222;font-size:17px;font-weight:600;line-height:1.35;text-decoration:none;overflow-wrap:anywhere}
 .analytics-tile-links a:hover{border-color:#111;background:#fff}
