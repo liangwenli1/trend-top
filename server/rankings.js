@@ -324,8 +324,8 @@ export async function getRankings({
 }
 
 export async function getChart(query) {
-  const ranking = await getRankings({ ...query, limit: 5, page: 1 });
   const sample = await getRankings({ ...query, limit: 50, page: 1 });
+  const ranking = { ...sample, items: sample.items.slice(0, 5), limit: 5 };
   const languageCounts = new Map();
   for (const item of sample.items) {
     const language = item.language || 'Other';

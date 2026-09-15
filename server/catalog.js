@@ -148,27 +148,44 @@ function mapAsset(row, extras = {}) {
   };
 }
 
-async function periodStats(assetId, period, endpoint) {
+function periodBounds(period, endpoint) {
   const days = DAYS[period] || 7;
   const end = utcDay(endpoint);
   const start = new Date(end.getTime() - (days - 1) * 86400000);
   const prevStart = new Date(start.getTime() - days * 86400000);
   const prevEnd = new Date(start.getTime() - 86400000);
+  return { end, start, prevStart, prevEnd };
+}
+
+async function periodStatsBatch(assetIds, period, endpoint) {
+  const ids = [...new Set(assetIds.map(String).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const { end, start, prevStart, prevEnd } = periodBounds(period, endpoint);
   const rows = await many(
-    `SELECT day, star_created FROM asset_daily WHERE asset_id = $1 AND day BETWEEN $2::date AND $3::date ORDER BY day`,
-    [assetId, prevStart.toISOString().slice(0, 10), end.toISOString().slice(0, 10)]
+    `SELECT asset_id,
+       SUM(CASE WHEN day BETWEEN $4::date AND $5::date THEN COALESCE(star_created, 0) ELSE 0 END)::bigint AS gain,
+       SUM(CASE WHEN day BETWEEN $2::date AND $3::date THEN COALESCE(star_created, 0) ELSE 0 END)::bigint AS prev_gain
+     FROM asset_daily
+     WHERE asset_id = ANY($1::text[]) AND day BETWEEN $2::date AND $5::date
+     GROUP BY asset_id`,
+    [
+      ids,
+      prevStart.toISOString().slice(0, 10),
+      prevEnd.toISOString().slice(0, 10),
+      start.toISOString().slice(0, 10),
+      end.toISOString().slice(0, 10)
+    ]
   );
-  const inWindow = (from, to) => rows
-    .filter(r => {
-      const day = asDay(r.day);
-      return day >= from && day <= to;
-    })
-    .reduce((sum, r) => sum + (asNumber(r.star_created) || 0), 0);
-  const from = start.toISOString().slice(0, 10);
-  const to = end.toISOString().slice(0, 10);
-  const gain = inWindow(from, to);
-  const prevGain = inWindow(prevStart.toISOString().slice(0, 10), prevEnd.toISOString().slice(0, 10));
-  return { gain, prevGain, anomaly: prevGain > 0 && gain > prevGain * 3 && gain > 100 };
+  return new Map(rows.map(row => {
+    const gain = asNumber(row.gain) || 0;
+    const prevGain = asNumber(row.prev_gain) || 0;
+    return [String(row.asset_id), { gain, prevGain, anomaly: prevGain > 0 && gain > prevGain * 3 && gain > 100 }];
+  }));
+}
+
+async function periodStats(assetId, period, endpoint) {
+  const stats = await periodStatsBatch([assetId], period, endpoint);
+  return stats.get(String(assetId)) || { gain: 0, prevGain: 0, anomaly: false };
 }
 
 async function latestAssetDay() {
@@ -357,10 +374,11 @@ export async function getCatalogRankings(type, query = {}) {
   if (officialOnly) sql += ' AND official = TRUE';
   const rows = await many(sql, params);
   const similars = await similarCounts();
+  const statsById = await periodStatsBatch(rows.map(row => row.id), period, endpoint);
   const now = endpoint.getTime();
   const scored = [];
   for (const row of rows) {
-    const stats = await periodStats(row.id, period, endpoint);
+    const stats = statsById.get(String(row.id)) || { gain: 0, prevGain: 0, anomaly: false };
     const ageDays = Math.max(0, (now - new Date(row.created_at).getTime()) / 86400000);
     const pushDays = Math.max(0, (now - new Date(row.pushed_at).getTime()) / 86400000);
     if (board === 'new' && (ageDays > 90 || (asNumber(row.stars) || 0) < 5)) continue;
@@ -418,8 +436,8 @@ export async function getCatalogChart(type, query = {}) {
     const chart = await getRepoChart(query);
     return { ...chart, type };
   }
-  const ranking = await getCatalogRankings(type, { ...query, limit: 5, page: 1 });
   const sample = await getCatalogRankings(type, { ...query, limit: 50, page: 1 });
+  const ranking = { ...sample, items: sample.items.slice(0, 5), limit: 5 };
   const languageCounts = new Map();
   for (const item of sample.items) {
     const language = item.language || item.category || 'Other';
