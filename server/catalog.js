@@ -189,7 +189,8 @@ async function periodStats(assetId, period, endpoint) {
 }
 
 async function latestAssetDay() {
-  const row = await one('SELECT MAX(day) AS t FROM asset_daily');
+  // Only days with known Star counts are complete; the sample day itself stays NULL.
+  const row = await one('SELECT MAX(day) AS t FROM asset_daily WHERE star_created IS NOT NULL');
   return row?.t ? new Date(`${asDay(row.t)}T02:00:00Z`) : new Date();
 }
 
