@@ -41,7 +41,7 @@ test('admin configures one Pro tier, checkout and signed webhook activate it ide
     assert.equal((await call('/api/admin/auth/me', 'GET', undefined, adminCookie)).data.admin, true);
     assert.equal((await call('/api/admin/settings', 'GET')).status, 401);
     const configured = await call('/api/admin/settings', 'PUT', {
-      billing: { enabled: true, mode: 'test', prices: { en: { currency: 'USD', weekly: '2.99', monthly: 9.5 }, zh: { currency: 'CNY', weekly: 20, monthly: 68 } }, weeklyProductId: 'prod_week', monthlyProductId: 'prod_month', apiBaseUrl: 'https://test-api.creem.io', graceDays: 3 },
+      billing: { enabled: true, mode: 'test', prices: { en: { currency: 'USD', monthly: '9.99', yearly: 79 }, zh: { currency: 'CNY', monthly: 68, yearly: 560 } }, monthlyProductId: 'prod_month', yearlyProductId: 'prod_year', apiBaseUrl: 'https://test-api.creem.io', graceDays: 3 },
       contact: { email: 'support@example.com' }, social: { x: 'https://x.com/trendtop', facebook: '', telegram: '' },
       secrets: { creemApiKey: 'creem_test_key', creemWebhookSecret: 'webhook_test_secret' }
     }, adminCookie);
@@ -49,11 +49,11 @@ test('admin configures one Pro tier, checkout and signed webhook activate it ide
     assert.equal(configured.data.secretFlags.creemApiKey, true);
     assert.doesNotMatch((await one("SELECT secret_data FROM app_settings WHERE key='site'")).secret_data, /creem_test_key/);
     const plans = await call('/api/billing/plans');
-    assert.deepEqual(plans.data.plans.map(plan => plan.key), ['pro_weekly', 'pro_monthly']);
+    assert.deepEqual(plans.data.plans.map(plan => plan.key), ['pro_monthly', 'pro_yearly']);
     assert.ok(plans.data.plans.every(plan => plan.available));
-    assert.deepEqual(plans.data.plans.map(plan => [plan.price, plan.currency]), [[2.99, 'USD'], [9.5, 'USD']]);
+    assert.deepEqual(plans.data.plans.map(plan => [plan.price, plan.currency]), [[9.99, 'USD'], [79, 'USD']]);
     const zhPlans = await call('/api/billing/plans?locale=zh');
-    assert.deepEqual(zhPlans.data.plans.map(plan => [plan.price, plan.currency]), [[20, 'CNY'], [68, 'CNY']]);
+    assert.deepEqual(zhPlans.data.plans.map(plan => [plan.price, plan.currency]), [[68, 'CNY'], [560, 'CNY']]);
     assert.equal((await call('/api/site-settings')).data.billing.weeklyPrice, undefined);
 
     const email = 'buyer@example.invalid', password = 'a secure test password';
@@ -63,12 +63,12 @@ test('admin configures one Pro tier, checkout and signed webhook activate it ide
     userCookie = verified.response.headers.get('set-cookie').split(';')[0];
     assert.equal(verified.data.user.isAdmin, false);
     assert.equal((await call('/api/admin/settings', 'GET', undefined, userCookie)).status, 403);
-    const checkout = await call('/api/billing/checkout', 'POST', { planKey: 'pro_weekly' }, userCookie);
+    const checkout = await call('/api/billing/checkout', 'POST', { planKey: 'pro_yearly' }, userCookie);
     assert.equal(checkout.status, 201);
     assert.equal(checkout.data.checkoutUrl, 'https://checkout.creem.io/ch_test_1');
 
     const checkoutRow = await one('SELECT * FROM billing_checkouts WHERE request_id=$1', [checkout.data.requestId]);
-    const payload = JSON.stringify({ id: 'evt_1', eventType: 'checkout.completed', mode: 'test', object: { id: 'ch_test_1', request_id: checkout.data.requestId, mode: 'test', metadata: { userId: verified.data.user.id, billingCheckoutId: checkoutRow.id, planKey: 'pro_weekly' }, customer: { id: 'cust_1', email }, subscription: { id: 'sub_1', status: 'active', customer: { id: 'cust_1', email }, product: { id: 'prod_week', price: 300, currency: 'USD' }, current_period_start_date: '2026-09-15T00:00:00Z', current_period_end_date: '2026-09-22T00:00:00Z', updated_at: '2026-09-15T00:00:00Z', metadata: { userId: verified.data.user.id, planKey: 'pro_weekly' } } } });
+    const payload = JSON.stringify({ id: 'evt_1', eventType: 'checkout.completed', mode: 'test', object: { id: 'ch_test_1', request_id: checkout.data.requestId, mode: 'test', metadata: { userId: verified.data.user.id, billingCheckoutId: checkoutRow.id, planKey: 'pro_yearly' }, customer: { id: 'cust_1', email }, subscription: { id: 'sub_1', status: 'active', customer: { id: 'cust_1', email }, product: { id: 'prod_year', price: 7900, currency: 'USD' }, current_period_start_date: '2026-09-15T00:00:00Z', current_period_end_date: '2027-09-15T00:00:00Z', updated_at: '2026-09-15T00:00:00Z', metadata: { userId: verified.data.user.id, planKey: 'pro_yearly' } } } });
     const signature = crypto.createHmac('sha256', 'webhook_test_secret').update(payload).digest('hex');
     const webhook = await nativeFetch(base + '/api/webhooks/creem', { method: 'POST', headers: { 'Content-Type': 'application/json', 'creem-signature': signature }, body: payload });
     assert.equal(webhook.status, 200);
