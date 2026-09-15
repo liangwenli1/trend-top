@@ -5,7 +5,23 @@ const SETTING_KEY = 'site';
 const modeValue = value => ['test', 'prod', 'sandbox'].includes(value) ? value : 'test';
 const cleanUrl = value => String(value || '').trim().replace(/\/$/, '');
 const safeUrl = value => { try { const url = new URL(String(value || '')); return ['http:', 'https:'].includes(url.protocol) ? url.toString() : ''; } catch { return ''; } };
-const cents = value => { const number = Number(value); return Number.isInteger(number) && number >= 0 ? number : 0; };
+const amount = value => { const number = Number(String(value ?? '').trim()); return Number.isFinite(number) && number >= 0 ? Math.round(number * 100) / 100 : 0; };
+const currencyCode = (value, fallback) => { const code = String(value || '').trim().toUpperCase(); return /^[A-Z]{3}$/.test(code) ? code : fallback; };
+const LOCALES = ['en', 'zh'];
+const DEFAULT_CURRENCY = { en: 'USD', zh: 'CNY' };
+// Prices are display values in major units (9.99), one set per site language. Creem charges the product's own price.
+const normalizePrices = (input, fallback) => Object.fromEntries(LOCALES.map(locale => {
+  const source = input?.[locale] || {}, base = fallback?.[locale] || {};
+  return [locale, {
+    currency: currencyCode(source.currency ?? base.currency, DEFAULT_CURRENCY[locale]),
+    weekly: amount(source.weekly ?? base.weekly),
+    monthly: amount(source.monthly ?? base.monthly)
+  }];
+}));
+// Settings saved before per-locale prices stored one currency plus integer cents.
+const legacyPrices = billing => billing && !billing.prices && (billing.weeklyPrice || billing.monthlyPrice)
+  ? { en: { currency: currencyCode(billing.currency, 'USD'), weekly: amount(Number(billing.weeklyPrice || 0) / 100), monthly: amount(Number(billing.monthlyPrice || 0) / 100) } }
+  : null;
 const configSecret = () => {
   const source = process.env.AUTH_SECRET || process.env.ADMIN_TOKEN;
   if (source) return crypto.createHash('sha256').update(source).digest();
@@ -34,9 +50,10 @@ export function defaultSettings() {
       billing: {
         enabled: false,
         mode,
-        currency: (process.env.CREEM_CURRENCY || 'USD').toUpperCase(),
-        weeklyPrice: cents(process.env.CREEM_PRICE_PRO_WEEKLY),
-        monthlyPrice: cents(process.env.CREEM_PRICE_PRO_MONTHLY),
+        prices: normalizePrices({
+          en: { currency: process.env.CREEM_CURRENCY, weekly: process.env.CREEM_PRICE_PRO_WEEKLY, monthly: process.env.CREEM_PRICE_PRO_MONTHLY },
+          zh: { currency: process.env.CREEM_CURRENCY_ZH, weekly: process.env.CREEM_PRICE_PRO_WEEKLY_ZH, monthly: process.env.CREEM_PRICE_PRO_MONTHLY_ZH }
+        }),
         weeklyProductId: process.env.CREEM_PRODUCT_PRO_WEEKLY || '',
         monthlyProductId: process.env.CREEM_PRODUCT_PRO_MONTHLY || '',
         apiBaseUrl: cleanUrl(process.env.CREEM_API_BASE_URL || (mode === 'prod' ? 'https://api.creem.io' : 'https://test-api.creem.io')),
@@ -54,9 +71,10 @@ export async function getSettings() {
   const row = await one('SELECT public_data, secret_data FROM app_settings WHERE key=$1', [SETTING_KEY]);
   if (!row) return defaults;
   const stored = asJson(row.public_data, {});
+  const { currency: _c, weeklyPrice: _w, monthlyPrice: _m, ...storedBilling } = stored.billing || {};
   return {
     public: {
-      billing: { ...defaults.public.billing, ...(stored.billing || {}) },
+      billing: { ...defaults.public.billing, ...storedBilling, prices: normalizePrices(stored.billing?.prices || legacyPrices(stored.billing), defaults.public.billing.prices) },
       contact: { ...defaults.public.contact, ...(stored.contact || {}) },
       social: { ...defaults.public.social, ...(stored.social || {}) }
     },
@@ -71,8 +89,7 @@ export async function saveSettings(input) {
   const publicData = {
     billing: {
       enabled: Boolean(billing.enabled), mode,
-      currency: String(billing.currency || current.public.billing.currency || 'USD').trim().toUpperCase().slice(0, 3),
-      weeklyPrice: cents(billing.weeklyPrice), monthlyPrice: cents(billing.monthlyPrice),
+      prices: normalizePrices(billing.prices, current.public.billing.prices),
       weeklyProductId: String(billing.weeklyProductId || '').trim().slice(0, 160), monthlyProductId: String(billing.monthlyProductId || '').trim().slice(0, 160),
       apiBaseUrl: cleanUrl(billing.apiBaseUrl || (mode === 'prod' ? 'https://api.creem.io' : 'https://test-api.creem.io')),
       graceDays: Math.max(0, Math.min(30, Number(billing.graceDays ?? 3)))
@@ -94,7 +111,7 @@ export async function publicSettings() {
   const settings = await getSettings();
   const billing = settings.public.billing;
   return {
-    billing: { enabled: billing.enabled, mode: billing.mode, currency: billing.currency, weeklyPrice: billing.weeklyPrice, monthlyPrice: billing.monthlyPrice },
+    billing: { enabled: billing.enabled, mode: billing.mode, prices: billing.prices },
     contact: settings.public.contact, social: settings.public.social
   };
 }
