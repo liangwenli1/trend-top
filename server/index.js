@@ -16,7 +16,7 @@ import { registerAuthRoutes } from './auth.js';
 import { registerSubscriptionRoutes } from './subscriptions.js';
 import { registerBillingRoutes } from './billing.js';
 import { registerCreemWebhookRoute } from './creem-webhook.js';
-import { registerAdminRoutes } from './admin.js';
+import { registerAdminRoutes, requireAdmin } from './admin.js';
 import { publicSettings } from './settings.js';
 
 const app = express();
@@ -252,24 +252,13 @@ app.post('/api/one-click', async (req, res) => {
 if (demo) {
   app.get('/api/demo-outbox', async (_req, res) => res.json(await many('SELECT * FROM outbox ORDER BY id DESC LIMIT 30')));
 }
-function admin(req, res, next) {
-  if (!process.env.ADMIN_TOKEN || req.get('authorization') !== `Bearer ${process.env.ADMIN_TOKEN}`) return fail(res, 403, 'Admin token required');
-  next();
-}
-app.get('/api/admin', admin, async (_req, res) => {
-  res.json({
-    runs: await many('SELECT * FROM sync_runs ORDER BY id DESC LIMIT 30'),
-    deliveries: await many('SELECT * FROM deliveries ORDER BY id DESC LIMIT 30'),
-    reports: await many('SELECT * FROM classification_reports ORDER BY id DESC LIMIT 30')
-  });
-});
-app.post('/api/admin/collect', admin, async (_req, res) => {
+app.post('/api/admin/collect', requireAdmin, async (_req, res) => {
   try { res.json(await collect()); } catch (e) { fail(res, 503, String(e)); }
 });
-app.post('/api/admin/digest', admin, async (_req, res) => {
+app.post('/api/admin/digest', requireAdmin, async (_req, res) => {
   try { res.json(await digest()); } catch (e) { fail(res, 503, String(e)); }
 });
-app.post('/api/admin/backfill', admin, async (_req, res) => {
+app.post('/api/admin/backfill', requireAdmin, async (_req, res) => {
   try {
     await rebuildDerivedMetrics();
     res.json({ ok: true });
