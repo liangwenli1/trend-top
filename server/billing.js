@@ -13,14 +13,14 @@ const planRows = async (locale = 'en') => {
   const priced = interval => Object.values(billing.prices || {}).some(set => positive(set?.[interval]));
   return [
   {
-    key: 'pro_weekly', name: { en: 'Pro Weekly', zh: 'Pro 周付' }, interval: 'week',
-    productId: billing.weeklyProductId, price: positive(prices.weekly), currency: prices.currency, priced: priced('weekly'),
-    features: { en: ['Daily digest email across six collections', 'Growth charts inside every email', 'Language and topic filters', 'Your delivery hour and time zone', 'Cancel anytime from your account'], zh: ['覆盖六大类型的每日摘要邮件', '每封邮件内置增长图表', '按编程语言和主题筛选', '自选发送时间与时区', '随时在账户中取消'] }
-  },
-  {
     key: 'pro_monthly', name: { en: 'Pro Monthly', zh: 'Pro 月付' }, interval: 'month',
     productId: billing.monthlyProductId, price: positive(prices.monthly), currency: prices.currency, priced: priced('monthly'),
     features: { en: ['Daily digest email across six collections', 'Growth charts inside every email', 'Language and topic filters', 'Your delivery hour and time zone', 'One renewal per month, cancel anytime'], zh: ['覆盖六大类型的每日摘要邮件', '每封邮件内置增长图表', '按编程语言和主题筛选', '自选发送时间与时区', '每月续费一次，随时可取消'] }
+  },
+  {
+    key: 'pro_yearly', name: { en: 'Pro Yearly', zh: 'Pro 年付' }, interval: 'year',
+    productId: billing.yearlyProductId, price: positive(prices.yearly), currency: prices.currency, priced: priced('yearly'),
+    features: { en: ['Daily digest email across six collections', 'Growth charts inside every email', 'Language and topic filters', 'Your delivery hour and time zone', 'One renewal per year, cancel anytime'], zh: ['覆盖六大类型的每日摘要邮件', '每封邮件内置增长图表', '按编程语言和主题筛选', '自选发送时间与时区', '每年续费一次，随时可取消'] }
   }
   ];
 };
