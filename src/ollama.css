@@ -579,21 +579,32 @@ html.is-scrolling .analytics-page-nav,
 }
 @media(prefers-reduced-motion:reduce){.page-indicator,.analytics-page-nav{transition:none;translate:0 0}}
 
-/* Editorial footer: a large black closing band inspired by Wired's design notes. */
-.site-footer{width:100%;max-width:none;min-height:clamp(420px,40svh,560px);margin:0;padding:clamp(60px,7svh,96px) 48px 42px;display:flex;flex-direction:column;align-items:stretch;justify-content:space-between;gap:64px;border:0;background:#111;color:#fff}
+/* Editorial footer: a black closing band. Identity plus contact icons on the left, legal links and language toggle in the bottom row. */
+.site-footer{width:100%;max-width:none;min-height:0;margin:0;padding:clamp(48px,6svh,72px) 48px 36px;display:flex;flex-direction:column;align-items:stretch;justify-content:space-between;gap:40px;border:0;background:#111;color:#fff}
 .site-footer .footer-main,.site-footer .footer-bottom{width:100%;max-width:2304px;margin-inline:auto}
-.site-footer .footer-main{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,340px);align-items:start;gap:clamp(42px,5vw,120px);flex:1}
+.site-footer .footer-main{display:block}
 .site-footer .footer-identity{min-width:0}
-.site-footer .footer-wordmark{display:block;color:#fff;font-family:Georgia,'Times New Roman',serif;font-size:clamp(70px,6.8vw,144px);font-weight:400;line-height:1;letter-spacing:-.065em}
-.site-footer .footer-tagline{max-width:760px;margin:22px 0 0;color:#d0d0d0;font-size:clamp(22px,1.4vw,30px);line-height:1.35}
-.site-footer .footer-links{display:grid;align-content:start;gap:0;margin:0;padding:0}
-.site-footer .footer-links a{display:block;padding:9px 0 17px;border-bottom:1px solid #444;color:#f5f5f5;font-size:clamp(21px,1.2vw,26px);font-weight:580;line-height:1.3;text-decoration:none}
-.site-footer .footer-links a:first-child{padding-top:0}
-.site-footer .footer-links a:hover{color:#fff;text-decoration:underline;text-underline-offset:6px}
-.site-footer .footer-bottom{display:flex;align-items:center;justify-content:space-between;gap:24px;padding-top:30px;border-top:1px solid #444}
-.site-footer .footer-bottom p{max-width:none;margin:0;color:#bebebe;font-size:clamp(17px,1vw,21px);line-height:1.5}
-.site-footer .language-switch{flex:none;min-height:52px;margin:0;padding:10px 20px;border:1px solid #777;border-radius:0;background:transparent;color:#fff;font-size:17px;font-weight:600}
-.site-footer .language-switch:hover{border-color:#fff;background:#fff;color:#111}
+.site-footer .footer-wordmark{display:block;color:#fff;font-family:Georgia,'Times New Roman',serif;font-size:clamp(56px,5.6vw,112px);font-weight:400;line-height:1;letter-spacing:-.065em}
+.site-footer .footer-tagline{max-width:760px;margin:18px 0 0;color:#d0d0d0;font-size:clamp(19px,1.2vw,26px);line-height:1.35}
+.site-footer .footer-social{display:flex;flex-wrap:wrap;gap:12px;margin:26px 0 0;padding:0;list-style:none}
+.site-footer .footer-social a{display:inline-flex;align-items:center;justify-content:center;width:46px;height:46px;border:1px solid #555;color:#e5e5e5;text-decoration:none;transition:background .15s,color .15s,border-color .15s}
+.site-footer .footer-social a:hover,.site-footer .footer-social a:focus-visible{border-color:#fff;background:#fff;color:#111}
+.site-footer .footer-bottom{display:flex;align-items:center;justify-content:space-between;gap:24px;padding-top:24px;border-top:1px solid #444}
+.site-footer .footer-bottom-copy{display:flex;flex-wrap:wrap;align-items:center;gap:10px 28px}
+.site-footer .footer-bottom p{max-width:none;margin:0;color:#bebebe;font-size:clamp(15px,.9vw,18px);line-height:1.5}
+.site-footer .footer-legal{display:flex;gap:22px}
+.site-footer .footer-legal a{color:#f5f5f5;font-size:clamp(15px,.9vw,18px);font-weight:600;text-decoration:none;text-underline-offset:5px}
+.site-footer .footer-legal a:hover{color:#fff;text-decoration:underline}
+.site-footer .language-menu{position:relative;flex:none}
+.site-footer .language-menu-trigger{display:inline-flex;align-items:center;gap:10px;min-height:46px;padding:0 16px;border:1px solid #777;border-radius:0;background:transparent;color:#fff;font:inherit;font-size:15px;font-weight:600;cursor:pointer}
+.site-footer .language-menu-trigger:hover,.site-footer .language-menu-trigger[aria-expanded=true]{border-color:#fff;background:#fff;color:#111}
+.site-footer .language-menu-chevron{transition:transform .15s}
+.site-footer .language-menu-trigger[aria-expanded=true] .language-menu-chevron{transform:rotate(180deg)}
+.site-footer .language-menu-list{position:absolute;right:0;bottom:calc(100% + 8px);z-index:5;min-width:180px;margin:0;padding:6px 0;list-style:none;border:1px solid #444;background:#1a1a1a;box-shadow:0 12px 32px rgba(0,0,0,.45)}
+.site-footer .language-menu-list li{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:42px;padding:0 16px;color:#e5e5e5;font-size:15px;font-weight:600;cursor:pointer}
+.site-footer .language-menu-list li:hover,.site-footer .language-menu-list li:focus-visible{background:#fff;color:#111;outline:none}
+.site-footer .language-menu-list li[aria-selected=true]{color:#fff}
+.site-footer .language-menu-list li[aria-selected=true]:hover{color:#111}
 .brand{justify-self:start;width:max-content;text-decoration:none}
 .header-inner{position:relative;display:grid;grid-template-columns:1fr minmax(220px,440px) 1fr;align-items:center;gap:24px}
 .header-actions{position:static;left:auto;top:auto;transform:none;margin-left:0;justify-self:end;gap:clamp(18px,2vw,34px)}
@@ -652,21 +663,17 @@ html.is-scrolling .analytics-page-nav,
 @media(max-width:700px){.analytics-controls .design-select-trigger{min-height:52px;font-size:17px}.design-select-item{min-height:48px}.primary{font-size:16px}}
 @media(prefers-reduced-motion:reduce){.design-select-content{animation:none}.design-select-chevron{transition:none}}
 @media(max-width:900px){
-  .site-footer{min-height:520px;gap:54px}
-  .site-footer .footer-main{grid-template-columns:1fr;gap:36px}
-  .site-footer .footer-links{grid-template-columns:repeat(5,max-content);gap:24px}
-  .site-footer .footer-links a{padding:0 0 10px;font-size:21px}
+  .site-footer{gap:36px}
 }
 @media(max-width:700px){
-  .site-footer{min-height:540px;padding:56px 16px 32px;gap:42px}
+  .site-footer{padding:44px 16px 28px;gap:32px}
   .site-footer .footer-wordmark{font-size:clamp(42px,12vw,64px)}
-  .site-footer .footer-tagline{max-width:none;margin-top:18px;font-size:20px}
-  .site-footer .footer-main{gap:42px}
-  .site-footer .footer-links{display:grid;grid-template-columns:1fr;gap:0}
-  .site-footer .footer-links a{padding:12px 0;font-size:20px}
-  .site-footer .footer-bottom{align-items:flex-start;flex-direction:column;gap:22px;padding-top:24px}
-  .site-footer .footer-bottom p{font-size:17px}
-  .site-footer .language-switch{min-height:48px;font-size:16px}
+  .site-footer .footer-tagline{max-width:none;margin-top:14px;font-size:19px}
+  .site-footer .footer-social{margin-top:20px}
+  .site-footer .footer-social a{width:42px;height:42px}
+  .site-footer .footer-bottom{align-items:flex-start;flex-direction:column;gap:20px;padding-top:22px}
+  .site-footer .footer-bottom p{font-size:15px}
+  .site-footer .language-menu-trigger{min-height:44px;font-size:14px}
 }
 @media(max-width:850px){
   .header-inner{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px 16px;min-height:0;padding-top:10px;padding-bottom:10px}
@@ -693,7 +700,11 @@ html.is-scrolling .analytics-page-nav,
 @media(max-width:420px){.header-link{font-size:13px;padding:0 2px}}
 @media(max-width:340px){.header-link{font-size:12px;padding:0 1px}}
 @media(max-width:600px){.header-actions .header-signin{min-height:38px;max-width:120px;padding:0 12px}}
-.footer-public-links{display:flex;flex-wrap:wrap;gap:18px;margin-top:14px}.footer-public-links a{color:inherit;text-underline-offset:4px}
+/* Signed-in header control: a square account icon button, matching the site's square controls. */
+.header-actions .header-avatar{display:inline-flex;align-items:center;justify-content:center;flex:none;width:42px;height:42px;border:1px solid #111;border-radius:0;background:#fff;color:#111;text-decoration:none;transition:background .15s,color .15s,border-color .15s}
+.header-actions .header-avatar:hover,.header-actions .header-avatar:focus-visible{background:#111;color:#fff}
+.header-actions .header-avatar[aria-current=page]{background:#111;color:#fff}
+@media(max-width:600px){.header-actions .header-avatar{width:38px;height:38px}.header-actions .header-avatar svg{width:20px;height:20px}}
 
 /* Keep repository topics and languages in dedicated, centered columns. */
 .ranking-page .list-header,
