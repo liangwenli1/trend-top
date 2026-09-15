@@ -12,6 +12,13 @@ const attemptsByIp = new Map();
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const normalizeEmail = value => String(value || '').trim().toLowerCase();
 const respondError = (res, status, error) => res.status(status).json({ error });
+const DEFAULT_ADMIN_EMAILS = ['zhangyuge.ghs@gmail.com'];
+export const adminEmails = () => new Set(
+  String(process.env.ADMIN_EMAILS || DEFAULT_ADMIN_EMAILS.join(','))
+    .split(',').map(value => value.trim().toLowerCase()).filter(Boolean)
+);
+export const isAdminEmail = email => adminEmails().has(normalizeEmail(email));
+const publicUser = user => user ? { id: user.id, email: user.email, locale: user.locale, isAdmin: isAdminEmail(user.email) } : null;
 
 function codeSecret() {
   const secret = process.env.AUTH_SECRET || process.env.ADMIN_TOKEN;
@@ -132,7 +139,7 @@ async function consumeCode(email, purpose, code) {
 export function registerAuthRoutes(app) {
   app.get('/api/auth/me', async (req, res) => {
     const user = await authUser(req);
-    res.json({ user: user || null });
+    res.json({ user: publicUser(user) });
   });
 
   app.post('/api/auth/register', rate, async (req, res) => {
@@ -160,7 +167,7 @@ export function registerAuthRoutes(app) {
     await query('UPDATE subscriptions SET user_id = $1, status = CASE WHEN status = $3 THEN $4 ELSE status END, verified_at = COALESCE(verified_at, $5) WHERE email = $2 AND user_id IS NULL', [id, email, 'pending', 'active', now]);
     await query('DELETE FROM auth_codes WHERE email = $1 AND purpose = $2', [email, 'register']);
     await createSession(req, res, id);
-    res.json({ ok: true, user: { id, email, locale: record.locale } });
+    res.json({ ok: true, user: publicUser({ id, email, locale: record.locale }) });
   });
 
   app.post('/api/auth/login', rate, async (req, res) => {
@@ -168,7 +175,7 @@ export function registerAuthRoutes(app) {
     const user = await one('SELECT id, email, locale, password_hash FROM users WHERE email = $1', [email]);
     if (!user || !await checkPassword(password, user.password_hash)) return respondError(res, 401, 'Incorrect email or password');
     await createSession(req, res, user.id);
-    res.json({ ok: true, user: { id: user.id, email: user.email, locale: user.locale } });
+    res.json({ ok: true, user: publicUser(user) });
   });
 
   app.post('/api/auth/logout', requireUser, async (req, res) => {
