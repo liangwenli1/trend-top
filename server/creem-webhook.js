@@ -6,7 +6,7 @@ import { creemConfig } from './creem-client.js';
 const text = value => value == null ? null : String(value);
 const iso = value => { if (!value) return null; const date = new Date(value); return Number.isNaN(date.getTime()) ? null : date.toISOString(); };
 const objectId = value => typeof value === 'object' && value ? value.id : value;
-const planForProduct = (productId, config) => productId === config.weeklyProductId ? 'pro_weekly' : productId === config.monthlyProductId ? 'pro_monthly' : null;
+const planForProduct = (productId, config) => productId === config.monthlyProductId ? 'pro_monthly' : productId === config.yearlyProductId ? 'pro_yearly' : null;
 const eventTime = payload => iso(payload.created_at || payload.createdAt) || new Date().toISOString();
 
 export function verifyCreemSignature(rawBody, signature, secret) {
@@ -98,7 +98,7 @@ async function updateEntitlement(userId, sub, eventType, at, graceDays = 3) {
 
 async function applyEvent(payload, eventType, object, mode, at, config) {
   const candidateProductId = text(objectId(object?.product) || object?.product_id || objectId(object?.subscription?.product) || object?.subscription?.product_id);
-  if (candidateProductId && ![config.weeklyProductId, config.monthlyProductId].includes(candidateProductId)) return 'ignored';
+  if (candidateProductId && ![config.monthlyProductId, config.yearlyProductId].includes(candidateProductId)) return 'ignored';
   const userId = await resolveUser(object);
   if (!userId) return 'ignored';
   const customer = object?.customer || object?.subscription?.customer;
