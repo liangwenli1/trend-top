@@ -11,12 +11,12 @@ const planRows = async () => {
   {
     key: 'pro_weekly', name: { en: 'Pro Weekly', zh: 'Pro 周付' }, interval: 'week',
     productId: billing.weeklyProductId, price: integer(billing.weeklyPrice), currency: billing.currency,
-    features: { en: ['Advanced tracking', 'Expanded rankings', 'Account billing controls'], zh: ['高级追踪', '扩展榜单', '账户账单管理'] }
+    features: { en: ['Daily digest email across six collections', 'Growth charts inside every email', 'Language and topic filters', 'Your delivery hour and time zone', 'Cancel anytime from your account'], zh: ['覆盖六大类型的每日摘要邮件', '每封邮件内置增长图表', '按编程语言和主题筛选', '自选发送时间与时区', '随时在账户中取消'] }
   },
   {
     key: 'pro_monthly', name: { en: 'Pro Monthly', zh: 'Pro 月付' }, interval: 'month',
     productId: billing.monthlyProductId, price: integer(billing.monthlyPrice), currency: billing.currency,
-    features: { en: ['Everything in Pro', 'One monthly renewal', 'Account billing controls'], zh: ['包含全部 Pro 功能', '每月自动续费一次', '账户账单管理'] }
+    features: { en: ['Daily digest email across six collections', 'Growth charts inside every email', 'Language and topic filters', 'Your delivery hour and time zone', 'One renewal per month, cancel anytime'], zh: ['覆盖六大类型的每日摘要邮件', '每封邮件内置增长图表', '按编程语言和主题筛选', '自选发送时间与时区', '每月续费一次，随时可取消'] }
   }
   ];
 };
