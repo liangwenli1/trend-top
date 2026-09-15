@@ -9,8 +9,8 @@ export async function creemConfig() {
     apiKey: settings.secret.creemApiKey,
     webhookSecret: settings.secret.creemWebhookSecret,
     baseUrl: billing.apiBaseUrl,
-    weeklyProductId: billing.weeklyProductId,
     monthlyProductId: billing.monthlyProductId,
+    yearlyProductId: billing.yearlyProductId,
     graceDays: billing.graceDays
   };
 }
