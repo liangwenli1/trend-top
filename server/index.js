@@ -21,6 +21,8 @@ import { publicSettings } from './settings.js';
 
 const app = express();
 app.disable('x-powered-by');
+// Behind nginx/docker every request arrives from one gateway IP; trust those hops so rate limits and cookies use the real client.
+app.set('trust proxy', process.env.TRUST_PROXY || 'loopback, linklocal, uniquelocal');
 registerCreemWebhookRoute(app);
 app.use(express.json({ limit: '20kb' }));
 app.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
