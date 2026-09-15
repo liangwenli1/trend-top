@@ -3,27 +3,31 @@ import { asIso, asNumber, many, one, query } from './db.js';
 import { requireUser } from './auth.js';
 import { createCreemCheckout, createCreemPortal, creemConfig, creemReady } from './creem-client.js';
 
-const integer = value => { const number = Number(value); return Number.isInteger(number) && number > 0 ? number : null; };
-const planRows = async () => {
+const positive = value => { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : null; };
+const localeOf = value => value === 'zh' ? 'zh' : 'en';
+// Display prices come from the admin settings for the requested site language; Creem charges the product's own price.
+const planRows = async (locale = 'en') => {
   const settings = await import('./settings.js').then(module => module.getSettings());
   const billing = settings.public.billing;
+  const prices = billing.prices?.[localeOf(locale)] || {};
+  const priced = interval => Object.values(billing.prices || {}).some(set => positive(set?.[interval]));
   return [
   {
     key: 'pro_weekly', name: { en: 'Pro Weekly', zh: 'Pro 周付' }, interval: 'week',
-    productId: billing.weeklyProductId, price: integer(billing.weeklyPrice), currency: billing.currency,
+    productId: billing.weeklyProductId, price: positive(prices.weekly), currency: prices.currency, priced: priced('weekly'),
     features: { en: ['Daily digest email across six collections', 'Growth charts inside every email', 'Language and topic filters', 'Your delivery hour and time zone', 'Cancel anytime from your account'], zh: ['覆盖六大类型的每日摘要邮件', '每封邮件内置增长图表', '按编程语言和主题筛选', '自选发送时间与时区', '随时在账户中取消'] }
   },
   {
     key: 'pro_monthly', name: { en: 'Pro Monthly', zh: 'Pro 月付' }, interval: 'month',
-    productId: billing.monthlyProductId, price: integer(billing.monthlyPrice), currency: billing.currency,
+    productId: billing.monthlyProductId, price: positive(prices.monthly), currency: prices.currency, priced: priced('monthly'),
     features: { en: ['Daily digest email across six collections', 'Growth charts inside every email', 'Language and topic filters', 'Your delivery hour and time zone', 'One renewal per month, cancel anytime'], zh: ['覆盖六大类型的每日摘要邮件', '每封邮件内置增长图表', '按编程语言和主题筛选', '自选发送时间与时区', '每月续费一次，随时可取消'] }
   }
   ];
 };
 
-export async function billingPlans() {
+export async function billingPlans(locale = 'en') {
   const configured = await creemReady();
-  return (await planRows()).map(({ productId, ...plan }) => ({ ...plan, available: configured && Boolean(productId && plan.price) }));
+  return (await planRows(locale)).map(({ productId, priced, ...plan }) => ({ ...plan, available: configured && Boolean(productId && priced) }));
 }
 
 const privatePlan = async key => (await planRows()).find(plan => plan.key === key);
@@ -43,12 +47,12 @@ export async function billingSummary(userId) {
 }
 
 export function registerBillingRoutes(app) {
-  app.get('/api/billing/plans', async (_req, res) => { const config = await creemConfig(); res.json({ mode: config.mode, configured: await creemReady(), plans: await billingPlans() }); });
+  app.get('/api/billing/plans', async (req, res) => { const config = await creemConfig(); res.json({ mode: config.mode, configured: await creemReady(), locale: localeOf(req.query.locale), plans: await billingPlans(req.query.locale) }); });
   app.get('/api/billing/me', requireUser, async (req, res) => res.json(await billingSummary(req.user.id)));
   app.post('/api/billing/checkout', requireUser, async (req, res) => {
     const plan = await privatePlan(req.body?.planKey);
     if (!plan) return res.status(400).json({ error: 'Unknown billing plan' });
-    if (!await creemReady() || !plan.productId || !plan.price) return res.status(503).json({ error: 'This plan is not available yet' });
+    if (!await creemReady() || !plan.productId || !plan.priced) return res.status(503).json({ error: 'This plan is not available yet' });
     const active = await one("SELECT id FROM billing_subscriptions WHERE user_id = $1 AND status IN ('active','trialing','paid','scheduled_cancel') LIMIT 1", [req.user.id]);
     if (active) return res.status(409).json({ error: 'Manage your current plan from Account' });
     const id = crypto.randomUUID(), requestId = `tt_${crypto.randomUUID()}`, now = new Date().toISOString();
