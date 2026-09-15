@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 COPY index.html vite.config.js ./
+COPY public ./public
 COPY src ./src
 COPY server ./server
 RUN npm run build && npm prune --omit=dev
