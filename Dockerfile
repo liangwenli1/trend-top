@@ -6,6 +6,7 @@ COPY index.html vite.config.js ./
 COPY public ./public
 COPY src ./src
 COPY server ./server
+COPY shared ./shared
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22-bookworm-slim AS runner
@@ -23,6 +24,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./package.json
 COPY server ./server
+COPY shared ./shared
 COPY scripts/apply-config.mjs ./scripts/apply-config.mjs
 COPY scripts/scheduler.mjs ./scripts/scheduler.mjs
 COPY config.json ./config.json

@@ -13,8 +13,11 @@ import {
 import { mailReady, sendVerification } from './mail.js';
 import { collect, digest, encryptManageToken, decryptManageToken, token, hash } from './jobs.js';
 import { registerAuthRoutes } from './auth.js';
+import { registerGoogleAuthRoutes } from './google-auth.js';
 import { registerSubscriptionRoutes } from './subscriptions.js';
 import { registerBillingRoutes } from './billing.js';
+import { registerRefundRoutes } from './refunds.js';
+import { normalizeTopics as canonicalTopics } from '../shared/topics.js';
 import { registerCreemWebhookRoute } from './creem-webhook.js';
 import { registerAdminRoutes, requireAdmin } from './admin.js';
 import { publicSettings } from './settings.js';
@@ -43,7 +46,7 @@ const normalizeTopics = (value, fallback = '') => {
 };
 const storedTopics = sub => {
   const parsed = asJson(sub?.topics, null);
-  return Array.isArray(parsed) ? normalizeTopics(parsed) : normalizeTopics(undefined, sub?.topic || '');
+  return canonicalTopics(Array.isArray(parsed) ? normalizeTopics(parsed) : normalizeTopics(undefined, sub?.topic || ''));
 };
 const storedLanguages = sub => {
   const parsed = asJson(sub?.languages, null);
@@ -77,8 +80,10 @@ app.get('/api/health', async (_req, res) => {
 });
 app.get('/api/boards', publicCatalogCache, (_req, res) => res.json({ boards, mode: demo ? 'demo' : 'live' }));
 registerAuthRoutes(app);
+registerGoogleAuthRoutes(app);
 registerSubscriptionRoutes(app);
 registerBillingRoutes(app);
+registerRefundRoutes(app);
 registerAdminRoutes(app);
 app.get('/api/site-settings', publicCatalogCache, async (_req, res) => res.json(await publicSettings()));
 app.get('/api/filters', publicCatalogCache, async (_req, res) => res.json(await getFilters()));
@@ -171,7 +176,7 @@ app.get('/api/repos/:id', publicCatalogCache, async (req, res) => {
     created_at: asIso(repo.created_at),
     pushed_at: asIso(repo.pushed_at),
     updated_at: asIso(repo.updated_at),
-    topics: asJson(repo.topics, []),
+    topics: canonicalTopics(asJson(repo.topics, [])).slice(0, 5),
     aiEvidence: aiEvidence(repo),
     snapshots: snapshots.map(s => ({ sampled_at: asIso(s.sampled_at), stars: asNumber(s.stars), forks: asNumber(s.forks) })),
     url: `https://github.com/${repo.full_name}`,
@@ -187,7 +192,7 @@ app.post('/api/ai-report', rate, async (req, res) => {
 app.post('/api/subscriptions', rate, async (req, res) => {
   const b = req.body || {}, email = String(b.email || '').trim().toLowerCase(), locale = b.locale === 'en' ? 'en' : 'zh';
   const selected = Array.isArray(b.boards) ? [...new Set(b.boards.filter(x => boards[x]))] : [];
-  const topics = normalizeTopics(b.topics, b.topic);
+  const topics = canonicalTopics(normalizeTopics(b.topics, b.topic));
   const languages = normalizeTopics(b.languages, b.language);
   const hour = Number(b.sendHour), zone = String(b.timezone || '');
   if (!emailRe.test(email) || email.length > 254) return fail(res, 400, 'Invalid email address');
@@ -251,7 +256,7 @@ app.patch('/api/manage', async (req, res) => {
   const zone = b.timezone === undefined ? sub.timezone : String(b.timezone);
   const topics = b.topics === undefined && b.topic === undefined
     ? storedTopics(sub)
-    : normalizeTopics(b.topics, b.topic);
+    : canonicalTopics(normalizeTopics(b.topics, b.topic));
   const languages = b.languages === undefined && b.language === undefined
     ? storedLanguages(sub)
     : normalizeTopics(b.languages, b.language);

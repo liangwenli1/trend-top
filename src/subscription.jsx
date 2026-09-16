@@ -3,6 +3,8 @@ import { DesignSelect, TopicMultiSelect } from './components.jsx';
 import { TYPES, typeLabel } from './catalog.js';
 import { BillingCard } from './billing-ui.jsx';
 import './account.css';
+import { loginUrl, safeAccountReturn } from '../shared/account-paths.js';
+export const AuthContext = React.createContext(undefined);
 
 const boardLabels = {
   hot: ['近期热门', 'Trending now'],
@@ -84,7 +86,7 @@ function EmailCodeInput({ digits, onChange, zh }) {
   </div>;
 }
 
-export function AuthForm({ l, onAuthenticated, initialMode = 'register' }) {
+export function AuthForm({ l, onAuthenticated, initialMode = 'register', googleEnabled = false, nextPath }) {
   const zh = l === 'zh';
   const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState('');
@@ -116,6 +118,7 @@ export function AuthForm({ l, onAuthenticated, initialMode = 'register' }) {
         setMessage(zh ? '如果该邮箱已注册，验证码已发送。' : 'If this email has an account, a code was sent.');
       } else if (mode === 'reset') {
         await request('/api/auth/password/reset', 'POST', { email, code, password });
+        announceAuthChange(null);
         setMode('login');
         setCodeDigits(emptyCode()); setPassword('');
         setMessage(zh ? '密码已重设，请登录。' : 'Password reset. Please sign in.');
@@ -132,13 +135,14 @@ export function AuthForm({ l, onAuthenticated, initialMode = 'register' }) {
     </div>
     <form onSubmit={submit} className="subscribe-form">
       <div className="field"><label htmlFor="account-email">{zh ? '邮箱' : 'Email'}</label><input id="account-email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com"/></div>
-      {needsPassword && <div className="field"><label htmlFor="account-password">{mode === 'reset' ? (zh ? '新密码' : 'New password') : (zh ? '密码' : 'Password')}</label><input id="account-password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required minLength={mode === 'login' ? undefined : 10} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} placeholder={zh ? '至少 10 个字符' : 'At least 10 characters'}/></div>}
+      {needsPassword && <div className="field"><label htmlFor="account-password">{mode === 'reset' ? (zh ? '新密码' : 'New password') : (zh ? '密码' : 'Password')}</label><input id="account-password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required minLength={mode === 'login' ? undefined : 10} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} placeholder={mode === 'login' ? undefined : zh ? '至少 10 个字符' : 'At least 10 characters'}/></div>}
       {needsCode && <EmailCodeInput digits={codeDigits} onChange={setCodeDigits} zh={zh}/>}
       <button type="submit" className="primary wide" disabled={busy}>{busy ? '…' : mode === 'register' ? (zh ? '发送注册验证码' : 'Send registration code') : mode === 'verify' ? (zh ? '验证并注册' : 'Verify and register') : mode === 'login' ? (zh ? '登录' : 'Sign in') : mode === 'reset-request' ? (zh ? '发送重设验证码' : 'Send reset code') : (zh ? '重设密码' : 'Reset password')}</button>
       {mode === 'login' && <button type="button" className="account-text-button" onClick={() => changeMode('reset-request')}>{zh ? '忘记密码？' : 'Forgot password?'}</button>}
       {mode === 'verify' && <button type="button" className="account-text-button" onClick={() => changeMode('register')}>{zh ? '重新发送验证码' : 'Send another code'}</button>}
       {message && <p className="form-message" role="status">{message}</p>}
     </form>
+    {googleEnabled && ['register', 'login'].includes(mode) && <><div className="login-divider"><span>{zh ? '或' : 'or'}</span></div><a className="login-google" href={`/api/auth/google?${new URLSearchParams({ locale: l, next: safeAccountReturn(nextPath, l) })}`}><img src="/google-signin.png" width="20" height="20" alt=""/>{zh ? '使用 Google 继续' : 'Continue with Google'}</a></>}
   </div>;
 }
 
@@ -187,12 +191,12 @@ function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSa
     try {
       await request('/api/subscription/status', 'PATCH', { status: next });
       setStatus(next);
-      setMessage(next === 'paused' ? (zh ? '已暂停发送。' : 'Delivery paused.') : next === 'cancelled' ? (zh ? '已退订。' : 'Unsubscribed.') : (zh ? '已恢复发送。' : 'Delivery resumed.'));
+      setMessage(next === 'paused' ? (zh ? '已暂停邮件发送。' : 'Email delivery paused.') : next === 'cancelled' ? (zh ? '已停止邮件推送，付费套餐未变更。' : 'Emails stopped. Your paid plan is unchanged.') : (zh ? '已恢复邮件发送。' : 'Email delivery resumed.'));
     } catch (error) { setMessage(error.message); }
     finally { setBusy(false); }
   };
   return <form className="subscribe-form account-settings" onSubmit={submit}>
-    {account && <p className="account-status">{zh ? '订阅状态：' : 'Subscription: '}{status === 'active' ? (zh ? '发送中' : 'Active') : status === 'paused' ? (zh ? '已暂停' : 'Paused') : status === 'cancelled' ? (zh ? '已退订' : 'Unsubscribed') : (zh ? '尚未创建' : 'Not set up')}</p>}
+    {account && <p className="account-status">{zh ? '邮件推送：' : 'Email delivery: '}{status === 'active' ? (zh ? '发送中' : 'Active') : status === 'paused' ? (zh ? '已暂停' : 'Paused') : status === 'cancelled' ? (zh ? '已停止' : 'Stopped') : (zh ? '尚未设置' : 'Not set up')}</p>}
     <fieldset><legend>{zh ? '订阅内容' : 'Content types'}</legend><div className="checks account-type-grid">{TYPES.map(type => <label key={type}><input type="checkbox" checked={types.includes(type)} onChange={() => toggleType(type)}/>{typeLabel(type, l)}</label>)}</div></fieldset>
     <fieldset><legend>{zh ? '关注榜单' : 'Boards to follow'}</legend><div className="checks account-board-grid">{boardChoices.map(board => <label key={board}><input type="checkbox" checked={boards.includes(board)} onChange={() => setBoards(old => old.includes(board) ? old.filter(value => value !== board) : [...old, board])}/>{boardLabels[board][zh ? 0 : 1]}</label>)}</div></fieldset>
     <div className="form-grid">
@@ -203,49 +207,65 @@ function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSa
       <div className="field"><label htmlFor="digest-locale">{zh ? '邮件语言' : 'Email language'}</label><DesignSelect id="digest-locale" value={locale} onChange={setLocale} options={[{ value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }]}/></div>
     </div>
     <p className="account-hint">{zh ? '语言和主题留空即表示全部。邮件按类型展示榜单与增长图表。' : 'Leave language and topic empty for all. Emails include rankings and compact growth charts.'}</p>
-    <button type="submit" className="primary wide" disabled={busy}>{busy ? '…' : status ? (zh ? '保存订阅设置' : 'Save subscription') : (zh ? '开启每日摘要' : 'Start daily digest')}</button>
+    <button type="submit" className="primary wide" disabled={busy}>{busy ? '…' : status ? (zh ? '保存推送设置' : 'Save delivery settings') : (zh ? '开启每日摘要' : 'Start daily digest')}</button>
     {account && status && <div className="account-status-actions">
       {status === 'active' ? <button type="button" className="ghost" disabled={busy} onClick={() => changeStatus('paused')}>{zh ? '暂停发送' : 'Pause'}</button> : <button type="button" className="ghost" disabled={busy} onClick={() => changeStatus('active')}>{zh ? '恢复发送' : 'Resume'}</button>}
-      {status !== 'cancelled' && <button type="button" className="danger" disabled={busy} onClick={() => changeStatus('cancelled')}>{zh ? '退订' : 'Unsubscribe'}</button>}
+      {status !== 'cancelled' && <button type="button" className="danger" disabled={busy} onClick={() => changeStatus('cancelled')}>{zh ? '停止邮件推送' : 'Stop emails'}</button>}
     </div>}
+    {account && <p className="account-hint">{zh ? '暂停或停止邮件不会取消付费续订。' : 'Pausing or stopping emails does not cancel paid renewal.'} <a href={`/${l}/account/subscription`}>{zh ? '管理套餐与账单' : 'Manage plan & billing'}</a></p>}
     {message && <p className="form-message" role="status">{message}</p>}
   </form>;
 }
 
 export function AccountSubscribeForm({ l, currentType, currentBoard }) {
-  const [user, setUser] = useState(undefined);
+  const user = React.useContext(AuthContext);
   const [subscription, setSubscription] = useState(undefined);
-  useEffect(() => {
-    request('/api/auth/me').then(result => setUser(result.user)).catch(() => setUser(null));
-    const update = event => setUser(event.detail?.user || null);
-    addEventListener(AUTH_CHANGED_EVENT, update);
-    return () => removeEventListener(AUTH_CHANGED_EVENT, update);
-  }, []);
   useEffect(() => {
     if (!user) return;
     request('/api/subscription').then(result => setSubscription(result.subscription)).catch(() => setSubscription(null));
   }, [user?.id]);
   if (user === undefined || (user && subscription === undefined)) return <p>{l === 'zh' ? '加载中…' : 'Loading…'}</p>;
-  if (!user) return <AuthForm l={l} onAuthenticated={setUser}/>;
-  return <div><p className="account-signed-in">{l === 'zh' ? '已登录：' : 'Signed in: '}{user.email}</p><SubscriptionSettings l={l} currentType={currentType} currentBoard={currentBoard} subscription={subscription}/></div>;
+  if (!user) return <a className="primary billing-link" href={loginUrl(l, `/${l}/account/delivery`)}>{l === 'zh' ? '登录后设置推送' : 'Sign in to set up delivery'}</a>;
+  return <SubscriptionSettings l={l} currentType={currentType} currentBoard={currentBoard} subscription={subscription}/>;
 }
 
-export function AccountPage({ l }) {
-  const [user, setUser] = useState(undefined);
+export function LoginPage({ l, user, navigate }) {
+  const zh = l === 'zh', query = new URLSearchParams(location.search);
+  const next = safeAccountReturn(query.get('next'), l), reset = query.get('mode') === 'reset-request';
+  const [providers, setProviders] = useState({ google: false });
+  useEffect(() => { request('/api/auth/providers').then(setProviders).catch(() => {}); }, []);
+  useEffect(() => { if (user && !reset && !query.get('error')) navigate(next, true); }, [user?.id, next, reset]);
+  const errors = {
+    google_failed: zh ? 'Google 登录未完成，请重试或使用邮箱登录。' : 'Google sign-in did not finish. Retry or use email.',
+    google_unavailable: zh ? 'Google 登录暂不可用，请使用邮箱。' : 'Google sign-in is unavailable. Please use email.',
+    email_verification_required: zh ? '此 Google 账户使用第三方邮箱。请先通过邮件验证码注册，再在账户设置中关联 Google。' : 'This Google account uses a third-party email. Register with an email code first, then connect Google in Account settings.',
+    link_failed: zh ? '无法关联此 Google 账户。请确认登录邮箱一致，且未关联其他账户。' : 'Could not connect Google. Check that the emails match and the Google account is not connected elsewhere.'
+  };
+  return <div className="login-page"><main className="login-main"><a className="brand login-brand" href={`/${l}/home`}>Trend Top</a><header className="login-heading"><p className="account-kicker">{zh ? '你的开源发现空间' : 'YOUR OPEN-SOURCE DISCOVERY SPACE'}</p><h1>{reset ? (zh ? '重设你的密码' : 'Reset your password') : (zh ? '欢迎来到 Trend Top' : 'Welcome to Trend Top')}</h1><p>{zh ? '登录后管理你的套餐和每日摘要。' : 'Manage your plan and daily digest in one place.'}</p></header><section className="login-card" aria-label={zh ? '登录与注册' : 'Sign in and registration'}>{errors[query.get('error')] && <p className="form-message" role="alert">{errors[query.get('error')]}</p>}<AuthForm key={reset ? 'reset' : 'auth'} l={l} initialMode={reset ? 'reset-request' : 'login'} googleEnabled={providers.google} nextPath={next} onAuthenticated={() => navigate(next, true)}/><p className="login-legal">{zh ? '继续即表示你同意' : 'By continuing, you agree to our'} <a href={`/${l}/terms`}>{zh ? '服务条款' : 'Terms of Service'}</a> {zh ? '和' : 'and'} <a href={`/${l}/privacy`}>{zh ? '隐私政策' : 'Privacy Policy'}</a>{zh ? '。' : '.'}</p></section><a className="login-back" href={`/${l}/home`}>{zh ? '返回首页' : 'Back to home'}</a></main><footer className="login-footer"><span>© {new Date().getFullYear()} Trend Top</span><a href={loginUrl(zh ? 'en' : 'zh', next, reset ? 'reset-request' : undefined)}>{zh ? 'English' : '简体中文'}</a></footer></div>;
+}
+
+function AccountSettings({ l, user }) {
+  const zh = l === 'zh';
+  const [methods, setMethods] = useState(null), [providers, setProviders] = useState({ google: false });
+  const [currentPassword, setCurrentPassword] = useState(''), [password, setPassword] = useState(''), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
+  useEffect(() => { request('/api/auth/methods').then(setMethods).catch(error => setMessage(error.message)); request('/api/auth/providers').then(setProviders).catch(() => {}); }, []);
+  const changePassword = async event => { event.preventDefault(); setBusy(true); setMessage(''); try { await request('/api/auth/password/change', 'POST', { currentPassword, password }); setCurrentPassword(''); setPassword(''); setMessage(zh ? '密码已更新，其他设备的登录已退出。' : 'Password updated. Other devices have been signed out.'); } catch (error) { setMessage(error.message); } finally { setBusy(false); } };
+  return <><div className="account-user"><div><span>{zh ? '账户邮箱' : 'Account email'}</span><strong>{user.email}</strong></div><span className="account-verified">{zh ? '已验证' : 'Verified'}</span></div><section className="account-section"><div className="account-section-heading"><h2>{zh ? '登录方式' : 'Sign-in methods'}</h2></div>{!methods ? <p>{zh ? '加载中…' : 'Loading…'}</p> : <><div className="account-method"><strong>{zh ? '邮箱与密码' : 'Email & password'}</strong><span>{methods.passwordEnabled ? (zh ? '已启用' : 'Enabled') : (zh ? '未设置密码' : 'Password not set')}</span></div><div className="account-method"><strong>Google</strong>{methods.google ? <span>{zh ? '已关联' : 'Connected'}</span> : providers.google ? <a className="ghost billing-link" href={`/api/auth/google?${new URLSearchParams({ locale: l, next: `/${l}/account`, link: '1' })}`}>{zh ? '关联 Google' : 'Connect Google'}</a> : <span>{zh ? '暂未启用' : 'Not available yet'}</span>}</div></>}</section>{methods && <section className="account-section"><div className="account-section-heading"><h2>{methods.passwordEnabled ? (zh ? '修改密码' : 'Change password') : (zh ? '设置邮箱密码' : 'Set an email password')}</h2></div>{methods.passwordEnabled ? <form className="subscribe-form" onSubmit={changePassword}><div className="field"><label htmlFor="settings-current-password">{zh ? '当前密码' : 'Current password'}</label><input id="settings-current-password" type="password" autoComplete="current-password" maxLength={128} required value={currentPassword} onChange={event => setCurrentPassword(event.target.value)}/></div><div className="field"><label htmlFor="settings-new-password">{zh ? '新密码' : 'New password'}</label><input id="settings-new-password" type="password" autoComplete="new-password" minLength={10} maxLength={128} required value={password} onChange={event => setPassword(event.target.value)}/><small>{zh ? '10–128 个字符。' : '10–128 characters.'}</small></div><button className="primary" disabled={busy}>{busy ? '…' : (zh ? '更新密码' : 'Update password')}</button></form> : <><p className="account-hint">{zh ? '通过邮件验证码设置密码，以后也可以用邮箱登录。' : 'Set a password with an email code to also sign in using email.'}</p><a className="ghost billing-link" href={loginUrl(l, `/${l}/account`, 'reset-request')}>{zh ? '通过邮箱设置' : 'Set up with email'}</a></>}</section>}{message && <p className="form-message" role="status">{message}</p>}</>;
+}
+
+export function AccountPage({ l, section = '', navigate }) {
+  const user = React.useContext(AuthContext);
   const [subscription, setSubscription] = useState(undefined);
   const [error, setError] = useState('');
-  const subscriptionRef = React.useRef(null);
-  useEffect(() => { request('/api/auth/me').then(result => setUser(result.user)).catch(() => setUser(null)); }, []);
+  const selected = section === 'subscription' ? 'subscription' : section === 'delivery' ? 'delivery' : '';
+  useEffect(() => { if (user === null) navigate(loginUrl(l, location.pathname + location.search), true); }, [user]);
   useEffect(() => {
-    if (!user) return;
+    if (!user || selected !== 'delivery') return;
     request('/api/subscription').then(result => setSubscription(result.subscription)).catch(e => setError(e.message));
-  }, [user?.id]);
-  useEffect(() => {
-    if (!user || subscription === undefined || new URLSearchParams(location.search).get('section') !== 'subscription') return;
-    const frame = requestAnimationFrame(() => subscriptionRef.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }));
-    return () => cancelAnimationFrame(frame);
-  }, [user?.id, subscription]);
-  const logout = async () => { try { await request('/api/auth/logout', 'POST', {}); setUser(null); setSubscription(undefined); announceAuthChange(null); } catch (e) { setError(e.message); } };
+  }, [user?.id, selected]);
   const zh = l === 'zh';
-  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{user ? (zh ? '管理你的账户' : 'Manage your account') : (zh ? '登录或注册' : 'Sign in or register')}</h1><p>{zh ? '在一个页面管理每日摘要、推送偏好、Pro 套餐与账单。' : 'Manage your daily digest, delivery preferences, Pro plan, and billing in one place.'}</p></div><div className="account-page-card">{user === undefined ? <p>{zh ? '加载中…' : 'Loading…'}</p> : user ? <><div className="account-user"><div><span>{zh ? '登录邮箱' : 'Signed-in email'}</span><strong>{user.email}</strong></div><button type="button" className="ghost" onClick={logout}>{zh ? '退出登录' : 'Sign out'}</button></div><section className="account-section" ref={subscriptionRef} id="account-subscription"><div className="account-section-heading"><p>{zh ? '订阅与推送' : 'Subscription & delivery'}</p><h2>{zh ? '你的每日摘要' : 'Your daily digest'}</h2></div>{subscription === undefined ? <p>{zh ? '加载订阅…' : 'Loading subscription…'}</p> : <SubscriptionSettings l={l} subscription={subscription} account onSaved={setSubscription}/>}</section><section className="account-section" id="account-billing"><div className="account-section-heading"><p>{zh ? '套餐与账单' : 'Plan & billing'}</p><h2>{zh ? '管理 Pro 套餐' : 'Manage your Pro plan'}</h2></div><BillingCard l={l}/></section></> : <AuthForm l={l} initialMode="login" onAuthenticated={setUser}/>}</div>{error && <p role="alert">{error}</p>}</main>;
+  const titles = { '': zh ? '账户设置' : 'Account settings', subscription: zh ? '套餐与账单' : 'Plan & billing', delivery: zh ? '邮件推送设置' : 'Email delivery settings' };
+  const hints = { '': zh ? '管理邮箱、登录方式和账户安全。' : 'Manage your email, sign-in methods, and account security.', subscription: zh ? '查看付费套餐、续费日期、付款记录与退款申请。' : 'Review your paid plan, renewal date, payments, and refund requests.', delivery: zh ? '选择收到的内容和发送时间。推送偏好与付费续订独立管理。' : 'Choose what arrives and when. Delivery preferences are managed separately from paid renewal.' };
+  const current = new URLSearchParams(location.search);
+  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{titles[selected]}</h1><p>{hints[selected]}</p></div><nav className="account-navigation" aria-label={zh ? '账户设置导航' : 'Account navigation'}>{Object.entries(titles).map(([key, title]) => <a key={key} aria-current={selected === key ? 'page' : undefined} href={`/${l}/account${key ? '/' + key : ''}`} onClick={event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(`/${l}/account${key ? '/' + key : ''}`); }}>{title}</a>)}</nav><div className="account-page-card">{!user ? <p>{zh ? '加载中…' : 'Loading…'}</p> : selected === 'subscription' ? <BillingCard l={l}/> : selected === 'delivery' ? subscription === undefined ? <p>{error || (zh ? '加载推送设置…' : 'Loading delivery settings…')}</p> : <SubscriptionSettings key={user.id} l={l} subscription={subscription} currentType={current.get('type')} currentBoard={current.get('board')} account onSaved={setSubscription}/> : <AccountSettings l={l} user={user}/>}</div>{error && <p role="alert">{error}</p>}</main>;
 }

@@ -1,5 +1,6 @@
 import { asDay, asIso, asJson, asNumber, dataSource, DAYS, many, one, query, utcDay } from './db.js';
 import { aiEvidence, getChart as getRepoChart, getFilters as getRepoFilters, getRankings as getRepoRankings, getStarSeries } from './rankings.js';
+import { normalizeTopics, topicFilterValues } from '../shared/topics.js';
 
 export const TYPES = ['skill', 'plugin', 'agent', 'components', 'website', 'github-repo'];
 export const TYPE_META = {
@@ -117,7 +118,7 @@ function rankedTopics(row, frequency = null) {
   const haystack = `${row.full_name || ''} ${row.description || ''}`.toLowerCase();
   const source = String(row.source_query || '').toLowerCase();
   const category = String(row.category || '').toLowerCase();
-  return [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))].sort((left, right) => {
+  return normalizeTopics(values).sort((left, right) => {
     const score = value => {
       const key = value.toLowerCase();
       let total = key === category ? 8 : 0;
@@ -129,7 +130,7 @@ function rankedTopics(row, frequency = null) {
       return total;
     };
     return score(right) - score(left) || left.localeCompare(right);
-  });
+  }).slice(0, 5);
 }
 
 function mapAsset(row, extras = {}) {
@@ -330,10 +331,10 @@ export async function getCatalogFilters(type) {
       [type]
     ),
     many(
-      `SELECT topic AS name, COUNT(*)::int AS count
+      `SELECT canonical_topic(topic) AS name, COUNT(DISTINCT a.id)::int AS count
        FROM assets a, LATERAL jsonb_array_elements_text(a.topics) AS topic
-       WHERE a.type = $1 AND a.active=TRUE AND topic <> ''
-       GROUP BY topic ORDER BY count DESC, topic LIMIT 80`,
+       WHERE a.type = $1 AND a.active=TRUE AND canonical_topic(topic) <> ''
+       GROUP BY canonical_topic(topic) ORDER BY count DESC, name LIMIT 80`,
       [type]
     )
   ]);
@@ -366,7 +367,7 @@ export async function getCatalogRankings(type, query = {}) {
   let period = DAYS[query.period] ? query.period : 'week';
   const language = String(query.language || '');
   const categoryValues = filterValues(query.categories ?? query.category);
-  const topicValues = filterValues(query.topics ?? query.topic);
+  const topicValues = topicFilterValues(query.topics ?? query.topic);
   const q = String(query.q || '');
   const officialOnly = board === 'official' || query.official === '1' || query.official === 'true';
   const endpoint = await latestAssetDay();
@@ -387,7 +388,7 @@ export async function getCatalogRankings(type, query = {}) {
     params.push(topicValues[0]);
     sql += ` AND EXISTS (
       SELECT 1 FROM jsonb_array_elements_text(topics) t(topic)
-      WHERE lower(t.topic) = lower($${params.length})
+      WHERE canonical_topic(t.topic) = $${params.length}
     )`;
   } else if (topicValues.length > 1) {
     params.push(JSON.stringify(topicValues));
@@ -395,7 +396,7 @@ export async function getCatalogRankings(type, query = {}) {
       SELECT 1 FROM jsonb_array_elements_text(topics) t(topic)
       WHERE EXISTS (
         SELECT 1 FROM jsonb_array_elements_text($${params.length}::jsonb) f(value)
-        WHERE lower(t.topic) = lower(f.value)
+        WHERE canonical_topic(t.topic) = f.value
       )
     )`;
   }
@@ -408,7 +409,7 @@ export async function getCatalogRankings(type, query = {}) {
   const similars = await similarCounts();
   const statsById = await periodStatsBatch(rows.map(row => row.id), period, endpoint);
   const topicFrequency = new Map();
-  for (const row of rows) for (const value of asJson(row.topics, [])) { const key = String(value || '').trim().toLowerCase(); if (key) topicFrequency.set(key, (topicFrequency.get(key) || 0) + 1); }
+  for (const row of rows) for (const key of normalizeTopics(asJson(row.topics, []))) topicFrequency.set(key, (topicFrequency.get(key) || 0) + 1);
   const now = endpoint.getTime();
   const scored = [];
   for (const row of rows) {
@@ -550,7 +551,7 @@ export async function getCatalogItem(type, id) {
         id: asNumber(repo.id),
         stars: asNumber(repo.stars),
         forks: asNumber(repo.forks),
-        topics: asJson(repo.topics, []),
+        topics: normalizeTopics(asJson(repo.topics, [])).slice(0, 5),
         created_at: asIso(repo.created_at),
         pushed_at: asIso(repo.pushed_at),
         updated_at: asIso(repo.updated_at),

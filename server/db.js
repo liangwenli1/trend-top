@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trackDatabaseCall } from './performance.js';
+import { topicFunctionSql } from '../shared/topics.js';
 
 export const DAYS = { day: 1, week: 7, month: 30 };
 export const HISTORY_DAYS = 14;
@@ -90,10 +91,13 @@ async function createAdapter() {
 async function init() {
   adapter = await createAdapter();
   await adapter.exec(schemaSql);
+  await adapter.exec(topicFunctionSql);
   // Keep existing deployments compatible with the multi-topic subscription form.
   await adapter.exec("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS topics JSONB NOT NULL DEFAULT '[]'::jsonb");
   await adapter.exec("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS languages JSONB NOT NULL DEFAULT '[]'::jsonb");
   await adapter.exec("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS user_id TEXT");
+  await adapter.exec('ALTER TABLE users ADD COLUMN IF NOT EXISTS password_enabled BOOLEAN NOT NULL DEFAULT TRUE');
+  await adapter.exec('ALTER TABLE billing_subscriptions ADD COLUMN IF NOT EXISTS cancel_requested_at TIMESTAMPTZ');
   await adapter.exec("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS types JSONB NOT NULL DEFAULT '[\"github-repo\"]'::jsonb");
   await adapter.exec('CREATE INDEX IF NOT EXISTS subscriptions_user_idx ON subscriptions (user_id)');
   // Rank snapshot of the last sent digest, used for the next digest's rank-change arrows.

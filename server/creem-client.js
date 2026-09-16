@@ -48,3 +48,5 @@ export async function creemRequest(path, { method = 'POST', body } = {}) {
 
 export const createCreemCheckout = body => creemRequest('/v1/checkouts', { body });
 export const createCreemPortal = customerId => creemRequest('/v1/customers/billing', { body: { customer_id: customerId } });
+export const cancelCreemSubscription = subscriptionId => creemRequest(`/v1/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, { body: { mode: 'scheduled', onExecute: 'cancel' } });
+export const refundCreemTransaction = transactionId => creemRequest('/v1/refunds', { body: { transaction_id: transactionId } });

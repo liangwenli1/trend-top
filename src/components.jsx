@@ -53,7 +53,11 @@ export function TopicMultiSelect({
       if (rootRef.current?.contains(event.target)) return;
       setOpen(false);
     };
-    const escape = event => { if (event.key === 'Escape') setOpen(false); };
+    const escape = event => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      rootRef.current?.querySelector('button')?.focus();
+    };
     document.addEventListener('mousedown', close);
     document.addEventListener('keydown', escape);
     return () => {
@@ -108,7 +112,12 @@ export function TopicMultiSelect({
 }
 
 export function SubscribeDialog({trigger,title,description,children}) {
-  return <Dialog.Root><Dialog.Trigger asChild>{trigger}</Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content"><Dialog.Close className="dialog-close" aria-label={document.documentElement.lang==='zh'?'关闭':'Close'}>×</Dialog.Close><Dialog.Title>{title}</Dialog.Title><Dialog.Description>{description}</Dialog.Description>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>;
+  const contentRef=useRef(null);
+  const escape=event=>{
+    // The first Escape closes the nested multi-select, preserving unsaved settings.
+    if(contentRef.current?.querySelector('.topic-multi-select [aria-expanded="true"]'))event.preventDefault();
+  };
+  return <Dialog.Root><Dialog.Trigger asChild>{trigger}</Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content ref={contentRef} className="dialog-content" onEscapeKeyDown={escape}><Dialog.Close className="dialog-close" aria-label={document.documentElement.lang==='zh'?'关闭':'Close'}>×</Dialog.Close><Dialog.Title>{title}</Dialog.Title><Dialog.Description>{description}</Dialog.Description>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>;
 }
 
 export function TopicDialog({trigger,topics,title,description,hrefFor,onSelect,locale='en'}) {

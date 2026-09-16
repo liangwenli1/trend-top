@@ -1,6 +1,7 @@
 import {
   asDay, asIso, asJson, asNumber, dataSource, DAYS, lastCompleteDay, many, one, utcDay
 } from './db.js';
+import { normalizeTopics, topicFilterValues } from '../shared/topics.js';
 
 export const boards = {
   hot: { zh: '近期热门', en: 'Trending now', metric: 'score' },
@@ -63,12 +64,12 @@ function rankingCte(params, { board, language, languages, topic, topics, q, age,
       WHERE lower(r.language) = lower(l.lang)
     )`;
   }
-  const topicValues = filterValues(topics?.length ? topics : topic);
+  const topicValues = topicFilterValues(topics?.length ? topics : topic);
   if (topicValues.length === 1) {
     params.push(topicValues[0]);
     sql += ` AND EXISTS (
       SELECT 1 FROM jsonb_array_elements_text(r.topics) t(topic)
-      WHERE lower(t.topic) = lower($${params.length})
+      WHERE canonical_topic(t.topic) = $${params.length}
     )`;
   } else if (topicValues.length > 1) {
     params.push(JSON.stringify(topicValues));
@@ -76,7 +77,7 @@ function rankingCte(params, { board, language, languages, topic, topics, q, age,
       SELECT 1 FROM jsonb_array_elements_text(r.topics) t(topic)
       WHERE EXISTS (
         SELECT 1 FROM jsonb_array_elements_text($${params.length}::jsonb) f(value)
-        WHERE lower(t.topic) = lower(f.value)
+        WHERE canonical_topic(t.topic) = f.value
       )
     )`;
   }
@@ -167,7 +168,7 @@ function mapItem(row, rank) {
     full_name: row.full_name,
     description: row.description,
     language: row.language,
-    topics,
+    topics: normalizeTopics(topics).slice(0, 5),
     stars: asNumber(row.stars),
     forks: asNumber(row.forks),
     created_at: asIso(row.created_at),
@@ -230,11 +231,11 @@ export async function getFilters() {
     [source]
   );
   const topics = await many(
-    `SELECT topic AS name, COUNT(*)::int AS count
+    `SELECT canonical_topic(topic) AS name, COUNT(DISTINCT r.id)::int AS count
      FROM repos r, LATERAL jsonb_array_elements_text(r.topics) AS topic
-     WHERE r.deleted = FALSE AND r.archived = FALSE AND r.active = TRUE AND r.source = $1
-     GROUP BY topic
-     ORDER BY count DESC, topic
+     WHERE r.deleted = FALSE AND r.archived = FALSE AND r.active = TRUE AND r.source = $1 AND canonical_topic(topic) <> ''
+     GROUP BY canonical_topic(topic)
+     ORDER BY count DESC, name
      LIMIT 20`,
     [source]
   );

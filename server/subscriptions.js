@@ -4,6 +4,7 @@ import { TYPES, getCatalogFilters } from './catalog.js';
 import { boards as repoBoards } from './rankings.js';
 import { encryptManageToken, token } from './jobs.js';
 import { requireUser } from './auth.js';
+import { normalizeTopics } from '../shared/topics.js';
 
 const commonBoards = ['hot', 'rising', 'new', 'stars'];
 const repoOnlyBoards = ['ai', 'topics', 'forks'];
@@ -18,7 +19,7 @@ const toResponse = sub => sub ? {
   types: asJson(sub.types, ['github-repo']),
   boards: asJson(sub.boards, []),
   languages: asJson(sub.languages, []),
-  topics: asJson(sub.topics, []),
+  topics: normalizeTopics(asJson(sub.topics, [])),
   sendHour: asNumber(sub.send_hour),
   timezone: sub.timezone,
   locale: sub.locale,
@@ -46,7 +47,7 @@ export function registerSubscriptionRoutes(app) {
     const allowedBoards = new Set([...commonBoards, ...(types.includes('github-repo') ? repoOnlyBoards : [])]);
     const boards = Array.isArray(body.boards) ? unique(body.boards.filter(value => allowedBoards.has(value))) : [];
     const languages = selectedValues(body.languages);
-    const topics = selectedValues(body.topics);
+    const topics = normalizeTopics(selectedValues(body.topics));
     const sendHour = Number(body.sendHour), timezone = String(body.timezone || '');
     const locale = body.locale === 'en' ? 'en' : 'zh';
     if (!types.length || !boards.length || !Number.isInteger(sendHour) || sendHour < 0 || sendHour > 23 || !validZone(timezone)) {
@@ -57,7 +58,7 @@ export function registerSubscriptionRoutes(app) {
     if (existing) {
       await query(
         `UPDATE subscriptions SET types=$1::jsonb, boards=$2::jsonb, language=$3, languages=$4::jsonb,
-         topic=$5, topics=$6::jsonb, send_hour=$7, timezone=$8, locale=$9, status='active',
+         topic=$5, topics=$6::jsonb, send_hour=$7, timezone=$8, locale=$9,
          verified_at=COALESCE(verified_at,$10) WHERE id=$11 AND user_id=$12`,
         [JSON.stringify(types), JSON.stringify(boards), languages[0] || '', JSON.stringify(languages), topics[0] || '', JSON.stringify(topics), sendHour, timezone, locale, new Date().toISOString(), existing.id, req.user.id]
       );

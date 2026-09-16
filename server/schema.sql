@@ -183,6 +183,7 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
+  password_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   locale TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL,
   verified_at TIMESTAMPTZ NOT NULL
@@ -205,6 +206,27 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   user_id TEXT NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS auth_identities (
+  provider TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  email TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (provider, subject),
+  UNIQUE (provider, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS auth_oauth_states (
+  state_hash TEXT PRIMARY KEY,
+  browser_hash TEXT NOT NULL,
+  code_verifier TEXT NOT NULL,
+  nonce TEXT NOT NULL,
+  next_path TEXT NOT NULL,
+  locale TEXT NOT NULL,
+  link_user_id TEXT,
+  expires_at TIMESTAMPTZ NOT NULL
 );
 
 -- Paid plans are kept separate from the free email digest in `subscriptions`.
@@ -254,6 +276,7 @@ CREATE TABLE IF NOT EXISTS billing_subscriptions (
   last_transaction_id TEXT,
   last_transaction_at TIMESTAMPTZ,
   canceled_at TIMESTAMPTZ,
+  cancel_requested_at TIMESTAMPTZ,
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   provider_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
   provider_updated_at TIMESTAMPTZ,
@@ -289,6 +312,20 @@ CREATE TABLE IF NOT EXISTS creem_webhook_events (
   received_at TIMESTAMPTZ NOT NULL,
   processed_at TIMESTAMPTZ,
   last_error TEXT
+);
+
+CREATE TABLE IF NOT EXISTS billing_refund_requests (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  transaction_id TEXT NOT NULL UNIQUE REFERENCES billing_transactions(id),
+  mode TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL,
+  admin_note TEXT NOT NULL DEFAULT '',
+  reviewed_by TEXT,
+  provider_refund_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS user_entitlements (

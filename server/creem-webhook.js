@@ -25,6 +25,8 @@ async function resolveUser(object) {
   if (subscriptionId) return (await one('SELECT user_id FROM billing_subscriptions WHERE creem_subscription_id=$1', [subscriptionId]))?.user_id || null;
   const requestId = text(object?.request_id);
   if (requestId) return (await one('SELECT user_id FROM billing_checkouts WHERE request_id=$1', [requestId]))?.user_id || null;
+  const transactionId = text(objectId(object?.transaction));
+  if (transactionId) return (await one('SELECT user_id FROM billing_transactions WHERE creem_transaction_id=$1', [transactionId]))?.user_id || null;
   return null;
 }
 
@@ -50,7 +52,7 @@ function subscriptionData(object, config, eventType, fallback = {}) {
     customerId: text(objectId(source?.customer) || source?.customer_id || objectId(object?.customer) || fallback.customer_id),
     productId,
     planKey: source?.metadata?.planKey || object?.metadata?.planKey || planForProduct(productId, config),
-    status: text(eventType?.startsWith('subscription.') ? eventType.slice('subscription.'.length) : source?.status || fallback.status || 'active'),
+    status: text(eventType?.startsWith('subscription.') && eventType !== 'subscription.update' ? eventType.slice('subscription.'.length) : source?.status || fallback.status || 'active'),
     price: Number.isFinite(Number(source?.price || product?.price)) ? Number(source?.price || product?.price) : null,
     currency: text(source?.currency || product?.currency),
     periodStart: iso(source?.current_period_start_date || source?.current_period_start_at || source?.current_period_start),
@@ -83,7 +85,9 @@ async function updateEntitlement(userId, sub, eventType, at, graceDays = 3) {
   const graceEvents = new Set(['subscription.past_due', 'subscription.unpaid']);
   const revokedEvents = new Set(['subscription.paused', 'subscription.expired', 'subscription.canceled', 'subscription.cancelled']);
   let state = activeEvents.has(eventType) ? (eventType === 'subscription.trialing' ? 'trialing' : 'active') : graceEvents.has(eventType) ? 'grace' : revokedEvents.has(eventType) ? 'revoked' : null;
-  if (!state) state = ['active', 'paid', 'trialing'].includes(sub.status) ? sub.status === 'trialing' ? 'trialing' : 'active' : null;
+  if (!state) state = ['active', 'paid', 'trialing', 'scheduled_cancel'].includes(sub.status) ? sub.status === 'trialing' ? 'trialing' : 'active'
+    : ['past_due', 'unpaid'].includes(sub.status) ? 'grace'
+    : ['paused', 'expired', 'canceled', 'cancelled'].includes(sub.status) ? 'revoked' : null;
   if (!state) return;
   let endsAt = sub.periodEnd;
   if (state === 'grace') {
@@ -108,14 +112,32 @@ async function applyEvent(payload, eventType, object, mode, at, config) {
     await query(`UPDATE billing_checkouts SET status='completed',creem_customer_id=$1,creem_subscription_id=$2,provider_payload=$3::jsonb,completed_at=$4
       WHERE user_id=$5 AND (request_id=$6 OR creem_checkout_id=$7 OR id=$8)`, [text(objectId(object?.customer)), text(objectId(object?.subscription)), JSON.stringify(object), at, userId, text(object?.request_id), checkoutId, text(object?.metadata?.billingCheckoutId)]);
   }
-  const sub = await upsertSubscription(userId, object, mode, at, config, eventType);
+  const sub = eventType === 'checkout.completed' || eventType.startsWith('subscription.')
+    ? await upsertSubscription(userId, object, mode, at, config, eventType) : null;
   if (sub) await updateEntitlement(userId, sub, eventType, at, config.graceDays);
-  const transaction = eventType.startsWith('transaction.') || eventType.startsWith('refund.') ? object : object?.transaction;
+  const transaction = eventType.startsWith('transaction.') ? object : object?.transaction || object?.last_transaction;
   if (transaction?.id) {
     await query(`INSERT INTO billing_transactions (id,user_id,creem_transaction_id,creem_order_id,creem_subscription_id,creem_customer_id,amount,tax_amount,refunded_amount,currency,status,mode,provider_payload,created_at,updated_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$14)
-      ON CONFLICT (creem_transaction_id) DO UPDATE SET status=EXCLUDED.status,refunded_amount=EXCLUDED.refunded_amount,provider_payload=EXCLUDED.provider_payload,updated_at=EXCLUDED.updated_at`,
-      [crypto.randomUUID(), userId, text(transaction.id), text(objectId(transaction.order)), text(objectId(transaction.subscription)), text(objectId(transaction.customer)), Number(transaction.amount || 0), Number(transaction.tax_amount || 0), Number(transaction.refunded_amount || 0), text(transaction.currency), text(transaction.status), mode, JSON.stringify(transaction), at]);
+      ON CONFLICT (creem_transaction_id) DO UPDATE SET
+        status=CASE WHEN billing_transactions.status='refunded' THEN 'refunded' ELSE EXCLUDED.status END,
+        refunded_amount=GREATEST(billing_transactions.refunded_amount,EXCLUDED.refunded_amount),
+        provider_payload=EXCLUDED.provider_payload,updated_at=EXCLUDED.updated_at`,
+      [crypto.randomUUID(), userId, text(transaction.id), text(objectId(transaction.order)), text(objectId(transaction.subscription) || objectId(object?.subscription) || (eventType.startsWith('subscription.') ? object.id : null)), text(objectId(transaction.customer) || objectId(customer)), Number(transaction.amount || 0), Number(transaction.tax_amount || 0), Number(transaction.refunded_amount || 0), text(transaction.currency || object.refund_currency), text(transaction.status), mode, JSON.stringify(transaction), iso(transaction.created_at) || at]);
+  }
+  if (eventType === 'refund.created' && transaction?.id) {
+    const status = ({ requiresAction: 'requires_action', canceled: 'failed' })[object.status] || (['succeeded', 'failed', 'pending'].includes(object.status) ? object.status : 'pending');
+    await query(`UPDATE billing_refund_requests SET status=$1,provider_refund_id=$2,updated_at=$3
+      WHERE transaction_id IN (SELECT id FROM billing_transactions WHERE creem_transaction_id=$4 AND mode=$5)
+      AND status NOT IN ('succeeded','rejected')`, [status, text(object.id), at, transaction.id, mode]);
+    if (status === 'succeeded') {
+      await query("UPDATE billing_transactions SET refunded_amount=GREATEST(COALESCE(refunded_amount,0),$1),status='refunded' WHERE creem_transaction_id=$2 AND mode=$3", [Number(object.refund_amount || transaction.refunded_amount || 0), transaction.id, mode]);
+      const refundedSubId = text(objectId(object.subscription));
+      if (refundedSubId && ['canceled', 'cancelled', 'expired'].includes(object.subscription?.status)) {
+        await query("UPDATE billing_subscriptions SET status='canceled',canceled_at=$1,updated_at=$1 WHERE creem_subscription_id=$2 AND mode=$3", [at, refundedSubId, mode]);
+        await query("UPDATE user_entitlements SET state='revoked',ends_at=$1,updated_at=$1 WHERE user_id=$2 AND source_sub_id=$3", [at, userId, refundedSubId]);
+      }
+    }
   }
   return 'processed';
 }

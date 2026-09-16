@@ -27,6 +27,38 @@
 .billing-account-card{margin-top:32px;padding:30px;border:1px solid #dcdcdc;border-top:5px solid #315fd9}
 .billing-account-card h2{font-size:30px;margin:8px 0 20px}
 .billing-account-status{display:flex;justify-content:space-between;padding:18px 0;border-block:1px solid #e5e5e5}
+.billing-consent{display:flex;align-items:flex-start;gap:10px;margin:0 0 22px;font-size:14px;line-height:1.5;color:#555}
+.billing-consent input{margin-top:3px;flex:none;width:18px;height:18px;accent-color:#111}
+.billing-consent a,.billing-renewal a{color:#111;text-underline-offset:3px}
+.billing-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;margin:22px 0}
+.billing-facts dt{font-size:14px;color:#666;margin-bottom:6px}
+.billing-facts dd{margin:0;font-size:19px;font-weight:700}
+.billing-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.billing-actions .primary,.billing-actions .ghost,.billing-history .ghost,.billing-section-heading>.ghost{width:auto;min-height:44px;padding:10px 18px;font-size:14px}
+.billing-history{margin-top:34px;padding-top:24px;border-top:1px solid #ddd}
+.billing-history h3{margin:0 0 16px;font-size:22px;letter-spacing:-.025em}
+.billing-history article{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 0;border-bottom:1px solid #e5e5e5}
+.billing-history article>div{display:flex;flex-direction:column;gap:6px;min-width:0}
+.billing-history article span{font-size:14px;color:#666;overflow-wrap:anywhere}
+.billing-history .billing-renewal{margin-top:0}
+.dialog-content.billing-confirm{width:min(92vw,520px);padding:30px;border:1px solid #111;border-radius:0;max-height:90dvh;overflow-y:auto}
+.billing-confirm h2{margin:0 0 14px;font-size:28px;letter-spacing:-.035em}
+.billing-confirm>p{font-size:16px;line-height:1.55;color:#555;margin-bottom:24px}
+.billing-confirm .billing-actions{justify-content:flex-end}
+.billing-confirm textarea,.refund-reason textarea{display:block;width:100%;box-sizing:border-box;min-height:120px;border:1px solid #bbb;border-radius:0;padding:12px;font:inherit;resize:vertical}
+.billing-section-heading{display:flex;align-items:center;justify-content:space-between;gap:20px}
+.admin-refunds{margin-top:58px;padding-top:34px;border-top:1px solid #111}
+.admin-refunds h2{margin:10px 0 22px;font-size:30px;letter-spacing:-.03em}
+.refund-review-list{list-style:none;padding:0;margin:24px 0}
+.refund-review-list li{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:22px 0;border-bottom:1px solid #ddd}
+.refund-review-list li>div:first-child{min-width:0;max-width:650px;overflow-wrap:anywhere}
+.refund-review-list strong,.refund-review-list span{display:block}
+.refund-review-list span{margin-top:5px;color:#666;font-size:14px}
+.refund-review-list p{margin:10px 0 0;line-height:1.5;font-size:15px}
+.refund-reason{display:block;font-weight:600}
+.refund-reason textarea{margin-top:10px;font-weight:400}
+.billing-error{color:#a53e3e}
+@media(max-width:600px){.billing-facts{gap:16px}.billing-account-status{gap:16px}.billing-history article,.refund-review-list li{align-items:flex-start;flex-direction:column}.billing-history article .ghost{margin-top:4px}.billing-confirm .billing-actions{justify-content:flex-start}.dialog-content.billing-confirm,.dialog-content.admin-dialog{padding:24px}}
 .billing-result{min-height:70vh;padding-top:130px}
 .legal-page{max-width:920px}
 .legal-page h1{font-size:clamp(36px,5vw,64px)}
@@ -75,3 +107,6 @@
 .admin-query-table th{color:#666;font-size:12px;letter-spacing:.07em;text-transform:uppercase}
 @media(max-width:760px){.billing-page,.billing-result,.admin-page{padding:40px 20px 72px}.admin-grid,.admin-grid-3,.pricing-layout{grid-template-columns:1fr;gap:24px}.billing-hero h1,.billing-result h1,.admin-page h1{font-size:36px}.pricing-card{padding:22px}.billing-cycle button{min-width:0;flex:1}}
 @media(max-width:760px){.admin-candidate-form,.admin-collection-grid{grid-template-columns:1fr}.admin-candidate-notes{grid-column:auto}}
+.legal-page .cookie-list{padding-left:22px;color:#666;line-height:1.7}
+.legal-page .cookie-list li{margin:12px 0;overflow-wrap:anywhere}
+.legal-page #cookies{scroll-margin-top:120px}

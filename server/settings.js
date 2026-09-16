@@ -47,6 +47,7 @@ export function defaultSettings() {
   const mode = modeValue(process.env.CREEM_MODE);
   return {
     public: {
+      authentication: { googleEnabled: false, googleClientId: '' },
       billing: {
         enabled: false,
         mode,
@@ -66,7 +67,7 @@ export function defaultSettings() {
       contact: { email: process.env.CONTACT_EMAIL || '' },
       social: { x: safeUrl(process.env.SOCIAL_X_URL), facebook: safeUrl(process.env.SOCIAL_FACEBOOK_URL), telegram: safeUrl(process.env.SOCIAL_TELEGRAM_URL) }
     },
-    secret: { creemApiKey: process.env.CREEM_API_KEY || '', creemWebhookSecret: process.env.CREEM_WEBHOOK_SECRET || '', firecrawlApiKey: process.env.FIRECRAWL_API_KEY || '' }
+    secret: { creemApiKey: process.env.CREEM_API_KEY || '', creemWebhookSecret: process.env.CREEM_WEBHOOK_SECRET || '', firecrawlApiKey: process.env.FIRECRAWL_API_KEY || '', googleClientSecret: '' }
   };
 }
 
@@ -79,6 +80,7 @@ export async function getSettings() {
   const { currency: _c, weeklyPrice: _w, monthlyPrice: _m, weeklyProductId: _wp, ...storedBilling } = stored.billing || {};
   return {
     public: {
+      authentication: { ...defaults.public.authentication, ...(stored.authentication || {}) },
       billing: { ...defaults.public.billing, ...storedBilling, prices: normalizePrices(stored.billing?.prices || legacyPrices(stored.billing), defaults.public.billing.prices) },
       collection: { ...defaults.public.collection, ...(stored.collection || {}) },
       contact: { ...defaults.public.contact, ...(stored.contact || {}) },
@@ -93,6 +95,10 @@ export async function saveSettings(input) {
   const billing = input?.billing || {}, collection = input?.collection || {}, contact = input?.contact || {}, social = input?.social || {}, secrets = input?.secrets || {};
   const mode = modeValue(billing.mode ?? current.public.billing.mode);
   const publicData = {
+    authentication: {
+      googleEnabled: input?.authentication?.googleEnabled === undefined ? current.public.authentication.googleEnabled : Boolean(input.authentication.googleEnabled),
+      googleClientId: String(input?.authentication?.googleClientId ?? current.public.authentication.googleClientId).trim().slice(0, 250)
+    },
     billing: {
       enabled: Boolean(billing.enabled), mode,
       prices: normalizePrices(billing.prices, current.public.billing.prices),
@@ -108,6 +114,7 @@ export async function saveSettings(input) {
     social: { x: safeUrl(social.x), facebook: safeUrl(social.facebook), telegram: safeUrl(social.telegram) }
   };
   const secret = {
+    googleClientSecret: secrets.googleClientSecret === undefined ? current.secret.googleClientSecret : String(secrets.googleClientSecret || '').trim(),
     creemApiKey: secrets.creemApiKey === undefined ? current.secret.creemApiKey : String(secrets.creemApiKey || '').trim(),
     creemWebhookSecret: secrets.creemWebhookSecret === undefined ? current.secret.creemWebhookSecret : String(secrets.creemWebhookSecret || '').trim(),
     firecrawlApiKey: secrets.firecrawlApiKey === undefined ? current.secret.firecrawlApiKey : String(secrets.firecrawlApiKey || '').trim()
@@ -115,7 +122,7 @@ export async function saveSettings(input) {
   const now = new Date().toISOString();
   await query(`INSERT INTO app_settings (key,public_data,secret_data,updated_at) VALUES ($1,$2::jsonb,$3,$4)
     ON CONFLICT (key) DO UPDATE SET public_data=EXCLUDED.public_data,secret_data=EXCLUDED.secret_data,updated_at=EXCLUDED.updated_at`, [SETTING_KEY, JSON.stringify(publicData), encrypt(secret), now]);
-  return { public: publicData, configured: Boolean(secret.creemApiKey && secret.creemWebhookSecret), secretFlags: { creemApiKey: Boolean(secret.creemApiKey), creemWebhookSecret: Boolean(secret.creemWebhookSecret), firecrawlApiKey: Boolean(secret.firecrawlApiKey) } };
+  return { public: publicData, configured: Boolean(secret.creemApiKey && secret.creemWebhookSecret), secretFlags: { creemApiKey: Boolean(secret.creemApiKey), creemWebhookSecret: Boolean(secret.creemWebhookSecret), firecrawlApiKey: Boolean(secret.firecrawlApiKey), googleClientSecret: Boolean(secret.googleClientSecret) } };
 }
 
 export async function publicSettings() {

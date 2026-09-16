@@ -3,6 +3,7 @@ import { authUser, isAdminEmail } from './auth.js';
 import { getSettings, saveSettings } from './settings.js';
 import { TYPES } from './catalog.js';
 import { performanceSummary } from './performance.js';
+import { googleCallbackUrl } from './google-auth.js';
 
 // Administrators are ordinary accounts whose email is listed in ADMIN_EMAILS
 // (config.json admin.emails). There is no separate token sign-in.
@@ -26,9 +27,9 @@ export function registerAdminRoutes(app) {
     const user = await authUser(req);
     res.json({ admin: Boolean(user && isAdminEmail(user.email)), signedIn: Boolean(user), email: user?.email || null });
   });
-  app.get('/api/admin/settings', requireAdmin, async (_req, res) => {
+  app.get('/api/admin/settings', requireAdmin, async (req, res) => {
     const settings = await getSettings();
-    res.json({ settings: settings.public, configured: Boolean(settings.secret.creemApiKey && settings.secret.creemWebhookSecret), secretFlags: { creemApiKey: Boolean(settings.secret.creemApiKey), creemWebhookSecret: Boolean(settings.secret.creemWebhookSecret), firecrawlApiKey: Boolean(settings.secret.firecrawlApiKey) } });
+    res.json({ settings: settings.public, googleCallbackUrl: googleCallbackUrl(req), configured: Boolean(settings.secret.creemApiKey && settings.secret.creemWebhookSecret), secretFlags: { creemApiKey: Boolean(settings.secret.creemApiKey), creemWebhookSecret: Boolean(settings.secret.creemWebhookSecret), firecrawlApiKey: Boolean(settings.secret.firecrawlApiKey), googleClientSecret: Boolean(settings.secret.googleClientSecret) } });
   });
   app.put('/api/admin/settings', requireAdmin, async (req, res) => res.json(await saveSettings(req.body)));
   app.get('/api/admin', requireAdmin, async (_req, res) => {

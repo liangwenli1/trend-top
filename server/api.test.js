@@ -93,6 +93,8 @@ test('email-code registration, login, and account-managed digest cover all six t
     assert.equal((await request('/api/auth/me', 'GET', undefined, true)).data.user.email, email);
     const filters = await request('/api/subscription-filters?types=skill,plugin');
     assert.ok(filters.data.topics.includes('ocr'));
+    const typeFilters = await Promise.all(['skill', 'plugin'].map(type => request(`/api/${type}/filters`)));
+    assert.deepEqual(filters.data.topics, [...new Set(typeFilters.flatMap(result => result.data.topics))].sort());
     const types = ['skill', 'plugin', 'agent', 'components', 'website', 'github-repo'];
     const saved = await request('/api/subscription', 'PUT', { types, boards: ['hot'], languages: [], topics: [], sendHour: 9, timezone: 'UTC', locale: 'en' }, true);
     assert.equal(saved.status, 200);
@@ -106,9 +108,21 @@ test('email-code registration, login, and account-managed digest cover all six t
     assert.match(mail.html, /\/en\/account/);
     assert.doesNotMatch(mail.html, /\/en\/manage\?token=/);
     assert.equal((await request('/api/subscription/status', 'PATCH', { status: 'paused' }, true)).data.status, 'paused');
+    const normalized = await request('/api/subscription', 'PUT', { types, boards: ['hot'], languages: [], topics: ['API', 'apis', 'public-api', 'public'], sendHour: 9, timezone: 'UTC', locale: 'en' }, true);
+    assert.equal(normalized.status, 200);
+    assert.deepEqual(normalized.data.subscription.topics, ['api']);
+    assert.equal(normalized.data.subscription.status, 'paused');
     assert.equal((await request('/api/auth/logout', 'POST', {}, true)).status, 200);
     assert.equal((await request('/api/subscription', 'GET', undefined, true)).status, 401);
     assert.equal((await request('/api/auth/login', 'POST', { email, password })).status, 200);
     assert.equal((await request('/api/subscription', 'GET', undefined, true)).data.subscription.status, 'paused');
+    const otherSession = cookie;
+    assert.equal((await request('/api/auth/login', 'POST', { email, password })).status, 200);
+    assert.equal((await request('/api/auth/password/change', 'POST', { currentPassword: 'wrong', password: 'a replacement password' }, true)).status, 401);
+    assert.equal((await request('/api/auth/password/change', 'POST', { currentPassword: password, password: 'a replacement password' }, true)).status, 200);
+    assert.equal((await request('/api/auth/me', 'GET', undefined, true)).data.user.email, email);
+    assert.equal((await (await fetch(base + '/api/auth/me', { headers: { Cookie: otherSession } })).json()).user, null);
+    assert.equal((await request('/api/auth/login', 'POST', { email, password })).status, 401);
+    assert.equal((await request('/api/auth/login', 'POST', { email, password: 'a replacement password' })).status, 200);
   } finally { server.close(); }
 });

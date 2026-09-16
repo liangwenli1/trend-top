@@ -8,11 +8,12 @@ delete process.env.DATABASE_URL;
 process.env.DATA_MODE = 'demo';
 process.env.PGLITE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pulse-catalog-'));
 
-const { ready } = await import('./db.js');
+const { ready, one, query } = await import('./db.js');
 const {
   getTypeSummary, getCatalogRankings, getCatalogChart, getCatalogItem,
-  getCategory, getCompare, searchCatalog
+  getCategory, getCompare, searchCatalog, getCatalogFilters
 } = await import('./catalog.js');
+const { canonicalTopic, normalizeTopics } = await import('../shared/topics.js');
 await ready;
 
 test('catalog exposes six types and demo assets', async () => {
@@ -69,4 +70,38 @@ test('github-repo catalog still ranks live demo repos', async () => {
   assert.ok(chart.bars.length > 0);
   const combined = await getCatalogChart('github-repo', { board: 'hot', period: 'week', includeRanking: '1' });
   assert.ok(combined.ranking.items.length > 0);
+});
+
+test('topic aliases agree in JavaScript and SQL without merging related concepts', async () => {
+  const samples = ['API', ' apis ', 'public-api', 'public-apis', 'public', 'software', 'ai_agent', 'AI agents', 'mcp-servers', 'next.js', 'golang', 'front-end', 'ai', 'llm', 'react', 'components', 'C++', '--web---tools--'];
+  const result = await query('SELECT value, canonical_topic(value) AS canonical FROM jsonb_array_elements_text($1::jsonb) AS value', [JSON.stringify(samples)]);
+  assert.deepEqual(result.rows.map(row => row.canonical), samples.map(canonicalTopic));
+  assert.deepEqual(normalizeTopics(['api', 'public-apis', 'apis', 'public', 'AI', 'llm', 'ai']), ['api', 'ai', 'llm']);
+  assert.deepEqual(normalizeTopics(['react', 'components']), ['react', 'components']);
+});
+
+test('existing raw topics deduplicate in detail, facets and alias-filtered rankings', async () => {
+  const raw = ['api', 'public-apis', 'public-api', 'public', 'apis', 'security', 'SECURITY', 'llm'];
+  for (const [type, table, id] of [['skill', 'assets', 'anthropic-pdf'], ['github-repo', 'repos', 'modelcontextprotocol/servers']]) {
+    const original = await one(`SELECT * FROM ${table} WHERE ${table === 'assets' ? 'slug' : 'full_name'}=$1`, [id]);
+    assert.ok(original);
+    try {
+      await query(`UPDATE ${table} SET topics=$1::jsonb WHERE id=$2`, [JSON.stringify(raw), original.id]);
+      const detail = await getCatalogItem(type, table === 'assets' ? id : original.id);
+      assert.deepEqual(new Set(detail.topics), new Set(['api', 'security', 'llm']));
+      const filters = await getCatalogFilters(type);
+      assert.ok(filters.topics.includes('api'));
+      assert.ok(!filters.topics.some(topic => ['apis', 'public-api', 'public-apis', 'public'].includes(topic)));
+      for (const topic of ['api', 'public-apis']) {
+        const ranking = await getCatalogRankings(type, { topic, board: 'stars', limit: 100 });
+        assert.ok(ranking.items.some(item => String(item.id) === String(original.id)));
+      }
+      const multi = await getCatalogRankings(type, { topics: ['public-api', 'unknown-topic'], board: 'stars', limit: 100 });
+      assert.ok(multi.items.some(item => String(item.id) === String(original.id)));
+      // Preserve source evidence; presentation changes do not destroy historical tags.
+      assert.deepEqual((await one(`SELECT topics FROM ${table} WHERE id=$1`, [original.id])).topics, raw);
+    } finally {
+      await query(`UPDATE ${table} SET topics=$1::jsonb WHERE id=$2`, [JSON.stringify(original.topics), original.id]);
+    }
+  }
 });

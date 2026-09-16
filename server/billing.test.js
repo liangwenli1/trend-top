@@ -13,14 +13,25 @@ process.env.AUTH_SECRET = 'test-auth-secret-with-enough-entropy';
 process.env.ADMIN_EMAILS = 'admin@example.invalid';
 
 const nativeFetch = globalThis.fetch;
+let cancellationCalls = 0, refundCalls = 0;
 globalThis.fetch = (input, options) => {
+  if (String(input).endsWith('/v1/subscriptions/sub_1/cancel')) {
+    cancellationCalls++;
+    assert.deepEqual(JSON.parse(options.body), { mode: 'scheduled', onExecute: 'cancel' });
+    return Promise.resolve(Response.json({ id: 'sub_1', status: 'scheduled_cancel' }));
+  }
+  if (String(input).endsWith('/v1/refunds')) {
+    refundCalls++;
+    assert.deepEqual(JSON.parse(options.body), { transaction_id: 'tran_1' });
+    return Promise.resolve(Response.json({ id: 'ref_1', status: 'pending' }));
+  }
   if (String(input).startsWith('https://test-api.creem.io/v1/checkouts')) return Promise.resolve(new Response(JSON.stringify({ id: 'ch_test_1', status: 'pending', checkout_url: 'https://checkout.creem.io/ch_test_1' }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
   if (String(input).startsWith('https://test-api.creem.io/v1/customers/billing')) return Promise.resolve(new Response(JSON.stringify({ customer_portal_link: 'https://creem.io/my-orders/login/test' }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
   return nativeFetch(input, options);
 };
 
 const { app } = await import('./index.js');
-const { one } = await import('./db.js');
+const { one, query } = await import('./db.js');
 
 test('admin configures one Pro tier, checkout and signed webhook activate it idempotently', async () => {
   const server = app.listen(0);
@@ -80,6 +91,55 @@ test('admin configures one Pro tier, checkout and signed webhook activate it ide
     assert.equal(Number((await one('SELECT COUNT(*) AS n FROM creem_webhook_events')).n), 1);
     const portal = await call('/api/billing/portal', 'POST', {}, userCookie);
     assert.equal(portal.data.portalUrl, 'https://creem.io/my-orders/login/test');
+    const preferences = { types: ['skill','github-repo'], boards: ['hot'], languages: ['Python'], topics: ['ai'], sendHour: 9, timezone: 'UTC', locale: 'en' };
+    assert.equal((await call('/api/subscription', 'PUT', preferences, userCookie)).status, 200);
+    await call('/api/subscription/status', 'PATCH', { status: 'paused' }, userCookie);
+    assert.equal((await call('/api/subscription', 'PUT', { ...preferences, sendHour: 10 }, userCookie)).data.subscription.status, 'paused');
+    assert.equal((await call('/api/billing/cancel', 'POST', {}, adminCookie)).status, 404);
+    const canceled = await call('/api/billing/cancel', 'POST', {}, userCookie);
+    assert.equal(canceled.status, 200);
+    assert.equal(canceled.data.billing.subscription.status, 'scheduled_cancel');
+    assert.equal(canceled.data.billing.entitlements[0].state, 'active');
+    assert.equal((await call('/api/billing/cancel', 'POST', {}, userCookie)).data.duplicate, true);
+    assert.equal(cancellationCalls, 1);
+    assert.equal((await call('/api/subscription', 'GET', undefined, userCookie)).data.subscription.status, 'paused');
+    const sendEvent = async (id, eventType, object) => {
+      const body = JSON.stringify({ id, eventType, mode: 'test', object });
+      const response = await nativeFetch(base + '/api/webhooks/creem', { method: 'POST', headers: { 'Content-Type': 'application/json', 'creem-signature': crypto.createHmac('sha256', 'webhook_test_secret').update(body).digest('hex') }, body });
+      assert.equal(response.status, 200); return response.json();
+    };
+    const transaction = { id: 'tran_1', status: 'completed', amount: 7900, tax_amount: 790, currency: 'USD', created_at: Date.now() - 86400000, customer: { id: 'cust_1', email }, subscription: 'sub_1' };
+    await sendEvent('evt_payment', 'transaction.completed', transaction);
+    const payments = (await call('/api/billing/me', 'GET', undefined, userCookie)).data.transactions;
+    assert.equal(payments.length, 1);
+    assert.equal(payments[0].refundEligible, true);
+    assert.equal(payments[0].taxAmount, 790);
+    assert.equal((await call('/api/billing/refund-requests', 'POST', { transactionId: payments[0].id, reason: 'Service was not provided as described.' }, adminCookie)).status, 404);
+    const requested = await call('/api/billing/refund-requests', 'POST', { transactionId: payments[0].id, reason: 'Service was not provided as described.' }, userCookie);
+    assert.equal(requested.status, 201);
+    assert.equal(requested.data.refundRequest.status, 'requested');
+    assert.equal((await call('/api/billing/refund-requests', 'POST', { transactionId: payments[0].id, reason: 'Service was not provided as described.' }, userCookie)).data.duplicate, true);
+    const reviewPath = `/api/admin/refund-requests/${requested.data.refundRequest.id}/review`;
+    assert.equal((await call(reviewPath, 'POST', { action: 'approve' }, userCookie)).status, 403);
+    assert.equal((await call('/api/admin/refund-requests', 'GET', undefined, adminCookie)).data.requests[0].amount, 8690);
+    assert.equal((await call(reviewPath, 'POST', { action: 'approve', note: 'Verified the delivery issue.' }, adminCookie)).data.refundRequest.status, 'pending');
+    assert.equal((await call(reviewPath, 'POST', { action: 'approve' }, adminCookie)).status, 409);
+    assert.equal(refundCalls, 1);
+    await sendEvent('evt_refund', 'refund.created', { id: 'ref_1', status: 'succeeded', refund_amount: 8690, refund_currency: 'USD', transaction: { ...transaction, status: 'refunded', refunded_amount: 8690 }, customer: transaction.customer, subscription: { id: 'sub_1', status: 'canceled' } });
+    const refunded = (await call('/api/billing/me', 'GET', undefined, userCookie)).data;
+    assert.equal(refunded.refundRequests[0].status, 'succeeded');
+    assert.equal(refunded.transactions[0].refundedAmount, 8690);
+    assert.equal(refunded.subscription.status, 'canceled');
+    assert.equal(refunded.entitlements[0].state, 'revoked');
+    assert.equal(Number((await one('SELECT COUNT(*) AS n FROM billing_transactions')).n), 1);
+    await sendEvent('evt_old_transaction', 'transaction.completed', transaction);
+    assert.equal((await one("SELECT status,refunded_amount FROM billing_transactions WHERE creem_transaction_id='tran_1'")).status, 'refunded');
+    assert.equal((await call('/api/subscription', 'GET', undefined, userCookie)).data.subscription.status, 'paused');
+    await query("UPDATE billing_transactions SET created_at=$1,status='completed',refunded_amount=0 WHERE creem_transaction_id='tran_1'", [new Date(Date.now() - 8 * 86400000).toISOString()]);
+    assert.equal((await call('/api/billing/me', 'GET', undefined, userCookie)).data.transactions[0].refundEligible, false);
+    await sendEvent('evt_subscription_update', 'subscription.update', { ...JSON.parse(payload).object.subscription, status: 'expired', updated_at: new Date().toISOString() });
+    assert.equal((await call('/api/billing/me', 'GET', undefined, userCookie)).data.subscription.status, 'expired');
+    assert.equal((await call('/api/billing/me', 'GET', undefined, userCookie)).data.entitlements[0].state, 'revoked');
   } finally { server.close(); globalThis.fetch = nativeFetch; }
 });
 

@@ -18,7 +18,7 @@ export const adminEmails = () => new Set(
     .split(',').map(value => value.trim().toLowerCase()).filter(Boolean)
 );
 export const isAdminEmail = email => adminEmails().has(normalizeEmail(email));
-const publicUser = user => user ? { id: user.id, email: user.email, locale: user.locale, isAdmin: isAdminEmail(user.email) } : null;
+export const publicUser = user => user ? { id: user.id, email: user.email, locale: user.locale, isAdmin: isAdminEmail(user.email), passwordEnabled: user.password_enabled !== false } : null;
 
 function codeSecret() {
   const secret = process.env.AUTH_SECRET || process.env.ADMIN_TOKEN;
@@ -36,7 +36,7 @@ function equalHex(a, b) {
   return crypto.timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
 }
 
-async function hashPassword(password) {
+export async function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
   const result = await scrypt(password, salt, 64);
   return `${salt}:${result.toString('hex')}`;
@@ -59,19 +59,19 @@ function sessionCookie(req, token, maxAge) {
   return `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? '; Secure' : ''}`;
 }
 
-async function createSession(req, res, userId) {
+export async function createSession(req, res, userId) {
   const token = crypto.randomBytes(32).toString('hex');
   const created = new Date();
   const expires = new Date(created.getTime() + SESSION_DAYS * 86400000);
   await query('INSERT INTO auth_sessions (token_hash, user_id, expires_at, created_at) VALUES ($1,$2,$3,$4)', [digest(token), userId, expires.toISOString(), created.toISOString()]);
-  res.set('Set-Cookie', sessionCookie(req, token, SESSION_DAYS * 86400));
+  res.append('Set-Cookie', sessionCookie(req, token, SESSION_DAYS * 86400));
 }
 
 export async function authUser(req) {
   const token = cookieValue(req);
   if (!/^[a-f0-9]{64}$/.test(token)) return null;
   return one(
-    `SELECT u.id, u.email, u.locale FROM auth_sessions s
+    `SELECT u.id, u.email, u.locale, u.password_enabled FROM auth_sessions s
      JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = $1 AND s.expires_at > $2`,
     [digest(token), new Date().toISOString()]
@@ -92,7 +92,7 @@ export async function requireUser(req, res, next) {
   next();
 }
 
-function rate(req, res, next) {
+export function authRate(req, res, next) {
   const key = req.ip || 'local';
   const now = Date.now();
   const recent = (attemptsByIp.get(key) || []).filter(time => now - time < 3600000);
@@ -101,6 +101,7 @@ function rate(req, res, next) {
   attemptsByIp.set(key, recent);
   next();
 }
+const rate = authRate;
 
 async function sendCode(email, locale, purpose, passwordHash) {
   const existing = await one('SELECT sent_at FROM auth_codes WHERE email = $1 AND purpose = $2', [email, purpose]);
@@ -142,6 +143,21 @@ export function registerAuthRoutes(app) {
     res.json({ user: publicUser(user) });
   });
 
+  app.get('/api/auth/methods', requireUser, async (req, res) => {
+    const google = await one("SELECT email FROM auth_identities WHERE provider='google' AND user_id=$1", [req.user.id]);
+    res.json({ passwordEnabled: req.user.password_enabled !== false, google: google ? { email: google.email } : null });
+  });
+
+  app.post('/api/auth/password/change', requireUser, rate, async (req, res) => {
+    const password = String(req.body?.password || ''), current = String(req.body?.currentPassword || '');
+    if (password.length < 10 || password.length > 128 || current.length > 128) return respondError(res, 400, 'Use a password of 10–128 characters');
+    const stored = await one('SELECT password_hash,password_enabled FROM users WHERE id=$1', [req.user.id]);
+    if (stored.password_enabled === false || !await checkPassword(current, stored.password_hash)) return respondError(res, 401, 'Current password is incorrect');
+    await query('UPDATE users SET password_hash=$1 WHERE id=$2', [await hashPassword(password), req.user.id]);
+    await query('DELETE FROM auth_sessions WHERE user_id=$1 AND token_hash<>$2', [req.user.id, digest(cookieValue(req))]);
+    res.json({ ok: true });
+  });
+
   app.post('/api/auth/register', rate, async (req, res) => {
     const email = normalizeEmail(req.body?.email), password = String(req.body?.password || ''), locale = req.body?.locale === 'en' ? 'en' : 'zh';
     if (!emailRe.test(email) || email.length > 254 || password.length < 10 || password.length > 128) return respondError(res, 400, 'Enter a valid email and a password of 10–128 characters');
@@ -172,8 +188,8 @@ export function registerAuthRoutes(app) {
 
   app.post('/api/auth/login', rate, async (req, res) => {
     const email = normalizeEmail(req.body?.email), password = String(req.body?.password || '');
-    const user = await one('SELECT id, email, locale, password_hash FROM users WHERE email = $1', [email]);
-    if (!user || !await checkPassword(password, user.password_hash)) return respondError(res, 401, 'Incorrect email or password');
+    const user = await one('SELECT id, email, locale, password_hash, password_enabled FROM users WHERE email = $1', [email]);
+    if (!user || user.password_enabled === false || password.length > 128 || !await checkPassword(password, user.password_hash)) return respondError(res, 401, 'Incorrect email or password');
     await createSession(req, res, user.id);
     res.json({ ok: true, user: publicUser(user) });
   });
@@ -202,7 +218,7 @@ export function registerAuthRoutes(app) {
     if (!record) return respondError(res, 400, 'Code expired or incorrect');
     const user = await one('SELECT id FROM users WHERE email = $1', [email]);
     if (!user) return respondError(res, 400, 'Code expired or incorrect');
-    await query('UPDATE users SET password_hash = $1 WHERE id = $2', [await hashPassword(password), user.id]);
+    await query('UPDATE users SET password_hash = $1, password_enabled=TRUE WHERE id = $2', [await hashPassword(password), user.id]);
     await query('DELETE FROM auth_sessions WHERE user_id = $1', [user.id]);
     await query('DELETE FROM auth_codes WHERE email = $1 AND purpose = $2', [email, 'reset']);
     res.json({ ok: true });
