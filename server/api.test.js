@@ -14,6 +14,28 @@ const { digest, decryptManageToken } = await import('./jobs.js');
 await ready;
 const {attachTestPro,grantTestPro}=await import('./test-pro-fixture.js');
 
+test('dated email charts keep their window when later observations arrive', async () => {
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const repo = await one("SELECT id FROM repos WHERE source='demo' LIMIT 1");
+  try {
+    for (let day = 1; day <= 30; day++) await query("INSERT INTO daily_metrics (repo_id,day,source,star_created) VALUES ($1,$2,'demo',$3)", [repo.id, `1900-01-${String(day).padStart(2,'0')}`, day]);
+    const url = `${base}/api/digest-chart/github-repo/${repo.id}.png?days=30&end=1900-01-30`;
+    const before = await fetch(url);
+    assert.equal(before.status, 200);
+    assert.match(before.headers.get('content-type'), /image\/png/);
+    const image = Buffer.from(await before.arrayBuffer());
+    await query("INSERT INTO daily_metrics (repo_id,day,source,star_created) VALUES ($1,'1900-01-31','demo',999999)", [repo.id]);
+    assert.deepEqual(Buffer.from(await (await fetch(url)).arrayBuffer()), image);
+    assert.equal((await fetch(`${base}/api/digest-chart/github-repo/${repo.id}.png?end=1900-02-30`)).status, 400);
+    assert.equal((await fetch(`${base}/api/digest-chart/github-repo/${repo.id}.png?end=2999-01-01`)).status, 400);
+    assert.equal((await fetch(`${base}/api/digest-chart/github-repo/${repo.id}.png?days=30.9&end=1900-01-30`)).status, 200);
+  } finally {
+    await query("DELETE FROM daily_metrics WHERE repo_id=$1 AND source='demo' AND day BETWEEN '1900-01-01' AND '1900-01-31'", [repo.id]);
+    server.close();
+  }
+});
+
 test('verification gates delivery and management controls the subscription', async () => {
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;

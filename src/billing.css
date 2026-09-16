@@ -12,6 +12,7 @@
 .billing-cycle button[aria-pressed=true]{background:#111;color:#fff}
 .billing-price{font-size:36px;font-weight:800;letter-spacing:-.04em}
 .billing-price small{font-size:15px;font-weight:600;color:#666;letter-spacing:0}
+.billing-price-status{min-height:44px;display:flex;align-items:center;font-size:19px;letter-spacing:0;color:#666}
 .pricing-card ul{list-style:none;padding:0;margin:22px 0 26px}
 .pricing-card li{padding:11px 0;border-top:1px solid #e5e5e5;font-size:15px;font-weight:600;line-height:1.4}
 .pricing-card li:last-child{border-bottom:1px solid #e5e5e5}

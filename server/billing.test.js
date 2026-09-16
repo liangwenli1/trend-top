@@ -66,6 +66,15 @@ test('admin configures one Pro tier, checkout and signed webhook activate it ide
     const zhPlans = await call('/api/billing/plans?locale=zh');
     assert.deepEqual(zhPlans.data.plans.map(plan => [plan.price, plan.currency]), [[68, 'CNY'], [560, 'CNY']]);
     assert.equal((await call('/api/site-settings')).data.billing.weeklyPrice, undefined);
+    const cached = await call('/api/billing/plans?locale=zh');
+    assert.equal(cached.response.headers.get('x-catalog-cache'), 'HIT');
+    await call('/api/admin/settings', 'PUT', { ...configured.data.public, billing: { ...configured.data.public.billing, prices: { ...configured.data.public.billing.prices, zh: { currency: 'CNY', monthly: 0, yearly: 560 } } } }, adminCookie);
+    const changed = await call('/api/billing/plans?locale=zh');
+    assert.equal(changed.response.headers.get('x-catalog-cache'), 'MISS');
+    assert.equal(changed.data.plans[0].price, null);
+    assert.equal(changed.data.plans[0].available, false);
+    assert.equal((await call('/api/billing/plans?locale=en')).data.plans[0].available, true);
+    await call('/api/admin/settings', 'PUT', configured.data.public, adminCookie);
 
     const email = 'buyer@example.invalid', password = 'a secure test password';
     await call('/api/auth/register', 'POST', { email, password, locale: 'en' });

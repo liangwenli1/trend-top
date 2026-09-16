@@ -26,6 +26,8 @@ import { registerAdminRoutes, requireAdmin } from './admin.js';
 import { publicSettings } from './settings.js';
 import { renderGainChart } from './png-chart.js';
 import { lastCompleteDay } from './db.js';
+import { parseChartEnd } from './digest-chart-date.js';
+import { publicResponseCache } from './catalog-cache.js';
 import { performanceMiddleware } from './performance.js';
 
 const app = express();
@@ -36,10 +38,7 @@ registerCreemWebhookRoute(app);
 app.use(express.json({ limit: '20kb' }));
 app.use(performanceMiddleware);
 app.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
-const publicCatalogCache = (_req, res, next) => {
-  res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
-  next();
-};
+const publicCatalogCache = publicResponseCache.middleware;
 const demo = (process.env.DATA_MODE || 'demo') === 'demo';
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const validZone = z => { try { new Intl.DateTimeFormat('en', { timeZone: z }); return true; } catch { return false; } };
@@ -85,7 +84,7 @@ app.get('/api/boards', publicCatalogCache, (_req, res) => res.json({ boards, mod
 registerAuthRoutes(app);
 registerGoogleAuthRoutes(app);
 registerSubscriptionRoutes(app);
-registerBillingRoutes(app);
+registerBillingRoutes(app, { publicCache: publicCatalogCache });
 registerWatchRoutes(app);
 registerRefundRoutes(app);
 registerAdminRoutes(app);
@@ -136,25 +135,33 @@ app.get('/api/:type/items/:id', publicCatalogCache, async (req, res) => {
 // Hosted PNG for the email digest: cumulative new Stars over the last N complete days.
 app.get('/api/digest-chart/:type/:id.png', async (req, res) => {
   if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
-  const days = Math.max(7, Math.min(90, Number(req.query.days) || 30));
+  const days = Math.max(7, Math.min(90, Math.trunc(Number(req.query.days)) || 30));
+  let requestedEnd;
+  try { requestedEnd = parseChartEnd(req.query.end); }
+  catch { return fail(res, 400, 'Invalid chart end date'); }
   let counts = [];
   if (req.params.type === 'github-repo') {
     const repo = await one('SELECT id, created_at FROM repos WHERE id = $1 OR full_name = $2', [Number(req.params.id) || -1, req.params.id]);
     if (!repo) return fail(res, 404, 'Not found');
     if (demo) {
-      const rows = await many("SELECT day, star_created FROM daily_metrics WHERE repo_id = $1 AND source = 'demo' ORDER BY day DESC LIMIT $2", [repo.id, days]);
-      counts = rows.reverse().map(r => r.star_created == null ? null : asNumber(r.star_created));
+      const last = await one("SELECT MAX(day) AS t FROM daily_metrics WHERE repo_id=$1 AND source='demo'", [repo.id]);
+      if (!last?.t) return fail(res, 404, 'Insufficient history');
+      const end = requestedEnd || new Date(`${asDay(last.t)}T00:00:00Z`);
+      const start = new Date(end.getTime() - (days - 1) * 86400000);
+      const rows = await many("SELECT day, star_created FROM daily_metrics WHERE repo_id=$1 AND source='demo' AND day BETWEEN $2::date AND $3::date", [repo.id, asDay(start), asDay(end)]);
+      const byDay = new Map(rows.map(row => [asDay(row.day), row.star_created == null ? null : asNumber(row.star_created)]));
+      counts = Array.from({length:days}, (_, i) => byDay.get(asDay(new Date(start.getTime() + i * 86400000))) ?? null);
     } else {
       const latest = await one("SELECT MAX(sampled_at) AS t FROM snapshots WHERE source = 'github'");
       const endpoint = latest?.t ? new Date(latest.t) : new Date();
-      const series = await getStarSeries(repo.id, lastCompleteDay(endpoint), days, repo.created_at);
+      const series = await getStarSeries(repo.id, requestedEnd || lastCompleteDay(endpoint), days, repo.created_at);
       counts = series.points.map(point => point.count);
     }
   } else {
-    const row = await one('SELECT MAX(day) AS t FROM asset_daily WHERE asset_id = $1 AND star_created IS NOT NULL', [req.params.id]);
+    const row = await one('SELECT MAX(d.day) AS t FROM asset_daily d JOIN assets a ON a.id=d.asset_id WHERE d.asset_id=$1 AND a.type=$2 AND d.star_created IS NOT NULL', [req.params.id, req.params.type]);
     if (!row?.t) return fail(res, 404, 'Not found');
-    const end = new Date(`${asDay(row.t)}T00:00:00Z`), start = new Date(end.getTime() - (days - 1) * 86400000);
-    const rows = await many('SELECT day, star_created FROM asset_daily WHERE asset_id = $1 AND day BETWEEN $2::date AND $3::date', [req.params.id, start.toISOString().slice(0, 10), asDay(row.t)]);
+    const end = requestedEnd || new Date(`${asDay(row.t)}T00:00:00Z`), start = new Date(end.getTime() - (days - 1) * 86400000);
+    const rows = await many('SELECT day, star_created FROM asset_daily WHERE asset_id = $1 AND day BETWEEN $2::date AND $3::date', [req.params.id, asDay(start), asDay(end)]);
     const byDay = new Map(rows.map(r => [asDay(r.day), r.star_created == null ? null : asNumber(r.star_created)]));
     counts = Array.from({ length: days }, (_, i) => byDay.get(new Date(start.getTime() + i * 86400000).toISOString().slice(0, 10)) ?? null);
   }

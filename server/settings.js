@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { asJson, one, query } from './db.js';
+import { publicResponseCache } from './catalog-cache.js';
 
 const SETTING_KEY = 'site';
 const modeValue = value => ['test', 'prod', 'sandbox'].includes(value) ? value : 'test';
@@ -127,6 +128,7 @@ export async function saveSettings(input) {
   const now = new Date().toISOString();
   await query(`INSERT INTO app_settings (key,public_data,secret_data,updated_at) VALUES ($1,$2::jsonb,$3,$4)
     ON CONFLICT (key) DO UPDATE SET public_data=EXCLUDED.public_data,secret_data=EXCLUDED.secret_data,updated_at=EXCLUDED.updated_at`, [SETTING_KEY, JSON.stringify(publicData), encrypt(secret), now]);
+  publicResponseCache.clear();
   return { public: publicData, configured: Boolean(secret.creemApiKey && secret.creemWebhookSecret), secretFlags: { creemApiKey: Boolean(secret.creemApiKey), creemWebhookSecret: Boolean(secret.creemWebhookSecret), firecrawlApiKey: Boolean(secret.firecrawlApiKey), googleClientSecret: Boolean(secret.googleClientSecret) } };
 }
 

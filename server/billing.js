@@ -5,6 +5,7 @@ import { proAccess } from './pro-access.js';
 import { requireUser } from './auth.js';
 import { createCreemCheckout, createCreemPortal, cancelCreemSubscription, creemConfig, creemReady } from './creem-client.js';
 import { transactionSummary } from './refunds.js';
+import { PRO_FEATURES } from '../shared/pro-plan.js';
 
 const positive = value => { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : null; };
 const localeOf = value => value === 'zh' ? 'zh' : 'en';
@@ -18,19 +19,19 @@ const planRows = async (locale = 'en') => {
   {
     key: 'pro_monthly', name: { en: 'Pro Monthly', zh: 'Pro 月付' }, interval: 'month',
     productId: billing.monthlyProductId, price: positive(prices.monthly), currency: prices.currency, priced: priced('monthly'),
-    features: { en: ['Daily digest email across six collections', 'Watchlist with rank and star changes since last visit', 'Growth charts inside every email', 'Language and topic filters', 'Your delivery hour and time zone'], zh: ['覆盖六大类型的每日摘要邮件', '关注列表：距上次访问的名次和 Star 变化', '每封邮件内置增长图表', '按编程语言和主题筛选', '自选发送时间与时区'] }
+    features: PRO_FEATURES
   },
   {
     key: 'pro_yearly', name: { en: 'Pro Yearly', zh: 'Pro 年付' }, interval: 'year',
     productId: billing.yearlyProductId, price: positive(prices.yearly), currency: prices.currency, priced: priced('yearly'),
-    features: { en: ['Daily digest email across six collections', 'Watchlist with rank and star changes since last visit', 'Growth charts inside every email', 'Language and topic filters', 'Your delivery hour and time zone'], zh: ['覆盖六大类型的每日摘要邮件', '关注列表：距上次访问的名次和 Star 变化', '每封邮件内置增长图表', '按编程语言和主题筛选', '自选发送时间与时区'] }
+    features: PRO_FEATURES
   }
   ];
 };
 
 export async function billingPlans(locale = 'en') {
   const configured = await creemReady();
-  return (await planRows(locale)).map(({ productId, priced, ...plan }) => ({ ...plan, available: configured && Boolean(productId && priced) }));
+  return (await planRows(locale)).map(({ productId, priced, ...plan }) => ({ ...plan, available: configured && Boolean(productId && plan.price) }));
 }
 
 const privatePlan = async key => (await planRows()).find(plan => plan.key === key);
@@ -51,8 +52,8 @@ export async function billingSummary(userId) {
   return { access: await proAccess(userId), configured: await creemReady(), mode, customer: customer || null, subscription: serializeSubscription(subscription), ...await transactionSummary(userId, mode), entitlements: entitlements.map(row => ({ featureKey: row.feature_key, state: row.state, planKey: row.plan_key, startsAt: asIso(row.starts_at), endsAt: asIso(row.ends_at) })) };
 }
 
-export function registerBillingRoutes(app) {
-  app.get('/api/billing/plans', async (req, res) => { const config = await creemConfig(); res.json({ mode: config.mode, configured: await creemReady(), locale: localeOf(req.query.locale), plans: await billingPlans(req.query.locale) }); });
+export function registerBillingRoutes(app, { publicCache = (_req, _res, next) => next() } = {}) {
+  app.get('/api/billing/plans', publicCache, async (req, res) => { const config = await creemConfig(); res.json({ mode: config.mode, configured: await creemReady(), locale: localeOf(req.query.locale), plans: await billingPlans(req.query.locale) }); });
   app.get('/api/billing/access', requireUser, async (req,res) => res.json(await proAccess(req.user.id)));
   app.get('/api/billing/me', requireUser, async (req, res) => res.json(await billingSummary(req.user.id)));
   app.post('/api/billing/checkout', requireUser, async (req, res) => {

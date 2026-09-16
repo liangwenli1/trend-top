@@ -3,6 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { loginUrl, safeAccountReturn }  from '../shared/account-paths.js';
 import './billing.css';
 import { pricingCache } from './pricing-data.js';
+import { PRO_FEATURES } from '../shared/pro-plan.js';
 
 const api = async (url, options) => {
   const response = await fetch(url, options);
@@ -35,26 +36,28 @@ export function PricingPage({ l, user, navigate }) {
   const benefits = zh ? [
     ['每日摘要邮件', '在你选定的时区和时间，每天最多一封，覆盖你关注的类型与榜单。'],
     ['关注列表', '关注项目后，可在账户里看到距上次查看关注列表的名次和 Star 变化（周热度榜）。'],
-    ['邮件内置图表', '为领先条目附上紧凑的增长图，不打开网站也能看到势头。'],
+    ['邮件增长图表', '有足够历史时，为领先条目附上增长图；缺少增量会明确说明，不用总 Star 替代。'],
     ['按你的筛选推送', '只推送你关心的编程语言和主题；留空则接收全部。'],
     ['随时调整', '邮件推送设置中暂停、恢复或修改摘要；在套餐与账单页单独管理续订。']
   ] : [
     ['Daily digest email', 'At most one email per day, at the hour and time zone you choose, covering the collections and boards you follow.'],
     ['Watchlist', 'Watch projects, then see rank and star changes since your last watchlist view on the weekly Hot board.'],
-    ['Charts in every email', 'Compact growth charts for the leading items, so you can see momentum without opening the site.'],
+    ['Growth charts in your digest', 'See growth charts when enough history is available. Missing growth is labelled, never replaced with total stars.'],
     ['Filters that follow you', 'Limit the digest to the programming languages and topics you care about, or leave them empty to receive everything.'],
     ['Change it anytime', 'Pause, resume, or edit delivery preferences. Manage paid renewal separately in Plan & billing.']
   ];
   return <main className="billing-page pricing-page"><header className="billing-hero"><p>01 / PRO</p><h1>Trend Top Pro</h1><p>{zh ? '每日摘要邮件是 Pro 功能。按月或按年订阅，自动续费，随时可在账户中取消。' : 'The daily digest email is a Pro feature. Subscribe monthly or yearly; plans renew automatically and can be cancelled from your account at any time.'}</p></header>
-    {!data ? message ? <button type="button" className="ghost" onClick={() => setRetry(value => value + 1)}>{zh ? '重新加载套餐' : 'Retry loading plans'}</button> : <p>{zh ? '正在加载套餐…' : 'Loading plans…'}</p> : <div className="pricing-layout"><article className="pricing-card pricing-single">
+    <div className="pricing-layout"><article className="pricing-card pricing-single" aria-busy={!data && !message}>
       <p className="billing-kicker">PRO / ACCESS</p><h2>Trend Top Pro</h2>
-      <div className="billing-cycle" aria-label={zh ? '计费周期' : 'Billing cycle'}>{data.plans.map(plan => <button key={plan.key} type="button" aria-pressed={cycle === plan.interval} onClick={() => setCycle(plan.interval)}>{plan.interval === 'year' ? (zh ? '年付' : 'Yearly') : (zh ? '月付' : 'Monthly')}</button>)}</div>
-      <div className="billing-price">{money(selected?.price, selected?.currency, l) || (zh ? '等待管理员定价' : 'Awaiting admin price')}<small>{selected?.price ? ` / ${cycle === 'year' ? (zh ? '年' : 'year') : (zh ? '月' : 'month')}` : ''}</small></div>
-      <ul>{(selected?.features?.[l] || []).map(feature => <li key={feature}>{feature}</li>)}</ul>
-      <label className="billing-consent"><input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)}/><span>{zh ? '我已阅读并同意' : 'I have read and agree to the'} <a href={`/${l}/terms`}>{zh ? '服务条款' : 'Terms of Service'}</a> {zh ? '和' : 'and'} <a href={`/${l}/terms#cancellation`}>{zh ? '取消与退款规则' : 'cancellation and refund policy'}</a>{zh ? '。' : '.'}</span></label>
-      <button type="button" className="primary" disabled={!selected?.available || Boolean(busy) || (Boolean(user) && !accepted)} onClick={() => checkout(selected)}>{busy === selected?.key ? '…' : selected?.available ? (user ? (zh ? '使用 Creem 订阅' : 'Subscribe with Creem') : (zh ? '登录后订阅' : 'Sign in to subscribe')) : (zh ? '尚未开放' : 'Not available yet')}</button>
+      <div className="billing-cycle" aria-label={zh ? '计费周期' : 'Billing cycle'}>{['month','year'].map(interval => <button key={interval} type="button" aria-pressed={cycle === interval} onClick={() => setCycle(interval)}>{interval === 'year' ? (zh ? '年付' : 'Yearly') : (zh ? '月付' : 'Monthly')}</button>)}</div>
+      <div className={`billing-price${selected?.price ? '' : ' billing-price-status'}`} role="status">{money(selected?.price, selected?.currency, l) || (!data ? (message ? (zh ? '价格暂不可用' : 'Pricing is temporarily unavailable') : (zh ? '正在加载价格…' : 'Loading price…')) : (zh ? 'Pro 暂未开放' : 'Pro is not available yet'))}<small>{selected?.price ? ` / ${cycle === 'year' ? (zh ? '年' : 'year') : (zh ? '月' : 'month')}` : ''}</small></div>
+      <ul>{(selected?.features?.[l] || PRO_FEATURES[l] || PRO_FEATURES.en).map(feature => <li key={feature}>{feature}</li>)}</ul>
+      {selected?.available && <><label className="billing-consent"><input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)}/><span>{zh ? '我已阅读并同意' : 'I have read and agree to the'} <a href={`/${l}/terms`}>{zh ? '服务条款' : 'Terms of Service'}</a> {zh ? '和' : 'and'} <a href={`/${l}/terms#cancellation`}>{zh ? '取消与退款规则' : 'cancellation and refund policy'}</a>{zh ? '。' : '.'}</span></label>
+      <button type="button" className="primary" disabled={Boolean(busy) || (Boolean(user) && !accepted)} onClick={() => checkout(selected)}>{busy === selected.key ? '…' : user ? (zh ? '使用 Creem 订阅' : 'Subscribe with Creem') : (zh ? '登录后订阅' : 'Sign in to subscribe')}</button></>}
+      {!data && message && <button type="button" className="ghost" onClick={() => setRetry(value => value + 1)}>{zh ? '重新加载价格' : 'Retry loading price'}</button>}
+      {data && !selected?.available && selected?.price && <p className="billing-renewal">{zh ? 'Pro 订阅暂未开放。' : 'Pro subscriptions are not available yet.'}</p>}
     </article>
-    <section className="pricing-benefits" aria-labelledby="pricing-benefits-title"><h2 id="pricing-benefits-title">{zh ? '订阅 Pro 能获得什么' : 'What Pro gives you'}</h2><dl>{benefits.map(([title, body]) => <div key={title}><dt>{title}</dt><dd>{body}</dd></div>)}</dl></section></div>}
+    <section className="pricing-benefits" aria-labelledby="pricing-benefits-title"><h2 id="pricing-benefits-title">{zh ? '订阅 Pro 能获得什么' : 'What Pro gives you'}</h2><dl>{benefits.map(([title, body]) => <div key={title}><dt>{title}</dt><dd>{body}</dd></div>)}</dl></section></div>
     <p className="billing-renewal">{zh ? '结账前会显示最终金额。取消 Pro 后，摘要会在当前付费周期结束时停止；账户和网站浏览不受影响。' : 'The final amount is shown before checkout. If you cancel Pro, the digest stops at the end of the paid period; your account and site access are unaffected.'}</p>
     <p className="billing-renewal">{zh ? '付款由 Creem 作为登记商户（merchant of record）处理；收据由 Creem 发送，退款请求见服务条款。' : 'Payments are processed by Creem as the merchant of record. Creem issues the receipt; refund requests are described in the Terms of Service.'}</p>
     {message && <p className="form-message" role="status">{message}</p>}

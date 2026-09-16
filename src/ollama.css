@@ -973,10 +973,13 @@ button.tag-btn{font:inherit;font-size:13px;font-weight:650;line-height:1.2;appea
 .delivery-fields{margin:0;padding:0;border:0}
 .subscribe-form fieldset:disabled{opacity:.6}
 @media(max-width:700px){.related-cards{grid-template-columns:1fr}.related-card{padding:20px}.related-pagination{gap:12px}.subscribe-cta-button{white-space:normal}}
-.filters.filters-primary { grid-template-columns: minmax(240px, 1.4fr) repeat(3, minmax(160px, 1fr)); }
-.filters.filters-secondary { grid-template-columns: repeat(3, minmax(160px, 1fr)); margin: 16px 0 0; }
+.filters.filters-primary { grid-template-columns: minmax(240px, 1.3fr) repeat(5, minmax(150px, 1fr)); }
+.filters.filters-secondary { grid-template-columns: minmax(150px, 280px); margin: 16px 0 0; }
 .additional-filters { margin: 0 0 24px; border-top: 1px solid var(--line, #ddd); padding-top: 12px; }
 .additional-filters > summary { cursor: pointer; width: fit-content; font-weight: 600; padding: 8px 0; }
+@media (max-width: 1260px) {
+  .filters.filters-primary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 @media (max-width: 980px) {
   .filters.filters-primary, .filters.filters-secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

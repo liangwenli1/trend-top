@@ -4,6 +4,7 @@ import { getSettings, saveSettings } from './settings.js';
 import { TYPES } from './catalog.js';
 import { performanceSummary } from './performance.js';
 import { googleCallbackUrl } from './google-auth.js';
+import { publicResponseCache } from './catalog-cache.js';
 
 // Administrators are ordinary accounts whose email is listed in ADMIN_EMAILS
 // (config.json admin.emails). There is no separate token sign-in.
@@ -41,7 +42,7 @@ export function registerAdminRoutes(app) {
       query('SELECT * FROM deliveries ORDER BY id DESC LIMIT 30').then(r => r.rows),
       query('SELECT * FROM classification_reports ORDER BY id DESC LIMIT 30').then(r => r.rows)
     ]);
-    res.json({ runs, queryStats, sources, candidates, deliveries, reports, performance: performanceSummary() });
+    res.json({ runs, queryStats, sources, candidates, deliveries, reports, performance: performanceSummary(), publicCache: publicResponseCache.summary() });
   });
   app.post('/api/admin/candidates', requireAdmin, async (req, res) => {
     const type = String(req.body?.type || 'website');
