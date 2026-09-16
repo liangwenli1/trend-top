@@ -135,6 +135,11 @@ function websiteEntityKey(repo) {
 }
 
 async function upsertGithubRepo(repo, at, sourceQuery = null) {
+  const stars = Number(repo.stargazers_count ?? repo.stars) || 0;
+  const forks = Number(repo.forks_count ?? repo.forks) || 0;
+  const createdAt = repo.created_at || at;
+  const pushedAt = repo.pushed_at || repo.updated_at || at;
+  const updatedAt = repo.updated_at || repo.pushed_at || at;
   await query(
     `INSERT INTO repos (
        id, full_name, description, language, topics, stars, forks,
@@ -162,11 +167,11 @@ async function upsertGithubRepo(repo, at, sourceQuery = null) {
       repo.description || '',
       repo.language || '',
       JSON.stringify(repo.topics || []),
-      repo.stargazers_count,
-      repo.forks_count,
-      repo.created_at,
-      repo.pushed_at,
-      repo.updated_at,
+      stars,
+      forks,
+      createdAt,
+      pushedAt,
+      updatedAt,
       Boolean(repo.archived),
       at,
       sourceQuery
@@ -176,7 +181,7 @@ async function upsertGithubRepo(repo, at, sourceQuery = null) {
     `INSERT INTO snapshots (repo_id, sampled_at, stars, forks, source)
      VALUES ($1, $2, $3, $4, 'github')
      ON CONFLICT (repo_id, sampled_at) DO UPDATE SET stars = EXCLUDED.stars, forks = EXCLUDED.forks`,
-    [repo.id, at, repo.stargazers_count, repo.forks_count]
+    [repo.id, at, stars, forks]
   );
 }
 
@@ -229,7 +234,7 @@ export async function upsertAsset(type, repo, sourceQuery = null, at = new Date(
       isOfficial(evidence), evidence, `${type}:${classified.category}`,
       resource?.url || (type === 'website' ? websiteUrl(repo) : (repo.html_url || `https://github.com/${repo.full_name}`)), resource?`Copy ${resource.path} from ${resource.url}`:null, repo.language || '',
       JSON.stringify(topics), repo.stargazers_count || 0, repo.forks_count || 0,
-      repo.created_at, repo.pushed_at, null, null, null,
+      repo.created_at || at, repo.pushed_at || repo.updated_at || at, null, null, null,
       type === 'website' ? websiteUrl(repo) : null,
       repo.html_url || `https://github.com/${repo.full_name}`,
       at,
@@ -548,8 +553,16 @@ export async function collect() {
 
     const assets = await collectTypedAssets([...unique.values()], runId, at, manual.assets);
     for (const repo of assets.extra) {
-      await upsertGithubRepo(repo, at, repo._trendTopAssetSourceQuery || null);
-      unique.set(repo.id, repo);
+      let full = repo;
+      if (!Number.isFinite(Number(repo.stargazers_count))) {
+        try {
+          full = { ...repo, ...(await github(`https://api.github.com/repos/${repo.full_name}`)) };
+        } catch (error) {
+          if (/GitHub 404/.test(String(error))) continue;
+        }
+      }
+      await upsertGithubRepo(full, at, repo._trendTopAssetSourceQuery || null);
+      unique.set(full.id, full);
     }
 
     const websites = await collectWebsiteSources();
