@@ -70,8 +70,8 @@ export async function buildDigest(sub, manageToken) {
     if (!ranking.updatedAt) continue;
     sections.push({ board, name: boards[board][sub.locale], items: ranking.items, updatedAt: ranking.updatedAt });
   }
-  const manage = `${base}/${sub.locale}/manage?token=${encodeURIComponent(manageToken)}`;
-  const unsubscribe = `${base}/${sub.locale}/unsubscribe?token=${encodeURIComponent(manageToken)}`;
+  const manage = `${base}/${sub.locale}/account/delivery`;
+  const unsubscribe = `${manage}?intent=stop`;
   const oneClick = `${base}/api/one-click?token=${encodeURIComponent(manageToken)}`;
   const boardLink = board => `${base}/${sub.locale}/board/${board}?${new URLSearchParams({ period: 'day', language: languageQuery, languages: languageQuery, topic: topicQuery, topics: topicQuery })}`;
   const num = new Intl.NumberFormat(sub.locale === 'zh' ? 'zh-CN' : 'en-US');
@@ -86,9 +86,9 @@ export async function buildDigest(sub, manageToken) {
       boardLink(s.board),
       ''
     ]),
-    zh ? '管理订阅：' : 'Manage subscription:', manage,
-    zh ? '一键退订：' : 'Unsubscribe:', unsubscribe
+    zh ? '管理邮件推送：' : 'Manage email delivery:', manage,
+    zh ? '停止邮件推送：' : 'Stop emails:', unsubscribe
   ];
-  const html = `<div style="background:#f5f7f7;padding:16px"><main style="max-width:600px;margin:auto;background:#fff;padding:24px;font:15px/1.6 system-ui,sans-serif;color:#172327"><h1 style="margin:0">Trend Top</h1><p>${intro}</p>${sections.map(s => `<section style="border-top:1px solid #dce4e5;padding:18px 0"><h2 style="font-size:19px">${escape(s.name)}</h2><p style="font-size:12px;color:#526267">${zh ? '数据采样' : 'Sampled'}: ${escape(localTime(s.updatedAt))} (${escape(sub.timezone)})${(process.env.DATA_MODE || 'demo') === 'demo' ? ' · DEMO DATA' : ''}</p>${s.items.map(r => `<p style="margin:10px 0"><strong>#${r.rank}</strong> <a href="${escape(r.url)}">${escape(r.full_name)}</a><br><span style="color:#526267">${r.gain === null ? (zh ? '数据不足' : 'Insufficient data') : `+${num.format(r.gain)} ★`}</span></p>`).join('')}<a href="${escape(boardLink(s.board))}">${zh ? '查看完整榜单' : 'View full board'}</a></section>`).join('')}<footer style="border-top:1px solid #dce4e5;padding-top:16px;font-size:13px"><a href="${escape(manage)}">${zh ? '管理订阅' : 'Manage'}</a> · <a href="${escape(unsubscribe)}">${zh ? '一键退订' : 'Unsubscribe'}</a></footer></main></div>`;
+  const html = `<div style="background:#f5f7f7;padding:16px"><main style="max-width:600px;margin:auto;background:#fff;padding:24px;font:15px/1.6 system-ui,sans-serif;color:#172327"><h1 style="margin:0">Trend Top</h1><p>${intro}</p>${sections.map(s => `<section style="border-top:1px solid #dce4e5;padding:18px 0"><h2 style="font-size:19px">${escape(s.name)}</h2><p style="font-size:12px;color:#526267">${zh ? '数据采样' : 'Sampled'}: ${escape(localTime(s.updatedAt))} (${escape(sub.timezone)})${(process.env.DATA_MODE || 'demo') === 'demo' ? ' · DEMO DATA' : ''}</p>${s.items.map(r => `<p style="margin:10px 0"><strong>#${r.rank}</strong> <a href="${escape(r.url)}">${escape(r.full_name)}</a><br><span style="color:#526267">${r.gain === null ? (zh ? '数据不足' : 'Insufficient data') : `+${num.format(r.gain)} ★`}</span></p>`).join('')}<a href="${escape(boardLink(s.board))}">${zh ? '查看完整榜单' : 'View full board'}</a></section>`).join('')}<footer style="border-top:1px solid #dce4e5;padding-top:16px;font-size:13px"><a href="${escape(manage)}">${zh ? '管理邮件推送' : 'Manage email delivery'}</a> · <a href="${escape(unsubscribe)}">${zh ? '停止邮件推送' : 'Stop emails'}</a></footer></main></div>`;
   return { subject, text: lines.join('\n'), html, sections, unsubscribe, oneClick };
 }

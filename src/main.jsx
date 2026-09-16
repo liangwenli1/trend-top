@@ -2,7 +2,7 @@ import React,{useEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {SearchInput,SubscribeDialog,DesignSelect,TopicMultiSelect,TopicDialog} from './components.jsx';
 import {AccountSubscribeForm,AccountPage,LoginPage,AuthContext,AUTH_CHANGED_EVENT,announceAuthChange} from './subscription.jsx';
-import {User} from '@phosphor-icons/react/dist/csr/User';
+import { pricingCache } from './pricing-data.js';
 import {loginUrl} from '../shared/account-paths.js';
 import {TYPES, boardNames, typeLabel, typePath, itemPath} from './catalog.js';
 import {ViewBar, TypeHome, TypeTrending, CategoryPage, ComparePage, SearchPage, ItemDetail, HeaderSearch, TagActions} from './pages.jsx';
@@ -133,7 +133,7 @@ function AccountMenu({viewer,l,page,navigate}){
     items[next]?.focus();
   };
   return <div className="account-menu" ref={rootRef}>
-    <button ref={triggerRef} type="button" className="account-menu-trigger" aria-haspopup="menu" aria-expanded={open} aria-label={`${zh?'账户菜单':'Account menu'}: ${viewer.email}`} onClick={()=>setOpen(value=>!value)}><User size={24} weight="fill" aria-hidden="true"/></button>
+    <button ref={triggerRef} type="button" className="account-menu-trigger" aria-haspopup="menu" aria-expanded={open} aria-label={`${zh?'账户菜单':'Account menu'}: ${viewer.email}`} onClick={()=>setOpen(value=>!value)}><span aria-hidden="true">{viewer.email.slice(0,1).toUpperCase()}</span></button>
     {open&&<div className="account-menu-panel" role="menu" ref={panelRef} onKeyDown={moveFocus}>
       <div className="account-menu-identity"><span>{zh?'已登录':'Signed in'}</span><strong title={viewer.email}>{viewer.email}</strong></div>
       <a role="menuitem" href={`/${l}/account`} onClick={event=>go(event,`/${l}/account`)}>{zh?'账户设置':'Account settings'}</a>
@@ -176,6 +176,7 @@ function App(){
     };
   },[]);
   const route=parseRoute(),l=route.l,t=copy[l],page=route.page,type=route.type;
+  useEffect(()=>{pricingCache.load(l).catch(()=>{});},[l]);
   const rankingPage=page==='ranking'||page==='official';
   const namesForType=boardNames(type||'github-repo');
   const navigate=(e,target,query)=>{if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();const [pathOnly,q]=String(target).split('?');updatePath(pathOnly,query||q||'');};
@@ -365,7 +366,7 @@ function SubscribeCallout({l,t,data,board,type='github-repo'}){
         <p className="subscribe-cta-panel-label">{zh?'由你决定收到什么':'MAKE IT YOURS'}</p>
         <ol className="subscribe-cta-steps">{steps.map((step,index)=><li key={step}><span>{String(index+1).padStart(2,'0')}</span>{step}</li>)}</ol>
         {viewer ? <SubscribeDialog trigger={<button className="primary subscribe-cta-button" type="button">{zh?'设置每日摘要':'Set up your digest'} <span aria-hidden="true">↗</span></button>} title={zh?'邮件推送设置':'Email delivery settings'} description={data?.mailReady?(zh?'选择关注的内容、筛选条件和发送时间。':'Choose your content, filters, and delivery time.'):t.mailPending}>{data?.mailReady?<AccountSubscribeForm l={l} currentBoard={board} currentType={type}/>:null}</SubscribeDialog> : <a className="primary subscribe-cta-button" href={loginUrl(l,`/${l}/account/delivery?${new URLSearchParams({type,board:board||'hot'})}`)}>{zh?'设置每日摘要':'Set up your digest'}<span aria-hidden="true">↗</span></a>}
-        <p className="subscribe-cta-fineprint">{zh?'Pro 功能；每天最多一封，随时可以暂停或退订。':'Included with Pro. At most one email per day; pause or unsubscribe anytime.'}</p>
+        <p className="subscribe-cta-fineprint">{zh?'Pro 功能；每天最多一封，随时可以暂停或停止邮件推送。':'Included with Pro. At most one email per day; pause or stop emails anytime.'}</p>
       </div>
     </div>
   </section>;
@@ -481,21 +482,14 @@ function SubscribeForm({l,t,currentBoard}){
 }
 
 function Verify({l,t}){const [state,setState]=useState('loading');useEffect(()=>{post('/api/verify',{token:params().get('token')}).then(()=>setState('ok')).catch(()=>setState('error'))},[]);return <main className="simple-page"><h1>{state==='ok'?t.verified:state==='error'?t.verifyError:t.loading}</h1><a href={`/${l}/github-repo/ranking`}>{t.list}</a></main>}
-function Manage({l,t,unsubscribe}){
-  const [item,setItem]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState('');
-  const tok=params().get('token');
-  const filterOpts=useFilterOptions();
-  useEffect(()=>{api(`/api/manage?token=${encodeURIComponent(tok||'')}`).then(async v=>{
-    if(unsubscribe){await post('/api/unsubscribe',{token:tok});setItem({...v,status:'cancelled'});setMessage(t.cancelled)}else setItem(v);
-  }).catch(()=>setError(t.manageError))},[tok]);
-  const action=async status=>{try{if(status==='cancelled') await post('/api/unsubscribe',{token:tok});else await post('/api/manage',{token:tok,status},'PATCH');setItem(x=>({...x,status}));setMessage(status==='cancelled'?t.cancelled:status==='paused'?t.pause:t.resume)}catch(e){setError(e.message)}};
-  const save=async e=>{e.preventDefault();try{await post('/api/manage',{token:tok,boards:item.boards,sendHour:Number(item.sendHour),timezone:item.timezone,locale:item.locale,language:(item.languages||[])[0]||item.language||'',languages:item.languages||[],topics:item.topics||[],topic:(item.topics||[])[0]||item.topic||''},'PATCH');setMessage(t.save)}catch(e){setError(e.message)}};
-  if(error)return <main className="simple-page"><h1>{error}</h1></main>;
-  if(!item)return <main className="simple-page">{t.loading}</main>;
-  const manageTopics=Array.isArray(item.topics)?item.topics:(item.topic?[item.topic]:[]);
-  const manageLanguages=Array.isArray(item.languages)?item.languages:(item.language?String(item.language).split(',').map(x=>x.trim()).filter(Boolean):[]);
-  const topicOptions=optionList(filterOpts.topics,l);
-  return <main className="simple-page"><h1>{t.manage}</h1><p>{item.email} · {item.status==='active'?(l==='zh'?'已启用':'Active'):item.status==='paused'?(l==='zh'?'已暂停':'Paused'):t.cancelled}</p>{unsubscribe?<p role="status">{t.cancelled}</p>:<form onSubmit={save} className="subscribe-form"><fieldset><legend>{t.boards}</legend><div className="checks">{Object.keys(names).map(x=><label key={x}><input type="checkbox" checked={item.boards.includes(x)} onChange={()=>setItem(v=>({...v,boards:v.boards.includes(x)?v.boards.filter(y=>y!==x):[...v.boards,x]}))}/>{names[x][localeIndex(l)]}</label>)}</div></fieldset><div className="form-grid"><div className="field"><label htmlFor="manage-language">{t.language}</label><TopicMultiSelect id="manage-language" value={manageLanguages} onChange={x=>setItem({...item,languages:x,language:x[0]||''})} options={optionList(filterOpts.languages,l)} placeholder={t.allLanguages} ariaLabel={t.language}/></div><div className="field"><label htmlFor="manage-topic">{t.topic}</label><TopicMultiSelect id="manage-topic" value={manageTopics} onChange={x=>setItem({...item,topics:x})} options={topicOptions} placeholder={t.allTopics} ariaLabel={t.topic}/></div><div className="field"><label htmlFor="manage-hour">{t.send}</label><DesignSelect id="manage-hour" value={item.sendHour} onChange={x=>setItem({...item,sendHour:x})} options={Array.from({length:24},(_,i)=>({value:String(i),label:`${String(i).padStart(2,'0')}:00`}))}/></div><div className="field"><label htmlFor="manage-zone">{t.timezone}</label><DesignSelect id="manage-zone" value={item.timezone||browserTimezone()} onChange={x=>setItem({...item,timezone:x})} options={timezoneOptions(item.timezone||browserTimezone())}/></div><div className="field"><label htmlFor="manage-locale">{t.mailLocale}</label><DesignSelect id="manage-locale" value={item.locale} onChange={x=>setItem({...item,locale:x})} options={[{value:'zh',label:'简体中文'},{value:'en',label:'English'}]}/></div></div><div className="manage-actions"><button className="primary">{t.save}</button>{item.status==='active'?<button type="button" className="ghost" onClick={()=>action('paused')}>{t.pause}</button>:item.status==='paused'?<button type="button" className="ghost" onClick={()=>action('active')}>{t.resume}</button>:null}<button type="button" className="danger" onClick={()=>action('cancelled')}>{t.cancel}</button></div></form>}{message&&<p role="status">{message}</p>}</main>;
+function Manage({l,unsubscribe}){
+  const user=React.useContext(AuthContext);
+  const target=`/${l}/account/delivery${unsubscribe?'?intent=stop':''}`;
+  useEffect(()=>{
+    if(user===undefined)return;
+    location.replace(user?target:loginUrl(l,target));
+  },[user,target,l]);
+  return <main className="simple-page"><p role="status">{l==='zh'?'正在打开邮件推送设置…':'Opening email delivery settings…'}</p></main>;
 }
 function Repo({l,t,id}){const [repo,setRepo]=useState(null),[msg,setMsg]=useState(''),[showAllTopics,setShowAllTopics]=useState(false);useEffect(()=>{api(`/api/repos/${encodeURIComponent(id)}`).then(setRepo).catch(()=>setMsg(t.error))},[id]);if(!repo)return <main className="simple-page">{msg||t.loading}</main>;const topicValues=[];const seen=new Set();for(const value of Array.isArray(repo.topics)?repo.topics:[]){const text=String(value??'').trim(),key=text.toLowerCase();if(text&&!seen.has(key)){seen.add(key);topicValues.push(text)}}return <main className="simple-page repo-detail"><a href={`/${l}/ranking`} onClick={e=>{e.preventDefault();updatePath(`/${l}/ranking`)}}>{t.list}</a><h1>{repo.full_name}</h1><p>{t.original}</p><p className="detail-description">{repo.description}</p><div className="detail-metrics"><div><small>{t.stars}</small><strong>{fmt(repo.stars,l)}</strong></div><div><small>{t.forks}</small><strong>{fmt(repo.forks,l)}</strong></div><div><small>{t.language}</small><strong>{repo.language||'—'}</strong></div></div><div className="repo-tags">{topicValues.slice(0,showAllTopics?undefined:6).map(value=><a className="tag-btn detail-topic-tag" key={value} href={`/${l}/github-repo/ranking?topic=${encodeURIComponent(value)}`} onClick={e=>{e.preventDefault();updatePath(`/${l}/github-repo/ranking`,`topic=${encodeURIComponent(value)}`)}}>{value}</a>)}{topicValues.length>6&&<button type="button" className="tag-btn detail-topic-tag detail-topic-more" aria-expanded={showAllTopics} onClick={()=>setShowAllTopics(value=>!value)}>{showAllTopics?(l==='zh'?'收起':'Show less'):`+${topicValues.length-6}`}</button>}</div>{repo.aiEvidence.length>0&&<p><button className="text-button" onClick={async()=>{await post('/api/ai-report',{repoId:repo.id,reason:'misclassified'});setMsg(t.reported)}}>{t.report}</button></p>}{msg&&<p role="status">{msg}</p>}<a className="primary inline" href={repo.url} target="_blank" rel="noopener noreferrer">{t.github} ↗</a></main>}
 function Method({l,t}){

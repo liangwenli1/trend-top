@@ -1,3 +1,4 @@
+import { pricingCache } from './pricing-data.js';
 import React, { useEffect, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { DesignSelect } from './components.jsx';
@@ -39,7 +40,7 @@ export function AdminPage({ l }) {
   const pendingSecrets = Object.entries(secrets).filter(([, value]) => value).map(([key]) => key);
   const save = async () => {
     setBusy(true);
-    try { const payload = { ...settings, secrets: Object.fromEntries(Object.entries(secrets).filter(([, value]) => value)) }; const data = await request('/api/admin/settings', 'PUT', payload); setFlags(data.secretFlags); setSecrets({ googleClientSecret: '', creemApiKey: '', creemWebhookSecret: '', firecrawlApiKey: '' }); setSettings(old => ({ ...old, ...data.public })); setResult({ ok: true, at: new Date() }); }
+    try { const payload = { ...settings, secrets: Object.fromEntries(Object.entries(secrets).filter(([, value]) => value)) }; const data = await request('/api/admin/settings', 'PUT', payload); pricingCache.clear(); setFlags(data.secretFlags); setSecrets({ googleClientSecret: '', creemApiKey: '', creemWebhookSecret: '', firecrawlApiKey: '' }); setSettings(old => ({ ...old, ...data.public })); setResult({ ok: true, at: new Date() }); }
     catch (error) { setResult({ ok: false, message: error.message }); }
     finally { setBusy(false); setConfirming(false); }
   };

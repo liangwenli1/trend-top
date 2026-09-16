@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { loginUrl } from '../shared/account-paths.js';
 import './billing.css';
+import { pricingCache } from './pricing-data.js';
 
 const api = async (url, options) => {
   const response = await fetch(url, options);
@@ -14,10 +15,16 @@ const money = (amount, currency, locale) => amount ? new Intl.NumberFormat(local
 
 export function PricingPage({ l, user, navigate }) {
   const zh = l === 'zh';
-  const [data, setData] = useState(null), [message, setMessage] = useState(''), [busy, setBusy] = useState('');
+  const [data, setData] = useState(() => pricingCache.get(l)), [message, setMessage] = useState(''), [busy, setBusy] = useState('');
+  const [retry, setRetry] = useState(0);
   const [cycle, setCycle] = useState(new URLSearchParams(location.search).get('cycle') === 'year' ? 'year' : 'month');
   const [accepted, setAccepted] = useState(false);
-  useEffect(() => { api(`/api/billing/plans?locale=${l}`).then(setData).catch(error => setMessage(error.message)); }, [l]);
+  useEffect(() => {
+    let live = true;
+    setData(pricingCache.get(l)); setMessage('');
+    pricingCache.load(l).then(value => { if (live) setData(value); }).catch(error => { if (live) setMessage(error.message); });
+    return () => { live = false; };
+  }, [l, retry]);
   const checkout = async plan => {
     if (!user) { navigate(loginUrl(l, `/${l}/pricing?cycle=${cycle}`)); return; }
     setBusy(plan.key); setMessage('');
@@ -37,7 +44,7 @@ export function PricingPage({ l, user, navigate }) {
     ['Change it anytime', 'Pause, resume, or edit delivery preferences. Manage paid renewal separately in Plan & billing.']
   ];
   return <main className="billing-page pricing-page"><header className="billing-hero"><p>01 / PRO</p><h1>Trend Top Pro</h1><p>{zh ? '每日摘要邮件是 Pro 功能。按月或按年订阅，自动续费，随时可在账户中取消。' : 'The daily digest email is a Pro feature. Subscribe monthly or yearly; plans renew automatically and can be cancelled from your account at any time.'}</p></header>
-    {!data ? <p>{zh ? '正在加载套餐…' : 'Loading plans…'}</p> : <div className="pricing-layout"><article className="pricing-card pricing-single">
+    {!data ? message ? <button type="button" className="ghost" onClick={() => setRetry(value => value + 1)}>{zh ? '重新加载套餐' : 'Retry loading plans'}</button> : <p>{zh ? '正在加载套餐…' : 'Loading plans…'}</p> : <div className="pricing-layout"><article className="pricing-card pricing-single">
       <p className="billing-kicker">PRO / ACCESS</p><h2>Trend Top Pro</h2>
       <div className="billing-cycle" aria-label={zh ? '计费周期' : 'Billing cycle'}>{data.plans.map(plan => <button key={plan.key} type="button" aria-pressed={cycle === plan.interval} onClick={() => setCycle(plan.interval)}>{plan.interval === 'year' ? (zh ? '年付' : 'Yearly') : (zh ? '月付' : 'Monthly')}</button>)}</div>
       <div className="billing-price">{money(selected?.price, selected?.currency, l) || (zh ? '等待管理员定价' : 'Awaiting admin price')}<small>{selected?.price ? ` / ${cycle === 'year' ? (zh ? '年' : 'year') : (zh ? '月' : 'month')}` : ''}</small></div>

@@ -132,7 +132,8 @@ test('daily digest is one combined message and is idempotent', async () => {
   assert.equal(out.length, 1);
   assert.match(out[0].text, /Trending now/);
   assert.match(out[0].text, /Fastest rising/);
-  assert.match(out[0].text, /unsubscribe/i);
+  assert.match(out[0].text, /Stop emails:/);
+  assert.match(out[0].text, /account\/delivery\?intent=stop/);
   assert.match(out[0].html, /email-logo\.png/);
   assert.match(out[0].html, /api\/digest-chart\/github-repo\//);
   const delivery = await one('SELECT status, snapshot FROM deliveries WHERE subscription_id = $1', [id]);

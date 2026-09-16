@@ -717,8 +717,8 @@ html.is-scrolling .analytics-page-nav,
 @media(max-width:600px){.header-actions .header-signin{min-height:38px;max-width:120px;padding:0 12px}}
 /* Signed-in account menu keeps account and admin actions out of the primary navigation. */
 .account-menu{position:relative;flex:none}
-.account-menu-trigger{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border:1px solid #111;border-radius:0;background:#fff;color:#111;font-size:15px;font-weight:760;line-height:1;cursor:pointer}
-.account-menu-trigger:hover,.account-menu-trigger:focus-visible,.account-menu-trigger[aria-expanded=true]{border-color:#111;background:#f3f3f3;color:#111}
+.account-menu-trigger{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border:1px solid #111;border-radius:0;background:#111;color:#fff;font-size:18px;font-weight:760;line-height:1;cursor:pointer}
+.account-menu-trigger:hover,.account-menu-trigger:focus-visible,.account-menu-trigger[aria-expanded=true]{border-color:#315ee7;background:#315ee7;color:#fff}
 .account-menu-panel{position:absolute;right:0;top:calc(100% + 9px);z-index:50;width:min(310px,calc(100vw - 32px));padding:8px;border:1px solid #111;background:#fff;box-shadow:0 18px 42px #0002;animation:select-enter .16s ease-out}
 .account-menu-identity{padding:12px 13px 14px;border-bottom:1px solid #dedede}
 .account-menu-identity span{display:block;margin-bottom:4px;color:#747474;font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.08em}

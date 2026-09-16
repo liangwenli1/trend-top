@@ -53,6 +53,8 @@ test('verification gates delivery and management controls the subscription', asy
     assert.match(mail, /近期热门/);
     assert.match(mail, /AI 热门/);
     assert.match(mail, /\/zh\/account/);
+    assert.match(mail, /\/zh\/account\/delivery\?intent=stop/);
+    assert.doesNotMatch(mail, /\/unsubscribe\?token=/);
     assert.doesNotMatch(mail, /\/zh\/manage\?token=/);
     const manage = decryptManageToken((await one("SELECT manage_hash FROM subscriptions WHERE email = 'hello@example.invalid'")).manage_hash);
     assert.equal((await request('/api/manage?token=' + encodeURIComponent(manage))).data.status, 'active');
@@ -106,12 +108,18 @@ test('email-code registration, login, and account-managed digest cover all six t
     for (const label of ['Skills', 'Plugins', 'Agents', 'Components', 'Websites', 'Repositories']) assert.match(mail.text, new RegExp(label));
     assert.match(mail.html, /<table role="presentation"/);
     assert.match(mail.html, /\/en\/account/);
+    assert.match(mail.html, /\/en\/account\/delivery\?intent=stop/);
+    assert.doesNotMatch(mail.html, /\/unsubscribe\?token=/);
     assert.doesNotMatch(mail.html, /\/en\/manage\?token=/);
     assert.equal((await request('/api/subscription/status', 'PATCH', { status: 'paused' }, true)).data.status, 'paused');
     const normalized = await request('/api/subscription', 'PUT', { types, boards: ['hot'], languages: [], topics: ['API', 'apis', 'public-api', 'public'], sendHour: 9, timezone: 'UTC', locale: 'en' }, true);
     assert.equal(normalized.status, 200);
     assert.deepEqual(normalized.data.subscription.topics, ['api']);
     assert.equal(normalized.data.subscription.status, 'paused');
+    assert.equal((await request('/api/subscription/status', 'PATCH', { status: 'cancelled' })).status, 401);
+    assert.equal((await request('/api/subscription/status', 'PATCH', { status: 'cancelled' }, true)).data.status, 'cancelled');
+    assert.equal((await request('/api/subscription', 'GET', undefined, true)).data.subscription.status, 'cancelled');
+    assert.equal((await request('/api/subscription/status', 'PATCH', { status: 'paused' }, true)).data.status, 'paused');
     assert.equal((await request('/api/auth/logout', 'POST', {}, true)).status, 200);
     assert.equal((await request('/api/subscription', 'GET', undefined, true)).status, 401);
     assert.equal((await request('/api/auth/login', 'POST', { email, password })).status, 200);

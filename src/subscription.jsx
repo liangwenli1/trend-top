@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { DesignSelect, TopicMultiSelect } from './components.jsx';
 import { TYPES, typeLabel } from './catalog.js';
 import { BillingCard } from './billing-ui.jsx';
@@ -165,6 +166,8 @@ function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSa
       .then(response => response.json()).then(setFilters).catch(() => {});
     return () => controller.abort();
   }, [types.join(',')]);
+  const [confirmStop, setConfirmStop] = useState(false);
+  const stopButton = useRef(null), saveButton = useRef(null);
   const boardChoices = [...commonBoards, ...(types.includes('github-repo') ? repoBoards : [])];
   const toggleType = type => {
     const next = types.includes(type) ? types.filter(value => value !== type) : [...types, type];
@@ -191,6 +194,7 @@ function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSa
     try {
       await request('/api/subscription/status', 'PATCH', { status: next });
       setStatus(next);
+      setConfirmStop(false);
       setMessage(next === 'paused' ? (zh ? '已暂停邮件发送。' : 'Email delivery paused.') : next === 'cancelled' ? (zh ? '已停止邮件推送，付费套餐未变更。' : 'Emails stopped. Your paid plan is unchanged.') : (zh ? '已恢复邮件发送。' : 'Email delivery resumed.'));
     } catch (error) { setMessage(error.message); }
     finally { setBusy(false); }
@@ -207,13 +211,14 @@ function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSa
       <div className="field"><label htmlFor="digest-locale">{zh ? '邮件语言' : 'Email language'}</label><DesignSelect id="digest-locale" value={locale} onChange={setLocale} options={[{ value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }]}/></div>
     </div>
     <p className="account-hint">{zh ? '语言和主题留空即表示全部。邮件按类型展示榜单与增长图表。' : 'Leave language and topic empty for all. Emails include rankings and compact growth charts.'}</p>
-    <button type="submit" className="primary wide" disabled={busy}>{busy ? '…' : status ? (zh ? '保存推送设置' : 'Save delivery settings') : (zh ? '开启每日摘要' : 'Start daily digest')}</button>
+    <button ref={saveButton} type="submit" className="primary wide" disabled={busy}>{busy ? '…' : status ? (zh ? '保存推送设置' : 'Save delivery settings') : (zh ? '开启每日摘要' : 'Start daily digest')}</button>
     {account && status && <div className="account-status-actions">
       {status === 'active' ? <button type="button" className="ghost" disabled={busy} onClick={() => changeStatus('paused')}>{zh ? '暂停发送' : 'Pause'}</button> : <button type="button" className="ghost" disabled={busy} onClick={() => changeStatus('active')}>{zh ? '恢复发送' : 'Resume'}</button>}
-      {status !== 'cancelled' && <button type="button" className="danger" disabled={busy} onClick={() => changeStatus('cancelled')}>{zh ? '停止邮件推送' : 'Stop emails'}</button>}
+      {status !== 'cancelled' && <button ref={stopButton} type="button" className="danger" disabled={busy} onClick={() => { setMessage(''); setConfirmStop(true); }}>{zh ? '停止邮件推送' : 'Stop emails'}</button>}
     </div>}
     {account && <p className="account-hint">{zh ? '暂停或停止邮件不会取消付费续订。' : 'Pausing or stopping emails does not cancel paid renewal.'} <a href={`/${l}/account/subscription`}>{zh ? '管理套餐与账单' : 'Manage plan & billing'}</a></p>}
-    {message && <p className="form-message" role="status">{message}</p>}
+    {message && !confirmStop && <p className="form-message" role="status">{message}</p>}
+    <Dialog.Root open={confirmStop} onOpenChange={open => { if (!busy) setConfirmStop(open); }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content billing-confirm" onCloseAutoFocus={event => { event.preventDefault(); (stopButton.current || saveButton.current)?.focus(); }}><Dialog.Title>{zh ? '停止邮件推送？' : 'Stop email delivery?'}</Dialog.Title><Dialog.Description>{zh ? '停止后不再收到每日摘要，可随时恢复。你的 Pro 套餐和付费续订保持不变。' : 'You will stop receiving daily digests and can resume anytime. Your Pro plan and paid renewal remain unchanged.'}</Dialog.Description><div className="billing-actions"><button type="button" className="ghost" disabled={busy} onClick={() => setConfirmStop(false)}>{zh ? '继续接收邮件' : 'Keep receiving emails'}</button><button type="button" className="primary" disabled={busy} onClick={() => changeStatus('cancelled')}>{busy ? '…' : (zh ? '确认停止推送' : 'Confirm stop')}</button></div>{message && <p role="alert">{message}</p>}</Dialog.Content></Dialog.Portal></Dialog.Root>
   </form>;
 }
 

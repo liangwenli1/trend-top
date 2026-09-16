@@ -80,8 +80,8 @@ export async function buildDigest(sub, manageToken, { previous = null } = {}) {
       first = false;
     }
   }
-  const account = `${root}/${locale}/account`;
-  const unsubscribe = `${root}/${locale}/unsubscribe?token=${encodeURIComponent(manageToken)}`;
+  const account = `${root}/${locale}/account/delivery`;
+  const unsubscribe = `${account}?intent=stop`;
   const oneClick = `${root}/api/one-click?token=${encodeURIComponent(manageToken)}`;
   const boardLink = section => `${root}/${locale}/${section.type}/ranking?${new URLSearchParams({ board: section.board, period: 'day', language: languages.join(','), topic: topics.join(',') })}`;
   const localTime = at => new Intl.DateTimeFormat(zh ? 'zh-CN' : 'en-US', { timeZone: sub.timezone, dateStyle: 'medium' }).format(new Date(at));
@@ -94,8 +94,8 @@ export async function buildDigest(sub, manageToken, { previous = null } = {}) {
       ...section.items.map(item => '#' + item.rank + ' ' + item.full_name + ' · ' + (item.gain == null ? (zh ? '新增数据不足' : 'Growth unavailable') : '+' + num.format(item.gain) + ' ★') + changeText(item.change, zh) + ' · ' + item.url),
       boardLink(section), ''
     ]),
-    zh ? '登录并管理订阅：' : 'Sign in and manage your subscription:', account,
-    zh ? '退订：' : 'Unsubscribe:', unsubscribe
+    zh ? '管理邮件推送：' : 'Manage email delivery:', account,
+    zh ? '停止邮件推送：' : 'Stop emails:', unsubscribe
   ].join('\n');
   const htmlSections = sections.map(section => {
     const rows = section.items.map(item => `<p style="margin:8px 0;font-size:14px"><strong>#${item.rank}</strong> <a href="${escape(item.url)}" style="color:#171717">${escape(item.full_name)}</a>${changeHtml(item.change, zh)} <span style="color:#606060">${item.gain == null ? (zh ? '新增数据不足' : 'Growth unavailable') : '+' + num.format(item.gain) + ' ★'}</span></p>`).join('');
@@ -104,6 +104,6 @@ export async function buildDigest(sub, manageToken, { previous = null } = {}) {
       : '';
     return `<section style="border-top:1px solid #dedede;padding:22px 0"><p style="margin:0 0 5px;color:#315fd9;font-size:12px;font-weight:700;letter-spacing:1px">${escape(section.typeName)}</p><h2 style="margin:0;font-size:20px">${escape(section.name)}</h2><p style="margin:5px 0 12px;color:#666;font-size:12px">${escape(localTime(section.updatedAt))} · ${escape(sub.timezone)}${(process.env.DATA_MODE || 'demo') === 'demo' ? ' · DEMO DATA' : ''}</p>${section.chart ? chart(section.items, num, zh) : rows}${trend}<a href="${escape(boardLink(section))}" style="display:inline-block;margin-top:8px;color:#315fd9;font-weight:700">${zh ? '查看完整榜单' : 'View full ranking'} →</a></section>`;
   }).join('');
-  const html = `<div style="background:#f5f5f3;padding:16px"><main style="max-width:600px;margin:auto;padding:28px;background:#fff;color:#171717;font:15px/1.6 Arial,sans-serif"><table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><td style="padding:0 12px 0 0;vertical-align:middle"><a href="${escape(root)}/${locale}/home" style="display:block"><img src="${escape(logoUrl)}" width="40" height="40" alt="" style="display:block;width:40px;height:40px"></a></td><td style="vertical-align:middle"><h1 style="margin:0;font-size:28px;line-height:1.1"><a href="${escape(root)}/${locale}/home" style="color:#171717;text-decoration:none">Trend Top</a></h1></td></tr></table><p>${escape(intro)}</p>${htmlSections}<footer style="border-top:1px solid #dedede;padding-top:20px;font-size:13px"><a href="${escape(account)}">${zh ? '登录并管理订阅' : 'Sign in and manage'}</a> · <a href="${escape(unsubscribe)}">${zh ? '退订' : 'Unsubscribe'}</a></footer></main></div>`;
+  const html = `<div style="background:#f5f5f3;padding:16px"><main style="max-width:600px;margin:auto;padding:28px;background:#fff;color:#171717;font:15px/1.6 Arial,sans-serif"><table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><td style="padding:0 12px 0 0;vertical-align:middle"><a href="${escape(root)}/${locale}/home" style="display:block"><img src="${escape(logoUrl)}" width="40" height="40" alt="" style="display:block;width:40px;height:40px"></a></td><td style="vertical-align:middle"><h1 style="margin:0;font-size:28px;line-height:1.1"><a href="${escape(root)}/${locale}/home" style="color:#171717;text-decoration:none">Trend Top</a></h1></td></tr></table><p>${escape(intro)}</p>${htmlSections}<footer style="border-top:1px solid #dedede;padding-top:20px;font-size:13px"><a href="${escape(account)}">${zh ? '管理邮件推送' : 'Manage email delivery'}</a> · <a href="${escape(unsubscribe)}">${zh ? '停止邮件推送' : 'Stop emails'}</a></footer></main></div>`;
   return { subject, text, html, sections, snapshot, unsubscribe, oneClick };
 }
