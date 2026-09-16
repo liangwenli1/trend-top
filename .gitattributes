@@ -1,0 +1,2 @@
+# Linux deployment and container entrypoint scripts must keep LF line endings.
+*.sh text eol=lf
