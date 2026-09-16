@@ -1,18 +1,16 @@
+export const CLASSIFICATION_VERSION = 1;
 export const USE_CASES = {
-  browser: { zh: '浏览器', en: 'Browser' },
-  database: { zh: '数据库', en: 'Database' },
-  storage: { zh: '存储', en: 'Storage' },
-  filesystem: { zh: '文件系统', en: 'Filesystem' },
-  documents: { zh: '文档', en: 'Documents' },
-  git: { zh: 'Git', en: 'Git' },
-  coding: { zh: '编程', en: 'Coding' },
-  research: { zh: '研究', en: 'Research' },
-  ui: { zh: '界面', en: 'UI' },
-  github: { zh: 'GitHub', en: 'GitHub' },
-  auth: { zh: '认证', en: 'Auth' },
-  directory: { zh: '目录', en: 'Directory' },
-  playground: { zh: '试用', en: 'Playground' },
-  spec: { zh: '规范', en: 'Spec' },
+  browser: { zh: '网页自动化', en: 'Browser automation' },
+  database: { zh: '数据库操作', en: 'Database operations' },
+  storage: { zh: '数据存储', en: 'Data storage' },
+  filesystem: { zh: '文件管理', en: 'File management' },
+  documents: { zh: '文档处理', en: 'Document processing' },
+  git: { zh: '代码协作', en: 'Code collaboration' },
+  coding: { zh: '代码开发', en: 'Coding' },
+  research: { zh: '资料研究', en: 'Research' },
+  ui: { zh: '界面构建', en: 'UI development' },
+  auth: { zh: '身份认证', en: 'Authentication' },
+  discovery: { zh: '资源发现', en: 'Resource discovery' },
   other: { zh: '其他', en: 'Other' }
 };
 
@@ -34,13 +32,15 @@ export const CATEGORIES = {
   'vector-db': { zh: '向量库', en: 'Vector DB', useCase: 'database' },
   'object-storage': { zh: '对象存储', en: 'Object storage', useCase: 'storage' },
   browser: { zh: '浏览器', en: 'Browser', useCase: 'browser' },
-  github: { zh: 'GitHub', en: 'GitHub', useCase: 'github' },
+  github: { zh: 'GitHub', en: 'GitHub', useCase: 'git' },
   filesystem: { zh: '文件系统', en: 'Filesystem', useCase: 'filesystem' },
   coding: { zh: '编程助手', en: 'Coding', useCase: 'coding' },
   research: { zh: '研究', en: 'Research', useCase: 'research' },
-  directory: { zh: '目录', en: 'Directory', useCase: 'directory' },
-  playground: { zh: '试用', en: 'Playground', useCase: 'playground' },
-  spec: { zh: '规范', en: 'Spec', useCase: 'spec' }
+  directory: { zh: '目录', en: 'Directory', useCase: 'discovery' },
+  playground: { zh: '试用', en: 'Playground', useCase: 'discovery' },
+  spec: { zh: '规范', en: 'Spec', useCase: 'coding' },
+  database: { zh: '数据库', en: 'Database', useCase: 'database' },
+  storage: { zh: '存储', en: 'Storage', useCase: 'storage' }
 };
 
 const RULES = [
@@ -67,7 +67,10 @@ const RULES = [
   { category: 'research', keys: ['gpt-researcher', 'research agent', 'wikipedia-style'] },
   { category: 'playground', keys: ['playground', 'inspector', 'try a server'] },
   { category: 'directory', keys: ['leaderboard', 'directory', 'registry', 'catalog of'] },
-  { category: 'spec', keys: ['specification', 'agentskills.io'] }
+  { category: 'spec', keys: ['specification', 'agentskills.io'] },
+  { category: 'database', keys: ['database', 'databases', 'sql'] },
+  { category: 'storage', keys: ['storage'] },
+  { category: 'frontend', keys: ['frontend', 'front-end', 'ui components', 'component library', 'design system'] }
 ];
 
 export const OFFICIAL_ORGS = new Set([
@@ -77,16 +80,29 @@ export const OFFICIAL_ORGS = new Set([
   'minio', 'clickhouse', 'redis', 'elastic', 'apache'
 ]);
 
-const hay = item => `${item.full_name || ''} ${item.name || ''} ${item.description || ''} ${(item.topics || []).join(' ')} ${item.category || ''} ${item.homepage || ''} ${item.source_query || ''}`.toLowerCase();
+const hay = item => `${item.full_name || ''} ${item.name || ''} ${item.description || ''} ${(Array.isArray(item.topics) ? item.topics : []).join(' ')} ${item.category || ''} ${item.homepage || ''}`.toLowerCase();
+
+export function normalizeUseCase(value) {
+  const id = String(value || '').toLowerCase();
+  return ({ github: 'git', directory: 'discovery', playground: 'discovery', spec: 'coding' })[id] || id;
+}
+
+function keywordHit(text, key) {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`, 'i').test(text);
+}
 
 function topicList(item) {
-  return (item.topics || []).map(value => String(value || '').toLowerCase());
+  return (Array.isArray(item.topics) ? item.topics : []).map(value => String(value || '').toLowerCase());
 }
 
 function ruleHit(item) {
   const text = hay(item);
   const topics = topicList(item);
-  return RULES.find(rule => rule.keys.some(key => topics.includes(key) || text.includes(key))) || null;
+  const signals = item.rankingSignals || item.ranking_signals || {};
+  const resourceName = String(signals.resourcePath || '').split('/').slice(0, -1).pop();
+  const resourceRule = resourceName && RULES.find(rule => rule.keys.some(key => keywordHit(resourceName, key)));
+  return resourceRule || RULES.find(rule => rule.keys.some(key => topics.includes(key) || keywordHit(text, key))) || null;
 }
 
 export function classify(item = {}) {
@@ -94,7 +110,8 @@ export function classify(item = {}) {
   const known = CATEGORIES[stored] && stored !== 'uncategorized' ? stored : null;
   const category = known || ruleHit(item)?.category || 'uncategorized';
   const meta = CATEGORIES[category];
-  const useCase = item.use_case && USE_CASES[item.use_case] ? item.use_case : (meta?.useCase || 'other');
+  const storedUseCase = normalizeUseCase(item.use_case);
+  const useCase = USE_CASES[storedUseCase] ? storedUseCase : (meta?.useCase || 'other');
   return {
     category,
     categoryZh: meta?.zh || category,
@@ -116,13 +133,9 @@ function directoryEvidence(item) {
 
 export function officialEvidenceFor(item = {}) {
   const org = String(item.org || String(item.full_name || '').split('/')[0] || '').toLowerCase();
-  const text = hay(item);
   const listed = directoryEvidence(item);
   const reasons = [];
   if (OFFICIAL_ORGS.has(org)) reasons.push(`Verified vendor org ${org}`);
-  if (item.type === 'plugin' && (org === 'modelcontextprotocol' || listed === 'Official MCP Registry' || /registry\.modelcontextprotocol\.io|official mcp registry/.test(text))) {
-    reasons.push('Official MCP Registry');
-  }
   if (item.type === 'skill' && org === 'anthropics') reasons.push('anthropics/skills');
   if (item.type === 'website' && item.trust === 'official') reasons.push('Website source registry: official');
   if (OFFICIAL_ORGS.has(org) && listed && listed !== 'Official MCP Registry') reasons.push(listed);
@@ -134,17 +147,8 @@ export function isOfficial(evidence) {
 }
 
 function hostsFor(item) {
-  const text = hay(item);
-  const hosts = [];
-  if (/claude|anthropic/.test(text)) hosts.push('Claude');
-  if (/cursor/.test(text)) hosts.push('Cursor');
-  if (/windsurf/.test(text)) hosts.push('Windsurf');
-  if (/copilot|vscode|visual studio code/.test(text)) hosts.push('VS Code');
-  if (/codex/.test(text)) hosts.push('Codex');
-  if (item.type === 'plugin') return hosts.length ? hosts.join(' / ') : 'MCP hosts';
-  if (item.type === 'skill') return hosts.length ? hosts.join(' / ') : 'Claude / compatible agents';
-  if (item.type === 'components') return 'shadcn-compatible apps';
-  return hosts.length ? hosts.join(' / ') : (classify(item).useCaseLabel?.en || '—');
+  // Only explicit source declarations should be presented as compatibility.
+  return item.compatibleHosts || (item.rankingSignals || item.ranking_signals)?.compatibleHosts || null;
 }
 
 function transportFor(item) {
@@ -156,7 +160,6 @@ function transportFor(item) {
 }
 
 export function compareFields(item = {}) {
-  const classified = classify(item);
   const signals = item.rankingSignals || item.ranking_signals || {};
   const source = item.sourceRepoUrl || item.source_repo_url || item.url || null;
   const listed = directoryEvidence(item);
@@ -174,7 +177,7 @@ export function compareFields(item = {}) {
   }
   if (item.type === 'plugin') {
     return {
-      protocol: 'MCP',
+      protocol: /\bmcp\b|model context protocol/i.test(hay(item)) ? 'MCP' : null,
       identity: item.full_name,
       runtime: item.language || '—',
       transport: transportFor(item),
@@ -190,7 +193,7 @@ export function compareFields(item = {}) {
       identity: item.full_name,
       runtime: item.language || '—',
       transport: null,
-      hosts: classified.useCase === 'coding' ? 'CLI / editor' : hostsFor(item),
+      hosts: hostsFor(item),
       listed,
       language: item.language || '—',
       source
@@ -198,7 +201,7 @@ export function compareFields(item = {}) {
   }
   if (item.type === 'components') {
     return {
-      protocol: 'UI registry',
+      protocol: null,
       identity: item.full_name,
       runtime: item.language || 'TypeScript',
       transport: null,
@@ -220,9 +223,9 @@ export function compareFields(item = {}) {
   };
 }
 
-export const useCaseOptions = () => Object.entries(USE_CASES)
-  .filter(([id]) => id !== 'other')
-  .map(([id, labels]) => ({ id, ...labels }));
+export const useCaseOptions = counts => Object.entries(USE_CASES)
+  .filter(([id]) => id !== 'other' && (!counts || Number(counts.get(id)) > 0))
+  .map(([id, labels]) => ({ id, ...labels, ...(counts ? { count: counts.get(id) } : {}) }));
 
 const TYPE_HINTS = [
   { type: 'skill', keys: ['skill', 'skills', '技能'] },
@@ -242,22 +245,22 @@ export function expandSearch(q) {
   const types = [];
   for (const [id, labels] of Object.entries(USE_CASES)) {
     if (id === 'other') continue;
-    if (lower.includes(id) || lower.includes(String(labels.zh).toLowerCase()) || lower.includes(String(labels.en).toLowerCase())) useCases.add(id);
+    if (keywordHit(lower, id) || lower.includes(labels.zh) || keywordHit(lower, labels.en)) useCases.add(id);
   }
   for (const [id, meta] of Object.entries(CATEGORIES)) {
-    if (lower.includes(id) || lower.includes(String(meta.zh).toLowerCase()) || lower.includes(String(meta.en).toLowerCase())) {
+    if (keywordHit(lower, id) || lower.includes(meta.zh) || keywordHit(lower, meta.en)) {
       categories.add(id);
       useCases.add(meta.useCase);
     }
   }
   for (const rule of RULES) {
-    if (rule.keys.some(key => lower.includes(key))) {
+    if (rule.keys.some(key => keywordHit(lower, key))) {
       categories.add(rule.category);
       if (CATEGORIES[rule.category]) useCases.add(CATEGORIES[rule.category].useCase);
     }
   }
   for (const hint of TYPE_HINTS) {
-    if (hint.keys.some(key => lower.includes(key))) types.push(hint.type);
+    if (hint.keys.some(key => /[\u3400-\u9fff]/.test(key) ? lower.includes(key) : keywordHit(lower, key))) types.push(hint.type);
   }
   return { raw, tokens, useCases: [...useCases], categories: [...categories], types };
 }

@@ -3,7 +3,7 @@ import { aiEvidence, getChart as getRepoChart, getFilters as getRepoFilters, get
 import { groupProductResources } from '../shared/product-resources.js';
 import { rankRelated, broadTopics } from '../shared/related-projects.js';
 import { normalizeTopics, topicFilterValues } from '../shared/topics.js';
-import { classify, compareFields, officialEvidenceFor, isOfficial, useCaseOptions, expandSearch, searchScore } from '../shared/taxonomy.js';
+import { classify, compareFields, officialEvidenceFor, isOfficial, useCaseOptions, expandSearch, searchScore, normalizeUseCase } from '../shared/taxonomy.js';
 
 export const TYPES = ['skill', 'plugin', 'agent', 'components', 'website', 'github-repo'];
 export const TYPE_META = {
@@ -180,7 +180,7 @@ function mapAsset(row, extras = {}) {
     sourceQuery: row.source_query || null,
     entityKey: row.entity_key || null,
     rankingSignals,
-    usage: usageKind ? Number(rankingSignals[usageKind]) || null : null,
+    usage: usageKind && Number.isFinite(Number(rankingSignals[usageKind])) ? Number(rankingSignals[usageKind]) : null,
     usageKind,
     install: row.install,
     language: row.language,
@@ -349,9 +349,13 @@ export async function getTypeSummary() {
 
 export async function getCatalogFilters(type) {
   if (!isType(type)) return { languages: [], topics: [], categories: [] };
+  const useCaseRows = type === 'github-repo'
+    ? await many('SELECT use_case,COUNT(*)::int AS n FROM repos WHERE source=$1 AND active=TRUE AND deleted=FALSE AND archived=FALSE GROUP BY use_case', [dataSource()])
+    : await many('SELECT use_case,COUNT(*)::int AS n FROM assets WHERE type=$1 AND active=TRUE GROUP BY use_case', [type]);
+  const useCases = useCaseOptions(new Map(useCaseRows.map(row => [row.use_case, asNumber(row.n)])));
   if (type === 'github-repo') {
     const base = await getRepoFilters();
-    return { ...base, categories: base.topics, useCases: useCaseOptions() };
+    return { ...base, categories: base.topics, useCases };
   }
   const [languages, categories, topics] = await Promise.all([
     many(
@@ -377,26 +381,22 @@ export async function getCatalogFilters(type) {
     languages: languages.map(r => r.name),
     topics: topics.map(r => r.name),
     categories: categories.map(r => ({ id: r.id, zh: r.zh, en: r.en, count: asNumber(r.count) })),
-    useCases: useCaseOptions()
+    useCases
   };
 }
 
-export async function getCatalogRankings(type, query = {}) {
+export async function getCatalogRankings(type, query = {}, options = {}) {
   if (!isType(type)) return { items: [], total: 0 };
   if (type === 'github-repo') {
-    const ranking = await getRepoRankings(query);
+    const ranking = await getRepoRankings({ ...query, ...(query.board === 'official' ? { board: 'hot', official: '1' } : {}) }, options);
     let items = ranking.items.map(decorateRepo);
-    if (query.useCase) items = items.filter(item => item.useCase === query.useCase);
-    if (query.official === '1' || query.official === 'true' || query.board === 'official') {
-      items = items.filter(item => item.officialEvidence).map((item, i) => ({ ...item, rank: i + 1 }));
-    }
     return {
       ...ranking,
       type,
       board: query.board === 'official' ? 'official' : ranking.board,
       boards: boardsFor(type),
       items,
-      total: query.useCase || query.official === '1' || query.board === 'official' ? items.length : ranking.total
+      total: ranking.total
     };
   }
   const boards = boardsFor(type);
@@ -439,10 +439,11 @@ export async function getCatalogRankings(type, query = {}) {
   }
   if (q) {
     params.push(q);
-    sql += ` AND (full_name ILIKE '%' || $${params.length} || '%' OR COALESCE(description,'') ILIKE '%' || $${params.length} || '%' OR category ILIKE '%' || $${params.length} || '%')`;
+    sql += ` AND (full_name ILIKE '%' || $${params.length} || '%' OR COALESCE(description,'') ILIKE '%' || $${params.length} || '%' OR category ILIKE '%' || $${params.length} || '%'
+      OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(topics) t(topic) WHERE t.topic ILIKE '%' || $${params.length} || '%'))`;
   }
   if (officialOnly) sql += " AND COALESCE(official_evidence,'') <> ''";
-  const useCase = String(query.useCase || query.use_case || '');
+  const useCase = normalizeUseCase(query.useCase || query.use_case);
   if (useCase) {
     params.push(useCase);
     sql += ` AND use_case = $${params.length}`;
@@ -457,9 +458,7 @@ export async function getCatalogRankings(type, query = {}) {
   for (const row of rows) {
     const independentWebsite = type === 'website' && String(row.source_query || '').startsWith('website-source:');
     const stats = statsById.get(String(row.id));
-    const resolved = independentWebsite && !stats
-      ? { gain: null, prevGain: null, anomaly: false }
-      : (stats || { gain: 0, prevGain: 0, anomaly: false });
+    const resolved = stats || { gain: null, prevGain: null, anomaly: false };
     const ageDays = Math.max(0, (now - new Date(row.created_at).getTime()) / 86400000);
     const pushDays = Math.max(0, (now - new Date(row.pushed_at).getTime()) / 86400000);
     if (board === 'new' && (ageDays > 90 || (asNumber(row.stars) || 0) < 5)) continue;
@@ -490,7 +489,7 @@ export async function getCatalogRankings(type, query = {}) {
   const page = Math.max(1, Math.min(1000, Number(query.page) || 1));
   const limit = Math.max(1, Math.min(50, Number(query.limit) || 10));
   const total = filtered.length;
-  const slice = filtered.slice((page - 1) * limit, page * limit).map((item, i) => ({ ...item, rank: (page - 1) * limit + i + 1 }));
+  const slice = (options.all ? filtered : filtered.slice((page - 1) * limit, page * limit)).map((item, i) => ({ ...item, rank: options.all ? i + 1 : (page - 1) * limit + i + 1 }));
   return {
     type,
     board,

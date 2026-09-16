@@ -17,7 +17,9 @@ const run = task => new Promise(resolve => {
 async function latestSuccessfulCollectDay() {
   if (!pool) return '';
   try {
-    const result = await pool.query("SELECT MAX(finished_at) AS finished_at FROM sync_runs WHERE status = 'ok'");
+    // A completed partial run keeps valid catalog updates. Optional directory failures
+    // must not trigger an expensive full recollection every hour.
+    const result = await pool.query("SELECT MAX(finished_at) AS finished_at FROM sync_runs WHERE status IN ('ok','partial')");
     return result.rows[0]?.finished_at ? new Date(result.rows[0].finished_at).toISOString().slice(0, 10) : '';
   } catch (error) {
     console.error('[scheduler] could not read last collection time', error.message);

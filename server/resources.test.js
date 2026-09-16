@@ -66,7 +66,7 @@ test('Skill assets have their own file identity; mistaken copies retire reversib
 });
 test('Collector verifies discovery hits and creates separate Skill file resources',async()=>{
   const timestamp=new Date().toISOString();
-  const fire={id:901,full_name:'collector/firecrawl',description:'Context API to scrape the web.',homepage:'https://collector-fire.dev',topics:['ai','agents','skills'],created_at:timestamp,pushed_at:timestamp};
+  const fire={stargazers_count:100,forks_count:3,id:901,full_name:'collector/firecrawl',description:'Context API to scrape the web.',homepage:'https://collector-fire.dev',topics:['ai','agents','skills'],created_at:timestamp,pushed_at:timestamp};
   const plugin={...fire,id:902,full_name:'collector/firecrawl-mcp-server',description:'Official Firecrawl MCP Server',homepage:null};
   const agent={...fire,id:903,full_name:'collector/research-agent',description:'An autonomous research agent.',homepage:null};
   const calls=[];
@@ -122,5 +122,37 @@ test('Directory listings attach install counts to matching GitHub skills', async
   assert.equal(result.unmatched.length, 0);
   const signals = (await one('SELECT ranking_signals FROM assets WHERE id=$1', [id])).ranking_signals;
   assert.equal(Number(signals.installs), 12345);
+});
+
+test('directory installs belong to one named Skill and survive subsequent GitHub refresh', async () => {
+  const repo = { id: 8810, full_name: 'qa/multi-skill-counts', description: 'Skills collection', topics: [], created_at: '2026-01-01T00:00:00Z', stargazers_count: 100, forks_count: 1 };
+  const resources = skillResources(repo, [{type:'blob',path:'pdf/SKILL.md'},{type:'blob',path:'browser/SKILL.md'}]);
+  const ids = [];
+  for (const resource of resources) ids.push(await upsertAsset('skill',repo,'asset:skill:test',undefined,resource));
+  const ambiguous = await applyDirectorySignals([{type:'skill',github:repo.full_name,installs:999,directory:'skills-sh'}]);
+  assert.equal(ambiguous.applied,0);
+  const exact = await applyDirectorySignals([{type:'skill',github:repo.full_name,name:'pdf',installs:123,period:'cumulative',directory:'skills-sh'}]);
+  assert.equal(exact.applied,1);
+  await upsertAsset('skill',{...repo,stargazers_count:150},'asset:skill:test',undefined,resources[0]);
+  const pdf = (await one('SELECT ranking_signals FROM assets WHERE id=$1',[ids[0]])).ranking_signals;
+  const browser = (await one('SELECT ranking_signals FROM assets WHERE id=$1',[ids[1]])).ranking_signals;
+  assert.equal(pdf.installs,123);
+  assert.equal(pdf.directoryMetrics['skills-sh'].installs.period,'cumulative');
+  assert.equal(pdf.associatedRepoStars,150);
+  assert.equal(browser.installs,undefined);
+});
+
+test('partial code-search repositories hydrate before persisting counters; failures preserve old data', async () => {
+  const { hydrateRepo, upsertGithubRepo } = await import('./jobs.js');
+  const partial = {id:8820,full_name:'qa/partial-code-hit'};
+  const full = {...partial,stargazers_count:123,forks_count:7,created_at:'2024-01-01T00:00:00Z'};
+  const hydrated = await hydrateRepo(partial,async()=>full);
+  await upsertGithubRepo(hydrated);
+  await assert.rejects(()=>hydrateRepo(partial,async()=>{throw new Error('GitHub 403')}),/403/);
+  await assert.rejects(()=>upsertGithubRepo(partial),/metadata/i);
+  const stored = await one('SELECT stars,forks,created_at FROM repos WHERE id=$1',[partial.id]);
+  assert.equal(Number(stored.stars),123); assert.equal(Number(stored.forks),7);
+  const zero = await hydrateRepo({...full,stargazers_count:0,forks_count:0},async()=>{throw new Error('should not fetch')});
+  assert.equal(zero.stargazers_count,0);
 });
 

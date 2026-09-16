@@ -77,3 +77,10 @@
 button.tag-btn{font:inherit;cursor:pointer;border-radius:0}
 button.tag-btn:disabled{opacity:.6;cursor:wait}
 
+.account-status-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 24px; }
+.status-badge { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 6px 12px; border: 1px solid #dedede; border-radius: 0; background: #f7f7f7; color: #595959; font-size: 13px; font-weight: 600; line-height: 1.4; }
+.status-dot { width: 6px; height: 6px; background: currentColor; flex: 0 0 auto; }
+.status-badge-pro { border-color: #111; background: #111; color: #fff; }
+.status-badge-active { border-color: #d6e0ff; background: #f2f5ff; color: #315de0; }
+.delivery-upgrade { margin-bottom: 28px; }
+.delivery-upgrade p { margin: 0 0 16px; }

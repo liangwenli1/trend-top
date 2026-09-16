@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { asJson, many, query } from './db.js';
 import { getSettings } from './settings.js';
-import { classify, officialEvidenceFor, isOfficial } from '../shared/taxonomy.js';
+import { CLASSIFICATION_VERSION, classify, officialEvidenceFor, isOfficial } from '../shared/taxonomy.js';
 
 const SOURCES = [
   { id: '21st-dev', name: '21st.dev', url: 'https://21st.dev', trust: 'curated', topics: ['components', 'design-system'] },
@@ -88,6 +88,8 @@ const listingItem = {
   type: 'object',
   properties: {
     name: { type: 'string' },
+    skillPath: { type: 'string', description: 'Exact repository-relative SKILL.md path, only if explicitly listed' },
+    period: { type: 'string', description: 'Explicit counting window, e.g. cumulative or weekly. Omit if unknown.' },
     github: { type: 'string', description: 'GitHub owner/repo or https://github.com/owner/repo' },
     installs: { type: 'number' },
     usage: { type: 'number' },
@@ -100,14 +102,14 @@ const DIRECTORY_LISTINGS = [
     id: 'skills-sh',
     url: 'https://skills.sh',
     type: 'skill',
-    prompt: 'Extract the skill leaderboard. github must be owner/repo. installs is the install count.',
+    prompt: 'Extract the skill leaderboard. name must be the exact individual skill identifier, not the repository name. github must be owner/repo. Only extract counts explicitly visible on the source page; omit unknown counts. installs is the install count. Include skillPath and period only if explicitly provided.',
     schema: { type: 'object', properties: { items: { type: 'array', items: listingItem } } }
   },
   {
     id: 'glama',
     url: 'https://glama.ai/mcp/servers',
     type: 'plugin',
-    prompt: 'Extract MCP servers from the directory. github must be owner/repo. Prefer weekly downloads or recent usage.',
+    prompt: 'Extract MCP servers from the directory. github must be owner/repo. Extract downloads or usage only when a numeric count and its counting window are explicitly visible; do not infer users from stars, quality scores, or a description.',
     schema: { type: 'object', properties: { items: { type: 'array', items: listingItem } } }
   },
   {
@@ -136,16 +138,27 @@ function assetRepoKey(row) {
 
 function listingSignals(item, directory) {
   const signals = { directory, directoryUpdatedAt: new Date().toISOString() };
-  if (item.installs != null && item.installs !== '') signals.installs = Number(item.installs) || 0;
-  if (item.usage != null && item.usage !== '') signals.usage = Number(item.usage) || 0;
-  if (item.downloads != null && item.downloads !== '') signals.downloads = Number(item.downloads) || 0;
+  const metrics = {};
+  for (const kind of ['installs', 'usage', 'downloads']) {
+    if (item[kind] == null || item[kind] === '') continue;
+    const value = Number(item[kind]);
+    if (!Number.isFinite(value) || value < 0) continue;
+    signals[kind] = value;
+    metrics[kind] = { value, period: item.period || 'unknown', sampledAt: signals.directoryUpdatedAt,
+      sourceUrl: DIRECTORY_LISTINGS.find(spec => spec.id === directory)?.url || null,
+      resource: item.skillPath || item.name || item.github,
+      scope: item.type === 'skill' ? 'skill' : 'repository' };
+  }
+  signals.directoryMetrics = { [directory]: metrics };
   return signals;
 }
 
 async function stampDirectory(row, extra) {
-  const current = asJson(row.ranking_signals, {});
-  const signals = { ...current, ...extra };
-  const evidence = officialEvidenceFor({ type: row.type, full_name: row.full_name, ranking_signals: signals, source_query: `directory:${extra.directory}` });
+  const stored = (await many('SELECT * FROM assets WHERE id=$1', [row.id]))[0];
+  if (!stored) return;
+  const current = asJson(stored.ranking_signals, {});
+  const signals = { ...current, ...extra, directoryMetrics: { ...(current.directoryMetrics || {}), ...extra.directoryMetrics } };
+  const evidence = officialEvidenceFor({ ...stored, ranking_signals: signals });
   await query(
     `UPDATE assets SET ranking_signals=$1::jsonb,last_seen_at=$2,official_evidence=$3,official=$4 WHERE id=$5`,
     [JSON.stringify(signals), extra.directoryUpdatedAt, evidence, isOfficial(evidence), row.id]
@@ -171,7 +184,7 @@ export async function applyDirectorySignals(listings = []) {
   if (!listings.length) return { applied: 0, unmatched: [] };
   const types = [...new Set(listings.map(item => item.type))];
   const rows = await many(
-    `SELECT id,type,full_name,entity_key,source_repo_url,ranking_signals FROM assets WHERE active=TRUE AND type = ANY($1::text[])`,
+    `SELECT id,type,name,slug,full_name,entity_key,source_repo_url,ranking_signals FROM assets WHERE active=TRUE AND type = ANY($1::text[])`,
     [types]
   );
   const byRepo = new Map();
@@ -184,7 +197,8 @@ export async function applyDirectorySignals(listings = []) {
   let applied = 0;
   const unmatched = [];
   for (const item of listings) {
-    const matches = byRepo.get(`${item.type}:${item.github}`) || [];
+    let matches = byRepo.get(`${item.type}:${githubRepoKey(item.github)}`) || [];
+    if (item.type === 'skill') matches = matchSkillListing(item, matches);
     if (!matches.length) { unmatched.push(item); continue; }
     const extra = listingSignals(item, item.directory);
     for (const row of matches) {
@@ -195,14 +209,24 @@ export async function applyDirectorySignals(listings = []) {
   return { applied, unmatched };
 }
 
-export async function collectDirectorySignals({ fetchGithub, upsertAsset, wait = (ms) => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+const skillNameKey = value => String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+export function matchSkillListing(item, rows) {
+  if (item.skillPath) return rows.filter(row => asJson(row.ranking_signals, {}).resourcePath === item.skillPath);
+  if (item.name) return rows.filter(row => skillNameKey(row.name) === skillNameKey(item.name));
+  // A repository-only listing is unambiguous only when it has a single Skill.
+  return rows.length === 1 ? rows : [];
+}
+
+export async function collectDirectorySignals({ fetchGithub, upsertAsset, upsertRepo, wait = (ms) => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
   const settings = await getSettings();
   if (!settings.secret.firecrawlApiKey) return { applied: 0, created: 0, provider: 'skipped' };
   const listings = [];
+  let failed = 0;
   for (const spec of DIRECTORY_LISTINGS) {
     try {
       listings.push(...(await extractDirectory(spec, settings)).slice(0, 100));
     } catch (error) {
+      failed++;
       console.error('[directory-signals]', spec.id, error);
     }
     await wait(400);
@@ -212,20 +236,25 @@ export async function collectDirectorySignals({ fetchGithub, upsertAsset, wait =
   if (fetchGithub && upsertAsset) {
     const seen = new Set();
     for (const item of unmatched) {
-      if (created >= 80 || seen.has(`${item.type}:${item.github}`)) continue;
-      seen.add(`${item.type}:${item.github}`);
+      const listingKey = `${item.type}:${item.github}:${item.skillPath || item.name || ''}`;
+      if (created >= 80 || seen.has(listingKey)) continue;
+      seen.add(listingKey);
       try {
         const repo = await fetchGithub(`https://api.github.com/repos/${item.github}`);
         if (!repo?.full_name) continue;
+        if (upsertRepo) await upsertRepo(repo, `directory:${item.directory}`);
         if (item.type === 'skill') {
           const body = await fetchGithub(`https://api.github.com/repos/${repo.full_name}/git/trees/${encodeURIComponent(repo.default_branch || 'main')}?recursive=1`);
           const { skillResources } = await import('./asset-classification.js');
+          if (body.truncated) throw new Error('Skill verification tree is truncated');
           const resources = skillResources(repo, body.tree || []);
           if (!resources.length) continue;
           const at = new Date().toISOString();
-          for (const resource of resources.slice(0, 8)) {
+          for (const resource of resources.slice(0, Math.min(40, 80-created))) {
             const id = await upsertAsset('skill', repo, `directory:${item.directory}`, at, resource);
-            await stampDirectory({ id, type: 'skill', full_name: repo.full_name, ranking_signals: {} }, listingSignals(item, item.directory));
+            const match = matchSkillListing(item, resources.map(value => ({ name: value.name, ranking_signals: { resourcePath: value.path } })))
+              .some(value => value.ranking_signals.resourcePath === resource.path);
+            if (match) await stampDirectory({ id }, listingSignals(item, item.directory));
             created++;
           }
         } else {
@@ -234,12 +263,13 @@ export async function collectDirectorySignals({ fetchGithub, upsertAsset, wait =
           created++;
         }
       } catch (error) {
+        failed++;
         console.error('[directory-signals] hydrate', item.github, error);
       }
       await wait(350);
     }
   }
-  return { applied, created, listings: listings.length, provider: 'firecrawl' };
+  return { applied, created, failed, unmatched: unmatched.length, listings: listings.length, provider: 'firecrawl' };
 }
 
 export async function ensureWebsiteSources() {
@@ -260,7 +290,7 @@ async function saveWebsite(source, metadata, now) {
   const topics = asJson(source.topics, []);
   const description = metadata.description || `${source.name} open-source resource.`;
   const classified = classify({ type: 'website', full_name: source.name, description, topics, trust: source.trust });
-  const evidence = officialEvidenceFor({ type: 'website', full_name: source.name, trust: source.trust, evidence: `Website source registry: ${source.trust}` });
+  const evidence = officialEvidenceFor({ type: 'website', full_name: source.name, trust: source.trust_level || source.trust });
   await query(
     `INSERT INTO assets (
        id,type,slug,name,full_name,description,category,category_zh,category_en,use_case,official,official_evidence,
@@ -271,9 +301,10 @@ async function saveWebsite(source, metadata, now) {
        category=EXCLUDED.category,category_zh=EXCLUDED.category_zh,category_en=EXCLUDED.category_en,use_case=EXCLUDED.use_case,official=EXCLUDED.official,official_evidence=EXCLUDED.official_evidence,url=EXCLUDED.url,
        website_url=EXCLUDED.website_url,source_repo_url=COALESCE(EXCLUDED.source_repo_url,assets.source_repo_url),favicon_url=EXCLUDED.favicon_url,
        topics=EXCLUDED.topics,pushed_at=EXCLUDED.pushed_at,last_fetched_at=EXCLUDED.last_fetched_at,last_seen_at=EXCLUDED.last_seen_at,
-       source_query=EXCLUDED.source_query,entity_key=EXCLUDED.entity_key,ranking_signals=EXCLUDED.ranking_signals,active=TRUE,missed_runs=0`,
+       source_query=EXCLUDED.source_query,entity_key=EXCLUDED.entity_key,ranking_signals=assets.ranking_signals || EXCLUDED.ranking_signals,active=TRUE,missed_runs=0`,
     [id, slug, metadata.title || source.name, source.name, description, classified.category, classified.categoryZh, classified.categoryEn, classified.useCase, isOfficial(evidence), evidence, `website:${classified.category}`, source.url, JSON.stringify(topics), now, source.source_repo_url, metadata.favicon, `website-source:${slug}`, `domain:${new URL(source.url).hostname.toLowerCase().replace(/^www\./, '')}`, JSON.stringify({ trust: source.trust_level || source.trust, contentUpdatedAt: metadata.lastModified, provider: metadata.provider, confidence: metadata.lastModified ? 'partial' : 'metadata-only' })]
   );
+  await query('UPDATE assets SET taxonomy_version=$1 WHERE id=$2', [CLASSIFICATION_VERSION, id]);
   await query('UPDATE website_sources SET last_fetched_at=$1,next_retry_at=NULL,failure_count=0,last_error=NULL,metadata=$2::jsonb WHERE id=$3', [now, JSON.stringify(metadata), source.id]);
 }
 

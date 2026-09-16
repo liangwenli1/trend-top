@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trackDatabaseCall } from './performance.js';
 import { topicFunctionSql } from '../shared/topics.js';
+import { backfillUseCases } from './catalog-taxonomy.js';
 
 export const DAYS = { day: 1, week: 7, month: 30 };
 export const HISTORY_DAYS = 14;
@@ -116,6 +117,11 @@ async function init() {
   await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS entity_key TEXT');
   await adapter.exec("ALTER TABLE assets ADD COLUMN IF NOT EXISTS ranking_signals JSONB NOT NULL DEFAULT '{}'::jsonb");
   await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS use_case TEXT');
+  await adapter.exec('ALTER TABLE repos ADD COLUMN IF NOT EXISTS use_case TEXT');
+  await adapter.exec('ALTER TABLE repos ADD COLUMN IF NOT EXISTS taxonomy_version INTEGER NOT NULL DEFAULT 0');
+  await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS taxonomy_version INTEGER NOT NULL DEFAULT 0');
+  await adapter.exec('CREATE INDEX IF NOT EXISTS repos_use_case_idx ON repos (source, use_case, active)');
+  await adapter.exec('CREATE INDEX IF NOT EXISTS assets_use_case_idx ON assets (type, use_case, active)');
   await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE');
   await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS missed_runs INTEGER NOT NULL DEFAULT 0');
   await adapter.exec('ALTER TABLE website_sources ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ');
@@ -135,11 +141,13 @@ async function init() {
     PRIMARY KEY (user_id, item_type, item_id)
   )`);
   await adapter.exec('CREATE INDEX IF NOT EXISTS watches_user_idx ON watches (user_id, created_at DESC)');
+  await adapter.exec("ALTER TABLE watches ADD COLUMN IF NOT EXISTS pending_snapshot JSONB");
   if (dataSource() === 'demo') {
     await seedDemo();
     const { seedCatalog } = await import('./catalog.js');
     await seedCatalog();
   }
+  await backfillUseCases(adapter);
   await rebuildDerivedMetrics();
   return adapter;
 }

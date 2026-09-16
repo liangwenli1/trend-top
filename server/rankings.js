@@ -2,6 +2,7 @@ import {
   asDay, asIso, asJson, asNumber, dataSource, DAYS, lastCompleteDay, many, one, utcDay
 } from './db.js';
 import { normalizeTopics, topicFilterValues } from '../shared/topics.js';
+import { normalizeUseCase, OFFICIAL_ORGS } from '../shared/taxonomy.js';
 
 export const boards = {
   hot: { zh: '近期热门', en: 'Trending now', metric: 'score' },
@@ -39,12 +40,12 @@ function pctExpr(orderSql) {
   END`;
 }
 
-function rankingCte(params, { board, language, languages, topic, topics, q, age, endpoint }) {
+function rankingCte(params, { board, language, languages, topic, topics, q, age, endpoint, useCase, official }) {
   let sql = `
     WITH filtered AS (
       SELECT
         r.id, r.full_name, r.description, r.language, r.topics, r.stars, r.forks,
-        r.created_at, r.pushed_at, r.updated_at, r.archived, r.deleted, r.source,
+        r.created_at, r.pushed_at, r.updated_at, r.archived, r.deleted, r.source, r.use_case,
         p.gain, p.fork_gain, p.prev_gain, p.anomaly, p.sampled_at,
         GREATEST(0, COALESCE(EXTRACT(EPOCH FROM ($3::timestamptz - r.created_at)) / 86400, 0)) AS age_days,
         GREATEST(0, COALESCE(EXTRACT(EPOCH FROM ($3::timestamptz - r.pushed_at)) / 86400, 0)) AS push_days
@@ -53,6 +54,14 @@ function rankingCte(params, { board, language, languages, topic, topics, q, age,
         ON p.repo_id = r.id AND p.period = $2 AND p.source = $1
       WHERE r.deleted = FALSE AND r.archived = FALSE AND r.active = TRUE AND r.source = $1`;
 
+  if (useCase) {
+    params.push(normalizeUseCase(useCase));
+    sql += ` AND r.use_case = $${params.length}`;
+  }
+  if (official === '1' || official === 'true') {
+    params.push([...OFFICIAL_ORGS]);
+    sql += ` AND lower(split_part(r.full_name,'/',1)) = ANY($${params.length}::text[])`;
+  }
   const languageValues = filterValues(languages?.length ? languages : language);
   if (languageValues.length === 1) {
     params.push(languageValues[0]);
@@ -165,6 +174,7 @@ function mapItem(row, rank) {
   const topics = asJson(row.topics, []);
   return {
     id: asNumber(row.id),
+    use_case: row.use_case,
     full_name: row.full_name,
     description: row.description,
     language: row.language,
@@ -246,8 +256,8 @@ export async function getFilters() {
 }
 
 export async function getRankings({
-  board = 'hot', period = 'week', language = '', languages = [], topic = '', topics = [], age = '', q = '', page = 1, limit = 10
-} = {}) {
+  board = 'hot', period = 'week', language = '', languages = [], topic = '', topics = [], age = '', q = '', page = 1, limit = 10, useCase = '', use_case = '', official = ''
+} = {}, { all = false } = {}) {
   if (!boards[board]) board = 'hot';
   if (!DAYS[period]) period = 'week';
   const source = dataSource();
@@ -262,10 +272,10 @@ export async function getRankings({
     : new Date(endpoint.getTime() - days * 86400000);
   const safePage = Math.max(1, Math.min(1000, Number(page) || 1));
   const safeLimit = Math.max(1, Math.min(50, Number(limit) || 10));
-  const offset = (safePage - 1) * safeLimit;
+  const offset = all ? 0 : (safePage - 1) * safeLimit;
   const metric = boards[board].metric;
   const params = [source, period, endpoint.toISOString()];
-  const cte = rankingCte(params, { board, language, languages, topic, topics, q, age, endpoint });
+  const cte = rankingCte(params, { board, language, languages, topic, topics, q, age, endpoint, useCase: useCase || use_case, official });
   const extra = metric === 'score'
     ? 's.score IS NOT NULL'
     : metric === 'gain'
@@ -286,8 +296,8 @@ export async function getRankings({
      FROM scored s
      WHERE ${extra}
      ORDER BY ${orderExpr}
-     LIMIT $${params.length - 1} OFFSET $${params.length}`,
-    params
+     ${all ? '' : `LIMIT $${params.length - 1} OFFSET $${params.length}`}`,
+    all ? filterParams : params
   );
 
   let candidateCount = asNumber(rows[0]?.candidate_count);

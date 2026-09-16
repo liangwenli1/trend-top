@@ -514,9 +514,6 @@ export function ItemDetail({ l, t, type, id, navigate, viewer }) {
       topicValues.push(text);
     }
   }
-  const category = String(item.category ?? '').trim();
-  const categoryKey = category.toLowerCase();
-  const showCategory = category && category !== 'uncategorized' && category !== 'other' && !topicKeys.has(categoryKey);
   const topicHref = value => typePath(l, type, 'ranking', `topic=${encodeURIComponent(value)}`);
   const githubHref = item.sourceRepoUrl || (/github\.com/i.test(item.url || '') ? item.url : null);
   const siteHref = item.websiteUrl && item.websiteUrl !== githubHref ? item.websiteUrl : (type === 'website' ? (item.url || item.websiteUrl) : null);
@@ -530,7 +527,6 @@ export function ItemDetail({ l, t, type, id, navigate, viewer }) {
       <div className="repo-tags">
         {item.officialEvidence && <span className="source-tag" title={item.officialEvidence}>{l === 'zh' ? '官方' : 'Official'}</span>}
         {item.useCase && item.useCase !== 'other' && <a className="tag-btn" href={typePath(l, type, 'ranking', `useCase=${encodeURIComponent(item.useCase)}`)} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, 'ranking'), `useCase=${encodeURIComponent(item.useCase)}`); }}>{item.useCaseLabel?.[l === 'zh' ? 'zh' : 'en'] || item.useCase}</a>}
-        {showCategory && <a className="tag-btn detail-category-tag" href={typePath(l, type, `c/${encodeURIComponent(category)}`)} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, `c/${encodeURIComponent(category)}`)); }}>{item.categoryLabel?.[l === 'zh' ? 'zh' : 'en'] || category}</a>}
         {topicValues.filter(value => !['uncategorized', 'other'].includes(value.toLowerCase())).slice(0, 5).map(value => <a className="tag-btn detail-topic-tag" key={value} href={topicHref(value)} onClick={e => { e.preventDefault(); navigate(e, topicHref(value)); }}>{value}</a>)}
       </div>
       <div className="repo-tags detail-actions">
@@ -559,9 +555,11 @@ export function ItemDetail({ l, t, type, id, navigate, viewer }) {
 function WatchButton({ l, type, item, viewer, navigate }) {
   const [watching, setWatching] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const id = String(item.slug || item.id);
   const detailPath = itemPath(l, type, id);
   useEffect(() => {
+    setError('');
     if (!viewer) { setWatching(false); return; }
     const controller = new AbortController();
     fetch(`/api/watches/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, { signal: controller.signal }).then(async r => {
@@ -574,6 +572,7 @@ function WatchButton({ l, type, item, viewer, navigate }) {
     event.preventDefault();
     if (!viewer) { navigate(event, loginUrl(l, detailPath)); return; }
     if (busy) return;
+    setError('');
     setBusy(true);
     try {
       const response = await fetch('/api/watches', {
@@ -586,11 +585,13 @@ function WatchButton({ l, type, item, viewer, navigate }) {
       if (response.status === 403) { navigate(event, `/${l}/pricing`); return; }
       if (!response.ok) throw new Error(data.error || 'Watch failed');
       setWatching(Boolean(data.watching));
-    } catch {
-      setWatching(watching);
+    } catch (err) {
+      setError(err.message === 'Watch limit reached'
+        ? (l === 'zh' ? '最多关注 100 个项目，请先取消部分关注。' : 'You can watch 100 projects. Unwatch a project to add another.')
+        : (l === 'zh' ? '操作失败，请重试。' : 'Could not update your watchlist. Try again.'));
     } finally { setBusy(false); }
   };
-  return <button type="button" className="tag-btn tag-btn-action" disabled={busy} onClick={click}>{watching ? (l === 'zh' ? '已关注' : 'Watching') : (l === 'zh' ? '关注' : 'Watch')}</button>;
+  return <><button type="button" className="tag-btn tag-btn-action" disabled={busy} onClick={click}>{watching ? (l === 'zh' ? '已关注' : 'Watching') : (l === 'zh' ? '关注' : 'Watch')}</button>{error && <span role="alert">{error}</span>}</>;
 }
 
 function RelatedCards({l,items,navigate}) {

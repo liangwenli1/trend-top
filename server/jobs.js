@@ -6,7 +6,7 @@ import { asJson, asNumber, many, one, query, ready, rebuildDerivedMetrics } from
 import { sendMail } from './mail.js';
 import { buildDigest } from './digest.js';
 import { collectWebsiteSources, collectDirectorySignals } from './website-sources.js';
-import { classify, officialEvidenceFor, isOfficial } from '../shared/taxonomy.js';
+import { CLASSIFICATION_VERSION, classify, officialEvidenceFor, isOfficial } from '../shared/taxonomy.js';
 import { getSettings } from './settings.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -134,17 +134,30 @@ function websiteEntityKey(repo) {
   catch { return `repo:${String(repo.full_name || '').toLowerCase()}`; }
 }
 
-async function upsertGithubRepo(repo, at, sourceQuery = null) {
-  const stars = Number(repo.stargazers_count ?? repo.stars) || 0;
-  const forks = Number(repo.forks_count ?? repo.forks) || 0;
-  const createdAt = repo.created_at || at;
-  const pushedAt = repo.pushed_at || repo.updated_at || at;
-  const updatedAt = repo.updated_at || repo.pushed_at || at;
+export function completeRepoMetadata(repo) {
+  return Boolean(repo?.id && repo.full_name && Number.isInteger(repo.stargazers_count) && repo.stargazers_count >= 0
+    && Number.isInteger(repo.forks_count) && repo.forks_count >= 0 && Number.isFinite(Date.parse(repo.created_at)));
+}
+
+export async function hydrateRepo(repo, fetchGithub = github) {
+  if (completeRepoMetadata(repo)) return repo;
+  const full = { ...repo, ...(await fetchGithub(`https://api.github.com/repos/${repo.full_name}`)) };
+  if (!completeRepoMetadata(full)) throw new Error(`Incomplete GitHub metadata: ${repo.full_name}`);
+  return full;
+}
+
+export async function upsertGithubRepo(repo, at = new Date().toISOString(), sourceQuery = null) {
+  if (!completeRepoMetadata(repo)) throw new Error(`Incomplete GitHub metadata: ${repo.full_name}`);
+  const stars = repo.stargazers_count;
+  const forks = repo.forks_count;
+  const createdAt = repo.created_at;
+  const pushedAt = repo.pushed_at || null;
+  const updatedAt = repo.updated_at || null;
   await query(
     `INSERT INTO repos (
        id, full_name, description, language, topics, stars, forks,
-       created_at, pushed_at, updated_at, archived, deleted, source,last_seen_at,source_query,active,missed_runs
-     ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,FALSE,'github',$12,$13,TRUE,0)
+       created_at, pushed_at, updated_at, archived, deleted, source,last_seen_at,source_query,active,missed_runs,use_case,taxonomy_version
+     ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,FALSE,'github',$12,$13,TRUE,0,$14,$15)
      ON CONFLICT (id) DO UPDATE SET
        full_name = EXCLUDED.full_name,
        description = EXCLUDED.description,
@@ -152,6 +165,9 @@ async function upsertGithubRepo(repo, at, sourceQuery = null) {
        topics = EXCLUDED.topics,
        stars = EXCLUDED.stars,
        forks = EXCLUDED.forks,
+       created_at = EXCLUDED.created_at,
+       use_case = EXCLUDED.use_case,
+       taxonomy_version = EXCLUDED.taxonomy_version,
        pushed_at = EXCLUDED.pushed_at,
        updated_at = EXCLUDED.updated_at,
        archived = EXCLUDED.archived,
@@ -174,7 +190,9 @@ async function upsertGithubRepo(repo, at, sourceQuery = null) {
       updatedAt,
       Boolean(repo.archived),
       at,
-      sourceQuery
+      sourceQuery,
+      classify(repo).useCase,
+      CLASSIFICATION_VERSION
     ]
   );
   await query(
@@ -190,7 +208,7 @@ export async function upsertAsset(type, repo, sourceQuery = null, at = new Date(
   const id = `${type}-${slug}`;
   const org = String(repo.full_name || '').split('/')[0];
   const topics = repo.topics || [];
-  const classified = classify({ type, full_name: repo.full_name, name: repo.name, description: repo.description, topics, category: resource?.name });
+  const classified = classify({ type, full_name: repo.full_name, name: resource?.name || repo.name, description: repo.description, topics, category: resource?.name, ranking_signals: { resourcePath: resource?.path } });
   const evidence = officialEvidenceFor({ type, full_name: repo.full_name, org });
   await query(
     `INSERT INTO assets (
@@ -225,7 +243,7 @@ export async function upsertAsset(type, repo, sourceQuery = null, at = new Date(
        last_seen_at = EXCLUDED.last_seen_at,
        source_query = COALESCE(EXCLUDED.source_query,assets.source_query),
        entity_key = EXCLUDED.entity_key,
-       ranking_signals = EXCLUDED.ranking_signals,
+       ranking_signals = assets.ranking_signals || EXCLUDED.ranking_signals,
        active = TRUE,
        missed_runs = 0`,
     [
@@ -243,6 +261,7 @@ export async function upsertAsset(type, repo, sourceQuery = null, at = new Date(
       JSON.stringify({ associatedRepoStars: repo.stargazers_count || 0, associatedRepoForks: repo.forks_count || 0, contentUpdatedAt: repo.pushed_at || repo.updated_at || null, confidence: 'github-associated', typeVerified: true, resourcePath: resource?.path || null, classificationEvidence: resource?'SKILL.md file':sourceQuery?.startsWith('manual:')?'administrator-approved':type==='website'?'repository-homepage':'primary-purpose-description' })
     ]
   );
+  await query('UPDATE assets SET taxonomy_version=$1 WHERE id=$2', [CLASSIFICATION_VERSION, id]);
   return id;
 }
 
@@ -255,24 +274,31 @@ async function recordQueryStat(runId, collectionType, spec, stat, error = null) 
 }
 
 export async function collectTypedAssets(knownRepos, runId, at, manualAssets = new Map(), fetchGithub = github, wait = sleep) {
-  const counts = {}, extra = new Map(), executedQueries = [], trees = new Map();
+  const counts = {}, extra = new Map(), executedQueries = [], trees = new Map(), hydrated = new Map();
+  let metadataFailures = 0, verificationFailures = 0;
   const skillTree = async repo => {
     if (trees.has(repo.id)) return trees.get(repo.id);
     const branches = [...new Set([repo.default_branch, 'main', 'master'].filter(Boolean))];
     for (const branch of branches) {
       try {
         const body = await fetchGithub('https://api.github.com/repos/' + repo.full_name + '/git/trees/' + encodeURIComponent(branch) + '?recursive=1');
-        const resources = body.truncated ? [] : skillResources(repo, body.tree || []);
+        if (body.truncated) {
+          verificationFailures++;
+          console.warn('[collect] truncated Skill tree; preserving existing resources', repo.full_name);
+        }
+        const resources = body.truncated ? [] : skillResources({ ...repo, default_branch: branch }, body.tree || []);
         trees.set(repo.id, resources);
         return resources;
       } catch (error) {
         if (!/GitHub 404/.test(String(error))) {
+          verificationFailures++;
           console.warn('[collect] skill tree', repo.full_name, error.message || error);
           trees.set(repo.id, []);
           return [];
         }
       }
     }
+    verificationFailures++;
     trees.set(repo.id, []);
     return [];
   };
@@ -287,6 +313,16 @@ export async function collectTypedAssets(knownRepos, runId, at, manualAssets = n
     const found = new Map();
     const accept = async (repo,source,manual=false,hintPath=null) => {
       if(!repo?.id)return 0;
+      if (!hydrated.has(repo.id)) {
+        try { hydrated.set(repo.id, await hydrateRepo(repo, fetchGithub)); }
+        catch (error) {
+          metadataFailures++;
+          console.warn('[collect] metadata unavailable; preserving existing resources', repo.full_name, error.message);
+          hydrated.set(repo.id, null);
+        }
+      }
+      repo = hydrated.get(repo.id);
+      if (!repo) return 0;
       if(type!=='skill' && !manual && !acceptsRepoType(type,repo))return 0;
       const resources=type==='skill'?await skills(repo,hintPath):[null];
       let added=0;
@@ -344,7 +380,7 @@ export async function collectTypedAssets(knownRepos, runId, at, manualAssets = n
     }
     counts[type]=found.size;
   }
-  return {counts,extra:[...extra.values()],executedQueries};
+  return {counts,extra:[...extra.values()],executedQueries,metadataFailures,verificationFailures};
 }
 
 async function approvedCandidates() {
@@ -553,40 +589,22 @@ export async function collect() {
 
     const assets = await collectTypedAssets([...unique.values()], runId, at, manual.assets);
     for (const repo of assets.extra) {
-      let full = repo;
-      if (!Number.isFinite(Number(repo.stargazers_count))) {
-        try {
-          full = { ...repo, ...(await github(`https://api.github.com/repos/${repo.full_name}`)) };
-        } catch (error) {
-          if (/GitHub 404/.test(String(error))) continue;
-        }
-      }
-      await upsertGithubRepo(full, at, repo._trendTopAssetSourceQuery || null);
-      unique.set(full.id, full);
+      await upsertGithubRepo(repo, at, repo._trendTopAssetSourceQuery || null);
+      unique.set(repo.id, repo);
     }
 
     const websites = await collectWebsiteSources();
     let directories = { applied: 0, created: 0 };
     try {
-      directories = await collectDirectorySignals({ fetchGithub: github, upsertAsset, wait: sleep });
+      directories = await collectDirectorySignals({ fetchGithub: github, upsertAsset,
+        upsertRepo: (repo, source) => upsertGithubRepo(repo, at, source), wait: sleep });
     } catch (error) {
+      directories.failed = (directories.failed || 0) + 1;
       console.error('[collect] directory signals', error);
     }
     console.log('[collect] websites', websites, 'directories', directories);
-    if (executedRepoQueries.length) {
-      await query(
-        `UPDATE repos SET missed_runs=missed_runs+1,active=CASE WHEN missed_runs+1>=3 THEN FALSE ELSE active END
-         WHERE source='github' AND source_query=ANY($1::text[]) AND (last_seen_at IS NULL OR last_seen_at<$2)`,
-        [executedRepoQueries, started]
-      );
-    }
-    if (assets.executedQueries.length) {
-      await query(
-        `UPDATE assets SET missed_runs=missed_runs+1,active=CASE WHEN missed_runs+1>=3 THEN FALSE ELSE active END
-         WHERE source_query=ANY($1::text[]) AND (last_seen_at IS NULL OR last_seen_at<$2)`,
-        [assets.executedQueries, started]
-      );
-    }
+    // Bounded search results are discovery, not proof an already verified resource disappeared.
+    // Explicit classification audits/verified source deletion handle retirement instead.
 
     // Star history is a separate GitHub endpoint; if it breaks, keep the snapshots and still rebuild metrics.
     let history = { sampled: 0, failed: 0 }, historyError = null;
@@ -598,9 +616,11 @@ export async function collect() {
     }
     await rebuildDerivedMetrics();
     await copyRepoMetricsToAssets();
+    const queryFailures = asNumber((await one('SELECT COUNT(*) AS n FROM sync_query_stats WHERE run_id=$1 AND error IS NOT NULL', [runId]))?.n) || 0;
+    const partial = queryFailures + assets.metadataFailures + assets.verificationFailures + (websites.failed || 0) + (directories.failed || 0) + (history.failed || 0) > 0 || Boolean(historyError);
     await query(
       `UPDATE sync_runs SET finished_at = $1, status = $2, found = $3, sampled = $4, error = $5 WHERE id = $6`,
-      [new Date().toISOString(), 'ok', found, sampled, historyError || (history.failed ? `${history.failed} star histories unavailable` : null), runId]
+      [new Date().toISOString(), partial ? 'partial' : 'ok', found, sampled, historyError || (partial ? `${queryFailures} query failures; ${assets.metadataFailures} incomplete repositories; ${assets.verificationFailures} Skill trees unavailable; ${websites.failed || 0} website failures; ${directories.failed || 0} directory failures; ${history.failed || 0} star histories unavailable` : null), runId]
     );
     return { found, sampled, history, historyError, assets: assets.counts, websites, directories, firecrawl: firecrawlReady ? (directories.provider || websites.provider || 'firecrawl') : 'skipped' };
   } catch (e) {

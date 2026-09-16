@@ -170,9 +170,49 @@ test('architecture topics classify instead of staying uncategorized', async () =
   assert.equal(archify.useCase, 'coding');
   assert.equal(officialEvidenceFor({ type: 'plugin', full_name: 'someone/pg', ranking_signals: { directory: 'glama' } }), null);
   assert.match(officialEvidenceFor({ type: 'plugin', full_name: 'supabase/mcp', ranking_signals: { directory: 'glama' } }) || '', /Glama/);
-  assert.match(officialEvidenceFor({ type: 'plugin', full_name: 'acme/random-mcp', ranking_signals: { directory: 'official-mcp-registry' } }) || '', /Official MCP Registry/);
+  assert.equal(officialEvidenceFor({ type: 'plugin', full_name: 'acme/random-mcp', ranking_signals: { directory: 'official-mcp-registry' } }), null);
+  assert.equal(compareFields({ type: 'components', full_name: 'someone/button' }).hosts, null);
   const compared = compareFields({ type: 'plugin', full_name: 'modelcontextprotocol/postgres', description: 'stdio MCP for Postgres', language: 'TypeScript' });
   assert.equal(compared.protocol, 'MCP');
   assert.equal(compared.transport, 'stdio');
   assert.ok(!String(compared.identity).includes('npx'));
+});
+
+test('startup migration makes legacy inferred use cases filterable and removes empty menu options', async () => {
+  const { backfillUseCases } = await import('./catalog-taxonomy.js');
+  await query("UPDATE assets SET use_case=NULL,taxonomy_version=0 WHERE slug='anthropic-pdf'");
+  await backfillUseCases({ query });
+  const row = await one("SELECT use_case FROM assets WHERE slug='anthropic-pdf'");
+  assert.equal(row.use_case, 'documents');
+  const result = await getCatalogRankings('skill', { board: 'stars', useCase: 'documents' });
+  assert.ok(result.items.some(item => item.slug === 'anthropic-pdf'));
+  const facets = await getCatalogFilters('skill');
+  assert.ok(facets.useCases.some(item => item.id === 'documents'));
+  assert.ok(facets.useCases.every(item => item.count > 0));
+  assert.ok(!facets.useCases.some(item => ['github','directory','playground','spec'].includes(item.id)));
+});
+
+test('repository use-case filter applies before pagination and total counting', async () => {
+  const ids = [];
+  try {
+    for (let i = 0; i < 65; i++) {
+      const id = 97000 + i; ids.push(id);
+      await query(`INSERT INTO repos(id,full_name,description,stars,forks,source,use_case,taxonomy_version)
+        VALUES($1,$2,'pagination regression',$3,1,'demo',$4,1)`,
+        [id, 'purpose-pagination/item-' + i, 100000-i, i < 55 ? 'ui' : 'database']);
+    }
+    const first = await getCatalogRankings('github-repo', { board: 'stars', q: 'purpose-pagination', useCase: 'database', limit: 6 });
+    const second = await getCatalogRankings('github-repo', { board: 'stars', q: 'purpose-pagination', useCase: 'database', limit: 6, page: 2 });
+    assert.equal(first.total, 10); assert.equal(first.items.length, 6);
+    assert.equal(second.total, 10); assert.equal(second.items.length, 4);
+    assert.ok([...first.items,...second.items].every(item => item.useCase === 'database'));
+    assert.equal(new Set([...first.items,...second.items].map(item => item.id)).size, 10);
+  } finally { await query('DELETE FROM repos WHERE id=ANY($1::bigint[])', [ids]); }
+});
+
+test('discovery search text does not contaminate purpose or substring-match unrelated types', async () => {
+  const { classify, expandSearch } = await import('../shared/taxonomy.js');
+  assert.equal(classify({ full_name: 'qa/server', description: 'A database client', source_query: 'asset:skill:filename:SKILL.md postgres' }).useCase, 'database');
+  assert.equal(classify({ full_name: 'qa/server', description: 'A database client' }).useCase, 'database');
+  assert.ok(!expandSearch('builds').types.includes('components'));
 });

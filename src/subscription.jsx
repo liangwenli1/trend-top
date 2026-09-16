@@ -4,12 +4,13 @@ import { DesignSelect, TopicMultiSelect } from './components.jsx';
 import { TYPES, typeLabel, itemPath } from './catalog.js';
 import { BillingCard } from './billing-ui.jsx';
 import './account.css';
+import { PlanBadge, DeliveryBadge, StatusBadge } from './account-status.jsx';
 import { loginUrl, safeAccountReturn, digestDestination } from '../shared/account-paths.js';
 export const AuthContext = React.createContext(undefined);
 export function useProStatus(user) {
-  const [access,setAccess]=useState(false);
+  const [access,setAccess]=useState(null);
   useEffect(()=>{
-    let live=true;setAccess(false);
+    let live=true;setAccess(user ? null : false);
     if(user)request('/api/billing/access').then(result=>{if(live)setAccess(result.active)}).catch(()=>{});
     return()=>{live=false};
   },[user?.id]);
@@ -219,7 +220,8 @@ function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSa
     finally { setBusy(false); }
   };
   return <form className="subscribe-form account-settings" onSubmit={submit}>
-    {account && <p className="account-status">{zh ? '邮件推送：' : 'Email delivery: '}{status === 'active' ? (zh ? '发送中' : 'Active') : status === 'paused' ? (zh ? '已暂停' : 'Paused') : status === 'cancelled' ? (zh ? '已停止' : 'Stopped') : (zh ? '尚未设置' : 'Not set up')}</p>}
+    {account && <div className="account-status-row" role="status"><PlanBadge active={proActive} l={l}/><DeliveryBadge status={status} proActive={proActive} l={l}/></div>}
+    {account && proActive === false && <div className="delivery-upgrade"><p>{zh ? '每日摘要邮件仅向有效 Pro 用户开放。你的推送偏好会保留。' : 'Daily digest emails require Pro. Your delivery preferences stay saved.'}</p><a className="primary billing-link" href={digestDestination(l,false,location.search)}>{zh ? '成为 Pro，获取每日最新热点' : 'Become Pro. Get the latest daily highlights'}</a></div>}
     <fieldset disabled={!proActive}><legend>{zh ? '订阅内容' : 'Content types'}</legend><div className="checks account-type-grid">{TYPES.map(type => <label key={type}><input type="checkbox" checked={types.includes(type)} onChange={() => toggleType(type)}/>{typeLabel(type, l)}</label>)}</div></fieldset>
     <fieldset disabled={!proActive}><legend>{zh ? '关注榜单' : 'Boards to follow'}</legend><div className="checks account-board-grid">{boardChoices.map(board => <label key={board}><input type="checkbox" checked={boards.includes(board)} onChange={() => setBoards(old => old.includes(board) ? old.filter(value => value !== board) : [...old, board])}/>{boardLabels[board][zh ? 0 : 1]}</label>)}</div></fieldset>
     <fieldset disabled={!proActive} className="delivery-fields"><div className="form-grid">
@@ -274,38 +276,51 @@ function WatchPanel({ l, proActive, navigate }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   useEffect(() => {
-    if (!proActive) { setData({ items: [] }); return; }
+    const controller = new AbortController();
+    setData(null);
+    setError('');
     const requestWatch = async () => {
-      const response = await fetch('/api/watches');
+      const response = await fetch(proActive ? '/api/watches' : '/api/watches/saved', { signal: controller.signal });
       const payload = await response.json().catch(() => ({}));
       if (response.status === 403) { setData({ items: [], locked: true }); return; }
       if (!response.ok) throw new Error(payload.error || 'Watchlist failed');
       setData(payload);
     };
-    requestWatch().catch(err => setError(err.message));
+    requestWatch().catch(err => { if (err.name !== 'AbortError') setError(zh ? '无法加载关注列表，请刷新重试。' : 'Could not load your watchlist. Refresh to retry.'); });
+    return () => controller.abort();
   }, [proActive]);
-  if (!proActive) return <><p>{zh ? '关注列表是 Pro 功能。关注后可看到距上次访问的名次和 Star 变化。' : 'Watchlist is a Pro feature. After you watch a project, you can see rank and star changes since your last visit.'}</p><a className="primary billing-link" href={`/${l}/pricing`}>{zh ? '成为 Pro' : 'Become Pro'}</a></>;
+  useEffect(() => {
+    if (!proActive || !data?.items?.length) return;
+    const controller = new AbortController();
+    fetch('/api/watches/seen', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: data.items.map(({ type, id, sampledAt }) => ({ type, id, sampledAt })) }) }).catch(() => {});
+    return () => controller.abort();
+  }, [proActive, data]);
+  const upgrade = !proActive && <><p>{zh ? '实时名次与变化是 Pro 功能。已保存的关注仍可取消。' : 'Live ranks and changes require Pro. You can still remove saved watches.'}</p><a className="primary billing-link" href={`/${l}/pricing`}>{zh ? '成为 Pro' : 'Become Pro'}</a></>;
   if (!data) return <p>{error || (zh ? '加载关注列表…' : 'Loading watchlist…')}</p>;
-  if (!data.items?.length) return <p className="account-hint">{zh ? '还没有关注项目。打开任意详情页，点「关注」。' : 'Nothing watched yet. Open a project and choose Watch.'}</p>;
+  if (!data.items?.length) return <>{upgrade}<p className="account-hint">{zh ? '还没有关注项目。打开任意详情页，点「关注」。' : 'Nothing watched yet. Open a project and choose Watch.'}</p></>;
   const deltaText = (value, zhUp, enUp, zhDown, enDown) => {
     if (value == null) return '—';
     if (value > 0) return `${zh ? zhUp : enUp} ${value}`;
     if (value < 0) return `${zh ? zhDown : enDown} ${Math.abs(value)}`;
     return zh ? '持平' : 'No change';
   };
-  return <div className="watch-list">{data.items.map(item => {
+  return <div className="watch-list">{upgrade}{proActive && <p className="account-hint">{zh ? '名次按全部项目的「周热度榜」计算；变化从上次查看关注列表开始。未进入该榜的项目显示 —。' : 'Ranks use the unfiltered weekly Hot board. Changes start from your last watchlist view. Projects outside this board show —.'}</p>}{error && <p role="alert">{error}</p>}{data.items.map(item => {
     const href = itemPath(l, item.type, item.slug || item.id);
     return <article className="watch-item" key={item.type + item.id}>
       <p className="watch-type">{typeLabel(item.type, l)}</p>
       <h2><a href={href} onClick={event => { event.preventDefault(); navigate(href); }}>{item.full_name}</a></h2>
       <p>{item.description || '—'}</p>
-      <div className="watch-deltas">
+      {proActive && <div className="watch-deltas">
         <span className={item.rankDelta > 0 ? 'positive' : item.rankDelta < 0 ? 'down' : ''}>{zh ? '名次' : 'Rank'} {item.rank ?? '—'} · {deltaText(item.rankDelta, '上升', 'up', '下降', 'down')}</span>
         <span className={item.starDelta > 0 ? 'positive' : item.starDelta < 0 ? 'down' : ''}>Stars {item.stars} · {item.starDelta > 0 ? `+${item.starDelta}` : item.starDelta}</span>
-      </div>
+      </div>}
       <button type="button" className="ghost" onClick={async () => {
-        await fetch('/api/watches', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: item.type, id: item.id }) });
-        setData(current => ({ items: current.items.filter(row => !(row.type === item.type && row.id === item.id)) }));
+        setError('');
+        try {
+          const response = await fetch('/api/watches', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: item.type, id: item.id }) });
+          if (!response.ok) throw new Error('Unwatch failed');
+          setData(current => ({ ...current, items: current.items.filter(row => !(row.type === item.type && row.id === item.id)) }));
+        } catch { setError(zh ? '取消关注失败，请重试。' : 'Could not unwatch this project. Try again.'); }
       }}>{zh ? '取消关注' : 'Unwatch'}</button>
     </article>;
   })}</div>;
@@ -317,7 +332,7 @@ function AccountSettings({ l, user }) {
   const [currentPassword, setCurrentPassword] = useState(''), [password, setPassword] = useState(''), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
   useEffect(() => { request('/api/auth/methods').then(setMethods).catch(error => setMessage(error.message)); request('/api/auth/providers').then(setProviders).catch(() => {}); }, []);
   const changePassword = async event => { event.preventDefault(); setBusy(true); setMessage(''); try { await request('/api/auth/password/change', 'POST', { currentPassword, password }); setCurrentPassword(''); setPassword(''); setMessage(zh ? '密码已更新，其他设备的登录已退出。' : 'Password updated. Other devices have been signed out.'); } catch (error) { setMessage(error.message); } finally { setBusy(false); } };
-  return <><div className="account-user"><div><span>{zh ? '账户邮箱' : 'Account email'}</span><strong>{user.email}</strong></div><span className="account-verified">{zh ? '已验证' : 'Verified'}</span></div><section className="account-section"><div className="account-section-heading"><h2>{zh ? '登录方式' : 'Sign-in methods'}</h2></div>{!methods ? <p>{zh ? '加载中…' : 'Loading…'}</p> : <><div className="account-method"><strong>{zh ? '邮箱与密码' : 'Email & password'}</strong><span>{methods.passwordEnabled ? (zh ? '已启用' : 'Enabled') : (zh ? '未设置密码' : 'Password not set')}</span></div><div className="account-method"><strong>Google</strong>{methods.google ? <span>{zh ? '已关联' : 'Connected'}</span> : providers.google ? <a className="ghost billing-link" href={`/api/auth/google?${new URLSearchParams({ locale: l, next: `/${l}/account`, link: '1' })}`}>{zh ? '关联 Google' : 'Connect Google'}</a> : <span>{zh ? '暂未启用' : 'Not available yet'}</span>}</div></>}</section>{methods && <section className="account-section"><div className="account-section-heading"><h2>{methods.passwordEnabled ? (zh ? '修改密码' : 'Change password') : (zh ? '设置邮箱密码' : 'Set an email password')}</h2></div>{methods.passwordEnabled ? <form className="subscribe-form" onSubmit={changePassword}><div className="field"><label htmlFor="settings-current-password">{zh ? '当前密码' : 'Current password'}</label><input id="settings-current-password" type="password" autoComplete="current-password" maxLength={128} required value={currentPassword} onChange={event => setCurrentPassword(event.target.value)}/></div><div className="field"><label htmlFor="settings-new-password">{zh ? '新密码' : 'New password'}</label><input id="settings-new-password" type="password" autoComplete="new-password" minLength={10} maxLength={128} required value={password} onChange={event => setPassword(event.target.value)}/><small>{zh ? '10–128 个字符。' : '10–128 characters.'}</small></div><button className="primary" disabled={busy}>{busy ? '…' : (zh ? '更新密码' : 'Update password')}</button></form> : <><p className="account-hint">{zh ? '通过邮件验证码设置密码，以后也可以用邮箱登录。' : 'Set a password with an email code to also sign in using email.'}</p><a className="ghost billing-link" href={loginUrl(l, `/${l}/account`, 'reset-request')}>{zh ? '通过邮箱设置' : 'Set up with email'}</a></>}</section>}{message && <p className="form-message" role="status">{message}</p>}</>;
+  return <><div className="account-user"><div><span>{zh ? '账户邮箱' : 'Account email'}</span><strong>{user.email}</strong></div><span className="account-verified">{zh ? '已验证' : 'Verified'}</span></div>{methods && (methods.google || providers.google) && <section className="account-section"><div className="account-section-heading"><h2>{zh ? '关联账户' : 'Connected accounts'}</h2></div><div className="account-method"><strong>Google</strong>{methods.google ? <StatusBadge tone="active">{zh ? '已关联' : 'Connected'}</StatusBadge> : <a className="ghost billing-link" href={`/api/auth/google?${new URLSearchParams({ locale: l, next: `/${l}/account`, link: '1' })}`}>{zh ? '关联 Google' : 'Connect Google'}</a>}</div></section>}{methods && <section className="account-section"><div className="account-section-heading"><h2>{methods.passwordEnabled ? (zh ? '修改密码' : 'Change password') : (zh ? '设置邮箱密码' : 'Set an email password')}</h2></div>{methods.passwordEnabled ? <form className="subscribe-form" onSubmit={changePassword}><div className="field"><label htmlFor="settings-current-password">{zh ? '当前密码' : 'Current password'}</label><input id="settings-current-password" type="password" autoComplete="current-password" maxLength={128} required value={currentPassword} onChange={event => setCurrentPassword(event.target.value)}/></div><div className="field"><label htmlFor="settings-new-password">{zh ? '新密码' : 'New password'}</label><input id="settings-new-password" type="password" autoComplete="new-password" minLength={10} maxLength={128} required value={password} onChange={event => setPassword(event.target.value)}/><small>{zh ? '10–128 个字符。' : '10–128 characters.'}</small></div><button className="primary" disabled={busy}>{busy ? '…' : (zh ? '更新密码' : 'Update password')}</button></form> : <><p className="account-hint">{zh ? '通过邮件验证码设置密码，以后也可以用邮箱登录。' : 'Set a password with an email code to also sign in using email.'}</p><a className="ghost billing-link" href={loginUrl(l, `/${l}/account`, 'reset-request')}>{zh ? '通过邮箱设置' : 'Set up with email'}</a></>}</section>}{message && <p className="form-message" role="status">{message}</p>}</>;
 }
 
 export function AccountPage({ l, section = '', navigate }) {
@@ -335,7 +350,7 @@ export function AccountPage({ l, section = '', navigate }) {
   }, [user?.id, selected]);
   const zh = l === 'zh';
   const titles = { '': zh ? '账户设置' : 'Account settings', watch: zh ? '关注列表' : 'Watchlist', subscription: zh ? '套餐与账单' : 'Plan & billing', delivery: zh ? '邮件推送设置' : 'Email delivery settings' };
-  const hints = { '': zh ? '管理邮箱、登录方式和账户安全。' : 'Manage your email, sign-in methods, and account security.', watch: zh ? '关注后，这里显示距上次访问的名次和 Star 变化。' : 'After you watch a project, this page shows rank and star changes since your last visit.', subscription: zh ? '查看付费套餐、续费日期、付款记录与退款申请。' : 'Review your paid plan, renewal date, payments, and refund requests.', delivery: zh ? '选择收到的内容和发送时间。推送偏好与付费续订独立管理。' : 'Choose what arrives and when. Delivery preferences are managed separately from paid renewal.' };
+  const hints = { '': zh ? '管理邮箱、登录方式和账户安全。' : 'Manage your email, sign-in methods, and account security.', watch: zh ? '关注后，这里显示距上次查看关注列表的名次和 Star 变化。' : 'After you watch a project, this page shows rank and star changes since your last watchlist view.', subscription: zh ? '查看付费套餐、续费日期、付款记录与退款申请。' : 'Review your paid plan, renewal date, payments, and refund requests.', delivery: zh ? '选择收到的内容和发送时间。推送偏好与付费续订独立管理。' : 'Choose what arrives and when. Delivery preferences are managed separately from paid renewal.' };
   const current = new URLSearchParams(location.search);
-  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{titles[selected]}</h1><p>{hints[selected]}</p></div><nav className="account-navigation" aria-label={zh ? '账户设置导航' : 'Account navigation'}>{Object.entries(titles).map(([key, title]) => <a key={key} aria-current={selected === key ? 'page' : undefined} href={`/${l}/account${key ? '/' + key : ''}`} onClick={event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(`/${l}/account${key ? '/' + key : ''}`); }}>{title}</a>)}</nav><div className="account-page-card">{!user ? <p>{zh ? '加载中…' : 'Loading…'}</p> : selected === 'subscription' ? <BillingCard l={l}/> : selected === 'watch' ? <WatchPanel l={l} proActive={proActive} navigate={navigate}/> : selected === 'delivery' ? subscription === undefined ? <p>{error || (zh ? '加载推送设置…' : 'Loading delivery settings…')}</p> : <><div hidden={proActive}><p>{zh?'每日摘要邮件仅向有效 Pro 用户开放。':'Daily digest emails are available with an active Pro plan.'}</p><a className="primary billing-link" href={digestDestination(l,false,location.search)}>{zh?'成为 Pro，获取每日最新热点':'Become Pro. Get the latest daily highlights'}</a></div><SubscriptionSettings proActive={proActive} key={user.id} l={l} subscription={subscription} currentType={current.get('type')} currentBoard={current.get('board')} account onSaved={setSubscription}/></> : <AccountSettings l={l} user={user}/>}</div>{error && <p role="alert">{error}</p>}</main>;
+  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{titles[selected]}</h1><p>{hints[selected]}</p>{user && selected !== 'delivery' && <div className="account-status-row"><PlanBadge active={proActive} l={l}/></div>}</div><nav className="account-navigation" aria-label={zh ? '账户设置导航' : 'Account navigation'}>{Object.entries(titles).map(([key, title]) => <a key={key} aria-current={selected === key ? 'page' : undefined} href={`/${l}/account${key ? '/' + key : ''}`} onClick={event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(`/${l}/account${key ? '/' + key : ''}`); }}>{title}</a>)}</nav><div className="account-page-card">{!user ? <p>{zh ? '加载中…' : 'Loading…'}</p> : selected === 'subscription' ? <BillingCard l={l}/> : selected === 'watch' ? <WatchPanel l={l} proActive={proActive} navigate={navigate}/> : selected === 'delivery' ? subscription === undefined ? <p>{error || (zh ? '加载推送设置…' : 'Loading delivery settings…')}</p> : <><SubscriptionSettings proActive={proActive} key={user.id} l={l} subscription={subscription} currentType={current.get('type')} currentBoard={current.get('board')} account onSaved={setSubscription}/></> : <AccountSettings l={l} user={user}/>}</div>{error && <p role="alert">{error}</p>}</main>;
 }
