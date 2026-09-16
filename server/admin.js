@@ -5,6 +5,7 @@ import { TYPES } from './catalog.js';
 import { performanceSummary } from './performance.js';
 import { googleCallbackUrl } from './google-auth.js';
 import { publicResponseCache } from './catalog-cache.js';
+import { getCoverageReport } from './catalog-coverage.js';
 
 // Administrators are ordinary accounts whose email is listed in ADMIN_EMAILS
 // (config.json admin.emails). There is no separate token sign-in.
@@ -24,6 +25,7 @@ export async function requireAdmin(req, res, next) {
 }
 
 export function registerAdminRoutes(app) {
+  app.get('/api/admin/catalog-coverage', requireAdmin, async (_req, res) => res.json(await getCoverageReport()));
   app.get('/api/admin/auth/me', async (req, res) => {
     const user = await authUser(req);
     res.json({ admin: Boolean(user && isAdminEmail(user.email)), signedIn: Boolean(user), email: user?.email || null });

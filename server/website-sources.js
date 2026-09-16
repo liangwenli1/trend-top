@@ -2,15 +2,9 @@ import crypto from 'node:crypto';
 import { asJson, many, query } from './db.js';
 import { getSettings } from './settings.js';
 import { CLASSIFICATION_VERSION, classify, officialEvidenceFor, isOfficial } from '../shared/taxonomy.js';
+import { WEBSITE_SOURCES, dataSourceById } from '../shared/data-sources.js';
 
-const SOURCES = [
-  { id: '21st-dev', name: '21st.dev', url: 'https://21st.dev', trust: 'curated', topics: ['components', 'design-system'] },
-  { id: 'skills-sh', name: 'Skills.sh', url: 'https://skills.sh', trust: 'curated', topics: ['skills', 'directory'] },
-  { id: 'smithery', name: 'Smithery', url: 'https://smithery.ai', trust: 'curated', topics: ['mcp', 'directory'] },
-  { id: 'glama', name: 'Glama', url: 'https://glama.ai/mcp/servers', trust: 'curated', topics: ['mcp', 'directory'] },
-  { id: 'agent-skills', name: 'Agent Skills', url: 'https://agentskills.io', trust: 'official', topics: ['skills', 'specification'] },
-  { id: 'shadcn-ui', name: 'shadcn/ui', url: 'https://ui.shadcn.com', trust: 'official', topics: ['components', 'design-system'] }
-];
+const SOURCES = WEBSITE_SOURCES;
 
 const clean = value => String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const absoluteUrl = (value, base) => { try { return new URL(value, base).href; } catch { return null; } };
@@ -100,21 +94,21 @@ const listingItem = {
 const DIRECTORY_LISTINGS = [
   {
     id: 'skills-sh',
-    url: 'https://skills.sh',
+    url: dataSourceById('skills-sh').url,
     type: 'skill',
     prompt: 'Extract the skill leaderboard. name must be the exact individual skill identifier, not the repository name. github must be owner/repo. Only extract counts explicitly visible on the source page; omit unknown counts. installs is the install count. Include skillPath and period only if explicitly provided.',
     schema: { type: 'object', properties: { items: { type: 'array', items: listingItem } } }
   },
   {
     id: 'glama',
-    url: 'https://glama.ai/mcp/servers',
+    url: dataSourceById('glama').url,
     type: 'plugin',
     prompt: 'Extract MCP servers from the directory. github must be owner/repo. Extract downloads or usage only when a numeric count and its counting window are explicitly visible; do not infer users from stars, quality scores, or a description.',
     schema: { type: 'object', properties: { items: { type: 'array', items: listingItem } } }
   },
   {
     id: 'official-mcp-registry',
-    url: 'https://registry.modelcontextprotocol.io',
+    url: dataSourceById('official-mcp-registry').url,
     type: 'plugin',
     prompt: 'Extract official MCP registry servers. github must be owner/repo. Ignore entries without a GitHub repository.',
     schema: { type: 'object', properties: { items: { type: 'array', items: listingItem } } }

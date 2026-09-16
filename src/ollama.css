@@ -974,6 +974,15 @@ button.tag-btn{font:inherit;font-size:13px;font-weight:650;line-height:1.2;appea
 .subscribe-form fieldset:disabled{opacity:.6}
 @media(max-width:700px){.related-cards{grid-template-columns:1fr}.related-card{padding:20px}.related-pagination{gap:12px}.subscribe-cta-button{white-space:normal}}
 .filters.filters-primary { grid-template-columns: minmax(240px, 1.3fr) repeat(5, minmax(150px, 1fr)); }
+.detail-provenance{margin-block:32px;padding-block:24px;border-block-start:1px solid var(--line,#ddd);font-size:14px;color:var(--muted,#666)}
+.detail-provenance h2{display:flex;align-items:center;gap:12px;margin:0 0 16px;font-size:20px;color:var(--ink,#111)}
+.detail-provenance a{color:inherit;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.detail-provenance dl{display:grid;gap:16px;margin:24px 0 0}
+.detail-provenance dl>div{display:grid;grid-template-columns:minmax(100px,140px) 1fr;gap:16px}
+.detail-provenance dt{font-weight:650;color:var(--ink,#111)}
+.detail-provenance dd{margin:0;overflow-wrap:anywhere}
+.detail-provenance small{display:block;margin-block-start:6px;font-size:12px}
+@media(max-width:700px){.detail-provenance dl>div{grid-template-columns:1fr;gap:6px}.detail-provenance h2{flex-wrap:wrap}}
 .filters.filters-secondary { grid-template-columns: minmax(150px, 280px); margin: 16px 0 0; }
 .additional-filters { margin: 0 0 24px; border-top: 1px solid var(--line, #ddd); padding-top: 12px; }
 .additional-filters > summary { cursor: pointer; width: fit-content; font-weight: 600; padding: 8px 0; }

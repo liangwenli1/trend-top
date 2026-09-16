@@ -103,6 +103,11 @@
 .admin-collection-grid strong{font-size:34px;letter-spacing:-.04em}
 .admin-collection-grid span{color:#666;font-size:14px;font-weight:650}
 .admin-query-table{overflow:auto;border:1px solid #ddd}
+.admin-source-policies{margin-top:28px}
+.admin-source-policies>summary{cursor:pointer;padding:12px 0;font-weight:650}
+.admin-source-policies article{padding:20px 0;border-bottom:1px solid #ddd;overflow-wrap:anywhere}
+.admin-source-policies h3{margin:0 0 10px;font-size:18px}
+.admin-source-policies a{color:inherit;text-decoration:underline;text-underline-offset:3px}
 .admin-query-table table{width:100%;border-collapse:collapse;min-width:620px}
 .admin-query-table th,.admin-query-table td{padding:13px 15px;border-bottom:1px solid #e6e6e6;text-align:left;font-size:14px}
 .admin-query-table th{color:#666;font-size:12px;letter-spacing:.07em;text-transform:uppercase}

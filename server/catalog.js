@@ -3,6 +3,7 @@ import { aiEvidence, getChart as getRepoChart, getFilters as getRepoFilters, get
 import { groupProductResources } from '../shared/product-resources.js';
 import { rankRelated, broadTopics } from '../shared/related-projects.js';
 import { normalizeTopics, topicFilterValues } from '../shared/topics.js';
+import { resourceProvenance } from '../shared/data-sources.js';
 import { classify, compareFields, officialEvidenceFor, isOfficial, useCaseOptions, expandSearch, searchScore, normalizeUseCase } from '../shared/taxonomy.js';
 
 export const TYPES = ['skill', 'plugin', 'agent', 'components', 'website', 'github-repo'];
@@ -180,6 +181,7 @@ function mapAsset(row, extras = {}) {
     sourceQuery: row.source_query || null,
     entityKey: row.entity_key || null,
     rankingSignals,
+    provenance: resourceProvenance(row, rankingSignals, dataSource() === 'demo'),
     usage: usageKind && Number.isFinite(Number(rankingSignals[usageKind])) ? Number(rankingSignals[usageKind]) : null,
     usageKind,
     install: row.install,
@@ -192,6 +194,7 @@ function mapAsset(row, extras = {}) {
     recommendRank: asNumber(row.recommend_rank),
     recommendNote: { zh: row.recommend_note_zh, en: row.recommend_note_en },
     gain: extras.gain ?? null,
+    growthCoverage: extras.growthCoverage || null,
     prevGain: extras.prevGain ?? null,
     forkGain: extras.forkGain ?? null,
     anomaly: Boolean(extras.anomaly),
@@ -218,8 +221,10 @@ async function periodStatsBatch(assetIds, period, endpoint) {
   const { end, start, prevStart, prevEnd } = periodBounds(period, endpoint);
   const rows = await many(
     `SELECT asset_id,
-       SUM(CASE WHEN day BETWEEN $4::date AND $5::date THEN COALESCE(star_created, 0) ELSE 0 END)::bigint AS gain,
-       SUM(CASE WHEN day BETWEEN $2::date AND $3::date THEN COALESCE(star_created, 0) ELSE 0 END)::bigint AS prev_gain
+       SUM(star_created) FILTER (WHERE day BETWEEN $4::date AND $5::date)::bigint AS gain,
+       SUM(star_created) FILTER (WHERE day BETWEEN $2::date AND $3::date)::bigint AS prev_gain,
+       COUNT(star_created) FILTER (WHERE day BETWEEN $4::date AND $5::date)::int AS known_days,
+       COUNT(star_created) FILTER (WHERE day BETWEEN $2::date AND $3::date)::int AS previous_known_days
      FROM asset_daily
      WHERE asset_id = ANY($1::text[]) AND day BETWEEN $2::date AND $5::date
      GROUP BY asset_id`,
@@ -232,15 +237,17 @@ async function periodStatsBatch(assetIds, period, endpoint) {
     ]
   );
   return new Map(rows.map(row => {
-    const gain = asNumber(row.gain) || 0;
-    const prevGain = asNumber(row.prev_gain) || 0;
-    return [String(row.asset_id), { gain, prevGain, anomaly: prevGain > 0 && gain > prevGain * 3 && gain > 100 }];
+    const expectedDays = DAYS[period] || 7;
+    const knownDays = asNumber(row.known_days) || 0;
+    const gain = knownDays === expectedDays ? asNumber(row.gain) : null;
+    const prevGain = asNumber(row.previous_known_days) === expectedDays ? asNumber(row.prev_gain) : null;
+    return [String(row.asset_id), { gain, prevGain, growthCoverage: { knownDays, expectedDays }, anomaly: gain != null && prevGain > 0 && gain > prevGain * 3 && gain > 100 }];
   }));
 }
 
 async function periodStats(assetId, period, endpoint) {
   const stats = await periodStatsBatch([assetId], period, endpoint);
-  return stats.get(String(assetId)) || { gain: 0, prevGain: 0, anomaly: false };
+  return stats.get(String(assetId)) || { gain: null, prevGain: null, growthCoverage: { knownDays: 0, expectedDays: DAYS[period] || 7 }, anomaly: false };
 }
 
 async function latestAssetDay() {
@@ -458,7 +465,7 @@ export async function getCatalogRankings(type, query = {}, options = {}) {
   for (const row of rows) {
     const independentWebsite = type === 'website' && String(row.source_query || '').startsWith('website-source:');
     const stats = statsById.get(String(row.id));
-    const resolved = stats || { gain: null, prevGain: null, anomaly: false };
+    const resolved = stats || { gain: null, prevGain: null, growthCoverage: { knownDays: 0, expectedDays: DAYS[period] || 7 }, anomaly: false };
     const ageDays = Math.max(0, (now - new Date(row.created_at).getTime()) / 86400000);
     const pushDays = Math.max(0, (now - new Date(row.pushed_at).getTime()) / 86400000);
     if (board === 'new' && (ageDays > 90 || (asNumber(row.stars) || 0) < 5)) continue;
@@ -507,7 +514,7 @@ export async function getCatalogRankings(type, query = {}, options = {}) {
     sample: dataSource() === 'demo',
     growthBasis: 'star_created',
     forkComponent: forkReady,
-    coverage: 100,
+    coverage: scored.length ? Math.round(cohort.length / scored.length * 100) : 0,
     boards
   };
 }
@@ -543,9 +550,13 @@ export async function getCatalogChart(type, query = {}, sampleOverride = null) {
       [leader.id, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)]
     );
     let cumulative = 0;
+    const byDay = new Map(rows.map(row => [asDay(row.day), asNumber(row.star_created)]));
     points = [
       { date: new Date(start.getTime() - 86400000).toISOString().slice(0, 10), gain: 0 },
-      ...rows.map(r => ({ date: asDay(r.day), gain: cumulative += asNumber(r.star_created) || 0 }))
+      ...Array.from({ length: days }, (_, index) => {
+        const date = asDay(new Date(start.getTime() + index * 86400000)), count = byDay.get(date);
+        return { date, gain: count == null ? null : (cumulative += count) };
+      })
     ];
   }
   return {
@@ -611,7 +622,8 @@ export async function getCatalogItem(type, id) {
         ageDays: item?.ageDays ?? 0,
         pushDays: item?.pushDays ?? 0,
         aiEvidence: aiEvidence(repo),
-        url: `https://github.com/${repo.full_name}`
+        url: `https://github.com/${repo.full_name}`,
+        provenance: resourceProvenance({ type: 'github-repo', url: `https://github.com/${repo.full_name}`, last_fetched_at: asIso(repo.updated_at) }, {}, dataSource() === 'demo')
       }),
       snapshots: snapshots.map(s => ({ sampled_at: asIso(s.sampled_at), stars: asNumber(s.stars), forks: asNumber(s.forks) })),
       similar: [],

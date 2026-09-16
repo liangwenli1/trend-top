@@ -51,6 +51,11 @@ test('admin configures one Pro tier, checkout and signed webhook activate it ide
     assert.equal(login.data.user.isAdmin, true);
     assert.equal((await call('/api/admin/auth/me', 'GET', undefined, adminCookie)).data.admin, true);
     assert.equal((await call('/api/admin/settings', 'GET')).status, 401);
+    assert.equal((await call('/api/admin/catalog-coverage')).status, 401);
+    const coverage = await call('/api/admin/catalog-coverage', 'GET', undefined, adminCookie);
+    assert.equal(coverage.status, 200);
+    assert.equal(coverage.response.headers.get('cache-control'), 'no-store');
+    assert.equal(coverage.data.expected, 16);
     const configured = await call('/api/admin/settings', 'PUT', {
       billing: { enabled: true, mode: 'test', prices: { en: { currency: 'USD', monthly: '9.99', yearly: 79 }, zh: { currency: 'CNY', monthly: 68, yearly: 560 } }, monthlyProductId: 'prod_month', yearlyProductId: 'prod_year', apiBaseUrl: 'https://test-api.creem.io', graceDays: 3 },
       contact: { email: 'support@example.com' }, social: { x: 'https://x.com/trendtop', facebook: '', telegram: '' },
@@ -83,6 +88,7 @@ test('admin configures one Pro tier, checkout and signed webhook activate it ide
     userCookie = verified.response.headers.get('set-cookie').split(';')[0];
     assert.equal(verified.data.user.isAdmin, false);
     assert.equal((await call('/api/admin/settings', 'GET', undefined, userCookie)).status, 403);
+    assert.equal((await call('/api/admin/catalog-coverage', 'GET', undefined, userCookie)).status, 403);
     const checkout = await call('/api/billing/checkout', 'POST', { planKey: 'pro_yearly' }, userCookie);
     assert.equal(checkout.status, 201);
     assert.equal(checkout.data.checkoutUrl, 'https://checkout.creem.io/ch_test_1');

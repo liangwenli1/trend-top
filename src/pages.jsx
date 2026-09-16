@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { TYPES, TYPE_META, typeLabel, typePath, itemPath, trendingCopy } from './catalog.js';
 import { loginUrl } from '../shared/account-paths.js';
+import { SourceProvenance } from './source-provenance.jsx';
 
 const fmt = (n, l) => n === null || n === undefined ? '—' : new Intl.NumberFormat(l === 'zh' ? 'zh-CN' : 'en-US').format(n);
 const api = (url,options) => fetch(url,options).then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Request failed'); return j; });
@@ -518,6 +519,8 @@ export function ItemDetail({ l, t, type, id, navigate, viewer }) {
   const githubHref = item.sourceRepoUrl || (/github\.com/i.test(item.url || '') ? item.url : null);
   const siteHref = item.websiteUrl && item.websiteUrl !== githubHref ? item.websiteUrl : (type === 'website' ? (item.url || item.websiteUrl) : null);
   const usageLabel = item.usageKind === 'downloads' ? (l === 'zh' ? '下载' : 'Downloads') : item.usageKind === 'usage' ? (l === 'zh' ? '用量' : 'Usage') : (l === 'zh' ? '安装量' : 'Installs');
+  const associatedMetrics = item.provenance?.metrics.some(metric => metric.kind === 'stars' && metric.scope === 'associated-repository');
+  const showRepositoryMetrics = associatedMetrics || type === 'github-repo' || item.mode === 'demo';
   return (
     <main className="simple-page repo-detail">
       <BackBtn href={typePath(l, type, 'ranking')} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, 'ranking')); }}>{l === 'zh' ? '返回排行' : 'Back to rankings'}</BackBtn>
@@ -537,16 +540,16 @@ export function ItemDetail({ l, t, type, id, navigate, viewer }) {
       {!item.officialEvidence && <p>{l === 'zh' ? '没有官方依据，按社区来源展示。' : 'No official evidence; shown as a community source.'}</p>}
       {note && <p>{l === 'zh' ? '和相邻选项的差别：' : 'How it differs: '}{note}</p>}
       {type === 'website' && !item.stars && item.gain == null && item.usage == null ? <p className="detail-data-pending">{l === 'zh' ? '独立网站还没有热度或用量数据。' : 'This site does not have momentum or usage data yet.'}</p> : <div className="detail-metrics">
-        <div><small>{t.stars}</small><strong>{fmt(item.stars, l)}</strong></div>
-        <div><small>{t.gain}</small><strong>{item.gain == null ? t.insufficient : `+${fmt(item.gain, l)}`}</strong></div>
-        <div><small>{t.forks}</small><strong>{fmt(item.forks, l)}</strong></div>
+        {showRepositoryMetrics && <><div><small>{associatedMetrics ? (l === 'zh' ? '关联仓库 Star' : 'Repository stars') : t.stars}</small><strong>{fmt(item.stars, l)}</strong></div>
+        <div><small>{l === 'zh' ? '近 7 天新增 Star' : 'New stars in 7 days'}</small><strong>{item.gain == null ? t.insufficient : `${item.gain >= 0 ? '+' : ''}${fmt(item.gain, l)}`}</strong></div>
+        <div><small>{associatedMetrics ? (l === 'zh' ? '关联仓库 Fork' : 'Repository forks') : t.forks}</small><strong>{fmt(item.forks, l)}</strong></div></>}
         {item.usage != null && <div><small>{usageLabel}</small><strong>{fmt(item.usage, l)}</strong></div>}
       </div>}
       <div className="detail-source-actions">
         {siteHref && <a className="primary inline" href={siteHref} target="_blank" rel="noopener noreferrer">{l === 'zh' ? '访问网站' : 'Visit website'} ↗</a>}
         {githubHref && githubHref !== siteHref && <a className={siteHref ? 'ghost inline' : 'primary inline'} href={githubHref} target="_blank" rel="noopener noreferrer">{t.github} ↗</a>}
       </div>
-      {type === 'website' && <p className="detail-provenance">{l === 'zh' ? '数据来源：' : 'Source: '}{item.sourceQuery?.startsWith('website-source:') ? (l === 'zh' ? '独立网站来源注册表' : 'Independent Website source registry') : (l === 'zh' ? '关联 GitHub 仓库' : 'Associated GitHub repository')}{item.lastFetchedAt ? ` · ${l === 'zh' ? '抓取于' : 'Fetched'} ${new Date(item.lastFetchedAt).toLocaleString(l === 'zh' ? 'zh-CN' : 'en-US')}` : ''}</p>}
+      <SourceProvenance l={l} provenance={item.provenance}/>
       {(item.similar || []).length>0&&<section className="related-section"><div className="related-heading"><h2>{l==='zh'?'相关项目':'Related projects'}</h2><span>{item.relatedCount ?? item.similarCount}</span></div><RelatedCards l={l} items={item.similar.slice(0,6)} navigate={navigate}/>{(item.relatedCount ?? item.similarCount)>6&&<a className="ghost inline" href={'/'+l+'/'+type+'/related/'+encodeURIComponent(item.slug || item.id)} onClick={event=>{event.preventDefault();navigate(event,'/'+l+'/'+type+'/related/'+encodeURIComponent(item.slug || item.id))}}>{l==='zh'?'查看全部相关项目':'View all related projects'}</a>}</section>}
     </main>
   );
