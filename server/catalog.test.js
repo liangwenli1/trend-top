@@ -130,3 +130,30 @@ test('official requires evidence and compare exposes protocol fields', async () 
   assert.ok(compared.items.every(row => row.compare?.protocol === 'MCP'));
   assert.ok(compared.items.every(row => !String(row.compare?.identity || '').includes('npx')));
 });
+
+test('skill hot score blends usage with star momentum', async () => {
+  const originals = await query("SELECT slug, ranking_signals FROM assets WHERE slug IN ('anthropic-pdf','pdf-extract-pro')");
+  try {
+    await query("UPDATE assets SET ranking_signals='{\"installs\":1}'::jsonb WHERE slug='anthropic-pdf'");
+    await query("UPDATE assets SET ranking_signals='{\"installs\":80000}'::jsonb WHERE slug='pdf-extract-pro'");
+    const ranking = await getCatalogRankings('skill', { board: 'hot', period: 'week', category: 'pdf', limit: 20 });
+    const community = ranking.items.find(item => item.slug === 'pdf-extract-pro');
+    const official = ranking.items.find(item => item.slug === 'anthropic-pdf');
+    assert.ok(community?.usage > official?.usage);
+    assert.ok(community.score > official.score);
+  } finally {
+    for (const row of originals.rows) {
+      await query('UPDATE assets SET ranking_signals=$1::jsonb WHERE slug=$2', [JSON.stringify(row.ranking_signals || {}), row.slug]);
+    }
+  }
+});
+
+test('search expands use-case and type instead of only matching names', async () => {
+  const { expandSearch } = await import('../shared/taxonomy.js');
+  const expanded = expandSearch('数据库 mcp');
+  assert.ok(expanded.useCases.includes('database'));
+  assert.deepEqual(expanded.types, ['plugin']);
+  const found = await searchCatalog('数据库 mcp');
+  assert.ok(found.items.some(item => item.category === 'postgres' || item.useCase === 'database'));
+  assert.ok(found.items.every(item => item.type === 'plugin' || item.resources));
+});

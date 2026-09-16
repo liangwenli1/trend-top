@@ -160,3 +160,53 @@ export function compareFields(item = {}) {
 export const useCaseOptions = () => Object.entries(USE_CASES)
   .filter(([id]) => id !== 'other')
   .map(([id, labels]) => ({ id, ...labels }));
+
+const TYPE_HINTS = [
+  { type: 'skill', keys: ['skill', 'skills', '技能'] },
+  { type: 'plugin', keys: ['plugin', 'plugins', 'mcp', '插件'] },
+  { type: 'agent', keys: ['agent', 'agents'] },
+  { type: 'components', keys: ['component', 'components', '组件'] },
+  { type: 'website', keys: ['website', 'directory', '网站', '目录'] },
+  { type: 'github-repo', keys: ['repo', 'repository', '仓库'] }
+];
+
+export function expandSearch(q) {
+  const raw = String(q || '').trim();
+  const lower = raw.toLowerCase();
+  const tokens = lower.split(/[\s,/|+]+/).filter(token => token.length > 1);
+  const useCases = new Set();
+  const categories = new Set();
+  const types = [];
+  for (const [id, labels] of Object.entries(USE_CASES)) {
+    if (id === 'other') continue;
+    if (lower.includes(id) || lower.includes(String(labels.zh).toLowerCase()) || lower.includes(String(labels.en).toLowerCase())) useCases.add(id);
+  }
+  for (const [id, meta] of Object.entries(CATEGORIES)) {
+    if (lower.includes(id) || lower.includes(String(meta.zh).toLowerCase()) || lower.includes(String(meta.en).toLowerCase())) {
+      categories.add(id);
+      useCases.add(meta.useCase);
+    }
+  }
+  for (const rule of RULES) {
+    if (rule.keys.some(key => lower.includes(key))) {
+      categories.add(rule.category);
+      if (CATEGORIES[rule.category]) useCases.add(CATEGORIES[rule.category].useCase);
+    }
+  }
+  for (const hint of TYPE_HINTS) {
+    if (hint.keys.some(key => lower.includes(key))) types.push(hint.type);
+  }
+  return { raw, tokens, useCases: [...useCases], categories: [...categories], types };
+}
+
+export function searchScore(item, expanded) {
+  const hay = `${item.full_name || ''} ${item.name || ''} ${item.description || ''} ${item.category || ''} ${item.useCase || ''} ${(item.topics || []).join(' ')}`.toLowerCase();
+  let score = 0;
+  for (const token of expanded.tokens) {
+    if (String(item.full_name || '').toLowerCase().includes(token)) score += 8;
+    else if (hay.includes(token)) score += 3;
+  }
+  if (expanded.useCases.includes(item.useCase)) score += 12;
+  if (expanded.categories.includes(item.category)) score += 10;
+  return score;
+}

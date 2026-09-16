@@ -3,7 +3,7 @@ import { aiEvidence, getChart as getRepoChart, getFilters as getRepoFilters, get
 import { groupProductResources } from '../shared/product-resources.js';
 import { rankRelated, broadTopics } from '../shared/related-projects.js';
 import { normalizeTopics, topicFilterValues } from '../shared/topics.js';
-import { classify, compareFields, officialEvidenceFor, isOfficial, useCaseOptions } from '../shared/taxonomy.js';
+import { classify, compareFields, officialEvidenceFor, isOfficial, useCaseOptions, expandSearch, searchScore } from '../shared/taxonomy.js';
 
 export const TYPES = ['skill', 'plugin', 'agent', 'components', 'website', 'github-repo'];
 export const TYPE_META = {
@@ -97,11 +97,31 @@ function hotScore(item, cohort, forkReady) {
   const rates = cohort.map(x => Math.max(0, x.gain || 0) / (Math.max(0, (x.stars || 0) - (x.gain || 0)) + 100));
   const forks = cohort.map(x => Math.log(1 + Math.max(0, x.forkGain || 0)));
   const starPct = percentile(gains, Math.log(1 + Math.max(0, item.gain)));
-  const ratePct = percentile(rates, Math.max(0, item.gain) / (Math.max(0, item.stars - item.gain) + 100));
+  const ratePct = percentile(rates, Math.max(0, item.gain) / (Math.max(0, (item.stars || 0) - (item.gain || 0)) + 100));
   const forkPct = percentile(forks, Math.log(1 + Math.max(0, item.forkGain || 0)));
   const recency = Math.max(0, 100 - (item.pushDays || 0) * 8);
   const raw = 0.45 * starPct + 0.20 * ratePct + (forkReady ? 0.15 * forkPct : 0) + 0.20 * recency;
   return Math.round(raw / (forkReady ? 1 : 0.85));
+}
+
+function usageScore(item, peers) {
+  if (!(Number(item.usage) > 0) || !peers.length) return null;
+  if (peers.length === 1) return Math.round(Math.min(100, Math.log10(1 + item.usage) * 20));
+  const values = peers.map(x => Math.log10(1 + Math.max(0, x.usage || 0)));
+  return percentile(values, Math.log10(1 + item.usage));
+}
+
+function typeScore(type, item, cohort, forkReady, all = cohort) {
+  const momentum = hotScore(item, cohort, forkReady);
+  const usagePct = usageScore(item, all.filter(x => Number(x.usage) > 0));
+  if (type === 'website' && item.sourceQuery?.startsWith('website-source:')) {
+    return usagePct != null ? Math.round(usagePct) : null;
+  }
+  if ((type === 'skill' || type === 'plugin') && usagePct != null && momentum != null) {
+    return Math.round(0.55 * momentum + 0.45 * usagePct);
+  }
+  if ((type === 'skill' || type === 'plugin') && usagePct != null) return Math.round(usagePct);
+  return momentum;
 }
 
 async function similarCounts() {
@@ -245,18 +265,21 @@ export async function seedCatalog() {
     const createdAt = `${created}T00:00:00Z`;
     const pushed = new Date(now.getTime() - (i % 5) * 86400000).toISOString();
     const classified = classify({ type, full_name: fullName, description, topics, category });
+    const rankingSignals = type === 'skill' ? { installs: Math.max(80, Math.round(stars * 0.55)) }
+      : type === 'plugin' ? { usage: Math.max(40, Math.round(stars * 0.35)) }
+      : {};
     await query(
       `INSERT INTO assets (
          id, type, slug, name, full_name, description, category, category_zh, category_en, use_case,
          official, official_evidence, cluster_id, url, install, language, topics, stars, forks,
-         created_at, pushed_at, recommend_rank, recommend_note_zh, recommend_note_en
+         created_at, pushed_at, recommend_rank, recommend_note_zh, recommend_note_en, ranking_signals
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19,$20,$21,$22,$23,$24
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19,$20,$21,$22,$23,$24,$25::jsonb
        )`,
       [
         id, type, slug, fullName.split('/').pop(), fullName, description, classified.category, categoryZh || classified.categoryZh, categoryEn || classified.categoryEn, classified.useCase,
         isOfficial(evidence), evidence, cluster, url, install, language, JSON.stringify(topics), stars, forks,
-        createdAt, pushed, recRank, recZh, recEn
+        createdAt, pushed, recRank, recZh, recEn, JSON.stringify(rankingSignals)
       ]
     );
     const back = [0];
@@ -451,12 +474,7 @@ export async function getCatalogRankings(type, query = {}) {
   }
   const cohort = scored.filter(x => x.gain != null && !x.anomaly);
   const forkReady = cohort.some(x => (x.forks || 0) > 0);
-  for (const item of scored) {
-    const usage = Number(item.usage) || 0;
-    if (type === 'website' && item.sourceQuery?.startsWith('website-source:') && (item.gain == null || item.anomaly)) {
-      item.score = usage > 0 ? Math.round(Math.min(100, Math.log10(1 + usage) * 20)) : null;
-    } else item.score = hotScore(item, cohort, forkReady);
-  }
+  for (const item of scored) item.score = typeScore(type, item, cohort, forkReady, scored);
   const metric = boards[board].metric;
   const filtered = scored.filter(item => {
     if (metric === 'score') return item.score != null || board === 'official';
@@ -696,16 +714,34 @@ export async function getCompare(type, ids) {
 
 export async function searchCatalog(q, type) {
   const queryText = String(q || '').trim();
-  if (!queryText) return { items: [] };
-  const types = type && isType(type) ? [type] : TYPES;
-  const rankings = await Promise.all(types.map(current =>
-    getCatalogRankings(current, { q: queryText, limit: 24, page: 1, board: 'stars' })
-  ));
-  const items = rankings.flatMap((ranking, index) =>
-    ranking.items.map(item => ({ ...item, type: types[index] }))
-  );
-  items.sort((a, b) => (b.stars || 0) - (a.stars || 0));
-  return { q: queryText, grouped: types.length>1, items: (types.length>1?groupProductResources(items):items).slice(0,20) };
+  if (!queryText) return { items: [], expanded: null };
+  const expanded = expandSearch(queryText);
+  const types = type && isType(type) ? [type] : (expanded.types.length ? expanded.types : TYPES);
+  const lookups = [];
+  for (const current of types) {
+    lookups.push(getCatalogRankings(current, { q: queryText, limit: 24, page: 1, board: 'stars' }));
+    for (const useCase of expanded.useCases.slice(0, 2)) {
+      lookups.push(getCatalogRankings(current, { useCase, limit: 24, page: 1, board: 'stars' }));
+    }
+    for (const category of expanded.categories.slice(0, 2)) {
+      lookups.push(getCatalogRankings(current, { category, limit: 24, page: 1, board: 'stars' }));
+    }
+  }
+  const rankings = await Promise.all(lookups);
+  const seen = new Set();
+  const items = [];
+  for (const ranking of rankings) {
+    for (const item of ranking.items) {
+      const key = `${item.type}:${item.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const relevance = searchScore(item, expanded);
+      if (relevance <= 0 && !String(item.full_name || '').toLowerCase().includes(queryText.toLowerCase())) continue;
+      items.push({ ...item, relevance });
+    }
+  }
+  items.sort((a, b) => (b.relevance || 0) - (a.relevance || 0) || (b.stars || 0) - (a.stars || 0));
+  return { q: queryText, grouped: types.length > 1, items: (types.length > 1 ? groupProductResources(items) : items).slice(0, 20), expanded };
 }
 
-export { isType, boardsFor, getStarSeries };
+export { isType, boardsFor, getStarSeries, typeScore };
