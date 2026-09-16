@@ -1,7 +1,8 @@
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+RUN npm ci --ignore-scripts \
+ && npm install --no-save --ignore-scripts @rollup/rollup-linux-x64-gnu
 COPY index.html vite.config.js ./
 COPY public ./public
 COPY src ./src
