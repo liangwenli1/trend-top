@@ -136,6 +136,8 @@ function rankedTopics(row, frequency = null) {
 }
 
 function mapAsset(row, extras = {}) {
+  const rankingSignals = asJson(row.ranking_signals, {});
+  const usageKind = rankingSignals.installs != null ? 'installs' : rankingSignals.usage != null ? 'usage' : rankingSignals.downloads != null ? 'downloads' : null;
   return {
     id: row.id,
     type: row.type,
@@ -156,7 +158,9 @@ function mapAsset(row, extras = {}) {
     lastFetchedAt: asIso(row.last_fetched_at),
     sourceQuery: row.source_query || null,
     entityKey: row.entity_key || null,
-    rankingSignals: asJson(row.ranking_signals, {}),
+    rankingSignals,
+    usage: usageKind ? Number(rankingSignals[usageKind]) || null : null,
+    usageKind,
     install: row.install,
     language: row.language,
     topics: rankedTopics(row, extras.topicFrequency),
@@ -416,12 +420,15 @@ export async function getCatalogRankings(type, query = {}) {
   const scored = [];
   for (const row of rows) {
     const independentWebsite = type === 'website' && String(row.source_query || '').startsWith('website-source:');
-    const stats = independentWebsite ? { gain: null, prevGain: null, anomaly: false } : (statsById.get(String(row.id)) || { gain: 0, prevGain: 0, anomaly: false });
+    const stats = statsById.get(String(row.id));
+    const resolved = independentWebsite && !stats
+      ? { gain: null, prevGain: null, anomaly: false }
+      : (stats || { gain: 0, prevGain: 0, anomaly: false });
     const ageDays = Math.max(0, (now - new Date(row.created_at).getTime()) / 86400000);
     const pushDays = Math.max(0, (now - new Date(row.pushed_at).getTime()) / 86400000);
     if (board === 'new' && (ageDays > 90 || (asNumber(row.stars) || 0) < 5)) continue;
     scored.push(mapAsset(row, {
-      ...stats,
+      ...resolved,
       ageDays: Math.round(ageDays),
       pushDays: Math.round(pushDays),
       topicFrequency,
@@ -432,16 +439,14 @@ export async function getCatalogRankings(type, query = {}) {
   const cohort = scored.filter(x => x.gain != null && !x.anomaly);
   const forkReady = cohort.some(x => (x.forks || 0) > 0);
   for (const item of scored) {
-    if (type === 'website' && item.sourceQuery?.startsWith('website-source:')) {
-      const trust = item.rankingSignals?.trust === 'official' ? 88 : item.rankingSignals?.trust === 'curated' ? 72 : 56;
-      const updatedAt = item.rankingSignals?.contentUpdatedAt ? new Date(item.rankingSignals.contentUpdatedAt).getTime() : NaN;
-      const recency = Number.isFinite(updatedAt) ? Math.max(0, 100 - Math.max(0, Date.now() - updatedAt) / 86400000 * 2) : 45;
-      item.score = Math.round(trust * .7 + recency * .3);
+    const usage = Number(item.usage) || 0;
+    if (type === 'website' && item.sourceQuery?.startsWith('website-source:') && (item.gain == null || item.anomaly)) {
+      item.score = usage > 0 ? Math.round(Math.min(100, Math.log10(1 + usage) * 20)) : null;
     } else item.score = hotScore(item, cohort, forkReady);
   }
   const metric = boards[board].metric;
   const filtered = scored.filter(item => {
-    if (metric === 'score') return item.score != null;
+    if (metric === 'score') return item.score != null || board === 'official';
     if (metric === 'gain') return item.gain != null && !item.anomaly;
     return true;
   });

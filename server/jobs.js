@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { asJson, asNumber, many, one, query, ready, rebuildDerivedMetrics } from './db.js';
 import { sendMail } from './mail.js';
 import { buildDigest } from './digest.js';
-import { collectWebsiteSources } from './website-sources.js';
+import { collectWebsiteSources, collectDirectorySignals } from './website-sources.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const token = () => crypto.randomBytes(24).toString('hex');
@@ -84,10 +84,11 @@ const OFFICIAL_ORGS = new Set([
 ]);
 const ASSET_QUERIES = {
   skill: [
-    { q: 'SKILL.md in:readme archived:false stars:>1', sort: 'updated', pages: 3, perPage: 100 },
+    { kind: 'code', q: 'filename:SKILL.md', pages: 2, perPage: 50 },
+    { q: '"SKILL.md" in:readme archived:false stars:>0', sort: 'updated', pages: 3, perPage: 100 },
     { q: 'topic:claude-skills archived:false', sort: 'stars', pages: 2, perPage: 100 },
     { q: 'topic:agent-skills archived:false', sort: 'stars', pages: 2, perPage: 100 },
-    { q: '"claude skill" in:readme archived:false stars:>2', sort: 'updated', pages: 2, perPage: 100 }
+    { q: 'topic:claude-code-skills archived:false', sort: 'updated', pages: 2, perPage: 100 }
   ],
   plugin: [
     { q: 'topic:mcp-server archived:false', sort: 'stars', pages: 3, perPage: 100 },
@@ -283,23 +284,36 @@ export async function collectTypedAssets(knownRepos, runId, at, manualAssets = n
       try {
         for(let page=1;page<=spec.pages;page++){
           if(found.size>=MAX_ASSETS_PER_TYPE || added>=queryBudget)break;
-          const url='https://api.github.com/search/repositories?q='+encodeURIComponent(spec.q)+'&sort='+encodeURIComponent(spec.sort)+'&order=desc&per_page='+spec.perPage+'&page='+page;
+          const params=new URLSearchParams({q:spec.q,per_page:String(spec.perPage),page:String(page)});
+          if(spec.kind!=='code'){
+            params.set('sort', spec.sort || 'updated');
+            params.set('order','desc');
+          }
+          const url='https://api.github.com/search/'+(spec.kind==='code'?'code':'repositories')+'?'+params.toString();
           stat.requested++;
           const body=await fetchGithub(url);stat.returned+=(body.items || []).length;
-          for(const repo of body.items || []){
+          for(const hit of body.items || []){
+            const repo=spec.kind==='code'?(hit.repository || hit):hit;
+            if(!repo?.full_name)continue;
             stat.unique++;
             const n=await accept(repo,'asset:'+type+':'+spec.q);added+=n;stat.accepted+=n;
             if(found.size>=MAX_ASSETS_PER_TYPE || added>=queryBudget)break;
           }
-          await wait(1200);
+          await wait(spec.kind==='code'?2500:1200);
         }
         executedQueries.push('asset:'+type+':'+spec.q);
         await recordQueryStat(runId,type,{...spec,family:'asset:'+type},stat);
-      }catch(error){await recordQueryStat(runId,type,{...spec,family:'asset:'+type},stat,error);throw error;}
+      }catch(error){
+        await recordQueryStat(runId,type,{...spec,family:'asset:'+type},stat,error);
+        if(spec.kind!=='code')throw error;
+      }
     }
     for(const repo of knownRepos){
       if(found.size>=MAX_ASSETS_PER_TYPE)break;
-      if(type==='skill' && !acceptsRepoType('skill',repo))continue;
+      if(type==='skill'){
+        const blob=`${repo.full_name||''} ${repo.description||''} ${(repo.topics||[]).join(' ')}`.toLowerCase();
+        if(!/skill/.test(blob))continue;
+      }
       await accept(repo,'inferred:'+type);
     }
     for(const {repo,resource,source} of found.values()){
@@ -339,12 +353,19 @@ async function approvedCandidates() {
   return { repos, assets };
 }
 
-async function copyRepoMetricsToAssets() {
+export async function copyRepoMetricsToAssets() {
   await query(
     `INSERT INTO asset_daily (asset_id, day, star_created, stars)
      SELECT a.id, d.day, d.star_created, d.stars
      FROM assets a
-     JOIN repos r ON lower(r.full_name) = lower(a.full_name)
+     JOIN repos r ON lower(r.full_name) = lower(
+       CASE
+         WHEN a.entity_key LIKE 'repo:%' THEN substr(a.entity_key, 6)
+         WHEN position(' / ' in a.full_name) > 0 THEN split_part(a.full_name, ' / ', 1)
+         WHEN a.source_repo_url LIKE 'https://github.com/%' THEN regexp_replace(a.source_repo_url, '^https://github.com/(.+?)/?$', '\\1')
+         ELSE a.full_name
+       END
+     )
      JOIN daily_metrics d ON d.repo_id = r.id
      ON CONFLICT (asset_id, day) DO UPDATE SET
        star_created = EXCLUDED.star_created,
@@ -496,6 +517,12 @@ export async function collect() {
     }
 
     const websites = await collectWebsiteSources();
+    let directories = { applied: 0, created: 0 };
+    try {
+      directories = await collectDirectorySignals({ fetchGithub: github, upsertAsset, wait: sleep });
+    } catch (error) {
+      console.error('[collect] directory signals', error);
+    }
     if (executedRepoQueries.length) {
       await query(
         `UPDATE repos SET missed_runs=missed_runs+1,active=CASE WHEN missed_runs+1>=3 THEN FALSE ELSE active END
@@ -525,7 +552,7 @@ export async function collect() {
       `UPDATE sync_runs SET finished_at = $1, status = $2, found = $3, sampled = $4, error = $5 WHERE id = $6`,
       [new Date().toISOString(), 'ok', found, sampled, historyError || (history.failed ? `${history.failed} star histories unavailable` : null), runId]
     );
-    return { found, sampled, history, historyError, assets: assets.counts, websites };
+    return { found, sampled, history, historyError, assets: assets.counts, websites, directories };
   } catch (e) {
     await query(
       `UPDATE sync_runs SET finished_at = $1, status = $2, found = $3, sampled = $4, error = $5 WHERE id = $6`,

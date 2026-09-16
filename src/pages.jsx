@@ -400,6 +400,7 @@ export function ComparePage({ l, t, type, ids, navigate }) {
               <div><dt>{t.stars}</dt><dd>{fmt(item.stars, l)}</dd></div>
               <div><dt>{t.gain}</dt><dd>{item.gain == null ? <span className="compare-unavailable">{t.insufficient}</span> : `+${fmt(item.gain, l)}`}</dd></div>
               <div><dt>{t.forks}</dt><dd>{fmt(item.forks, l)}</dd></div>
+              {item.usage != null && <div><dt>{item.usageKind === 'downloads' ? (l === 'zh' ? '下载' : 'Downloads') : item.usageKind === 'usage' ? (l === 'zh' ? '用量' : 'Usage') : (l === 'zh' ? '安装量' : 'Installs')}</dt><dd>{fmt(item.usage, l)}</dd></div>}
               <div><dt>{l === 'zh' ? '距上次更新' : 'Last updated'}</dt><dd>{item.pushDays == null ? '—' : item.pushDays === 0 ? (l === 'zh' ? '今天' : 'Today') : l === 'zh' ? `${fmt(item.pushDays, l)} 天前` : `${fmt(item.pushDays, l)}d ago`}</dd></div>
             </dl>
             <div className="compare-option-foot"><p>{(item.recommendNote?.[l] || item.recommendNote?.en) || (item.officialEvidence ? `${l === 'zh' ? '官方依据' : 'Official source'}: ${item.officialEvidence}` : '')}</p><div className="compare-option-links"><a href={detailHref(item)} onClick={e => navigate(e, detailHref(item))}>{l === 'zh' ? '查看详情' : 'View details'} <span aria-hidden="true">↗</span></a>{item.url && <a href={item.url} target="_blank" rel="noopener noreferrer">{l === 'zh' ? '打开来源' : 'Open source'} <span aria-hidden="true">↗</span></a>}</div></div>
@@ -509,6 +510,9 @@ export function ItemDetail({ l, t, type, id, navigate }) {
   const categoryKey = category.toLowerCase();
   const showCategory = category && !topicKeys.has(categoryKey);
   const topicHref = value => typePath(l, type, 'ranking', `topic=${encodeURIComponent(value)}`);
+  const githubHref = item.sourceRepoUrl || (/github\.com/i.test(item.url || '') ? item.url : null);
+  const siteHref = item.websiteUrl && item.websiteUrl !== githubHref ? item.websiteUrl : (type === 'website' ? (item.url || item.websiteUrl) : null);
+  const usageLabel = item.usageKind === 'downloads' ? (l === 'zh' ? '下载' : 'Downloads') : item.usageKind === 'usage' ? (l === 'zh' ? '用量' : 'Usage') : (l === 'zh' ? '安装量' : 'Installs');
   return (
     <main className="simple-page repo-detail">
       <BackBtn href={typePath(l, type, 'ranking')} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, 'ranking')); }}>{l === 'zh' ? '返回排行' : 'Back to rankings'}</BackBtn>
@@ -523,15 +527,15 @@ export function ItemDetail({ l, t, type, id, navigate }) {
       </div>
       {item.officialEvidence && <p>{l === 'zh' ? '官方依据：' : 'Official evidence: '}{item.officialEvidence}</p>}
       {note && <p>{l === 'zh' ? '和相邻选项的差别：' : 'How it differs: '}{note}</p>}
-      {type === 'website' && !item.stars && item.gain == null ? <p className="detail-data-pending">{l === 'zh' ? '网站独立指标正在积累中。' : 'Independent Website metrics are accumulating.'}</p> : <div className="detail-metrics">
+      {type === 'website' && !item.stars && item.gain == null && item.usage == null ? <p className="detail-data-pending">{l === 'zh' ? '独立网站还没有热度或用量数据。' : 'This site does not have momentum or usage data yet.'}</p> : <div className="detail-metrics">
         <div><small>{t.stars}</small><strong>{fmt(item.stars, l)}</strong></div>
         <div><small>{t.gain}</small><strong>{item.gain == null ? t.insufficient : `+${fmt(item.gain, l)}`}</strong></div>
         <div><small>{t.forks}</small><strong>{fmt(item.forks, l)}</strong></div>
+        {item.usage != null && <div><small>{usageLabel}</small><strong>{fmt(item.usage, l)}</strong></div>}
       </div>}
-      {item.install && <p><code>{item.install}</code></p>}
       <div className="detail-source-actions">
-        {(item.websiteUrl || item.url) && <a className="primary inline" href={item.websiteUrl || item.url} target="_blank" rel="noopener noreferrer">{type === 'website' ? (l === 'zh' ? '访问网站' : 'Visit website') : t.github} ↗</a>}
-        {type === 'website' && item.sourceRepoUrl && item.sourceRepoUrl !== (item.websiteUrl || item.url) && <a className="ghost inline" href={item.sourceRepoUrl} target="_blank" rel="noopener noreferrer">{l === 'zh' ? '查看源码' : 'View source'} ↗</a>}
+        {siteHref && <a className="primary inline" href={siteHref} target="_blank" rel="noopener noreferrer">{l === 'zh' ? '访问网站' : 'Visit website'} ↗</a>}
+        {githubHref && githubHref !== siteHref && <a className={siteHref ? 'ghost inline' : 'primary inline'} href={githubHref} target="_blank" rel="noopener noreferrer">{t.github} ↗</a>}
       </div>
       {type === 'website' && <p className="detail-provenance">{l === 'zh' ? '数据来源：' : 'Source: '}{item.sourceQuery?.startsWith('website-source:') ? (l === 'zh' ? '独立网站来源注册表' : 'Independent Website source registry') : (l === 'zh' ? '关联 GitHub 仓库' : 'Associated GitHub repository')}{item.lastFetchedAt ? ` · ${l === 'zh' ? '抓取于' : 'Fetched'} ${new Date(item.lastFetchedAt).toLocaleString(l === 'zh' ? 'zh-CN' : 'en-US')}` : ''}</p>}
       {(item.similar || []).length>0&&<section className="related-section"><div className="related-heading"><h2>{l==='zh'?'相关项目':'Related projects'}</h2><span>{item.relatedCount ?? item.similarCount}</span></div><RelatedCards l={l} items={item.similar.slice(0,6)} navigate={navigate}/>{(item.relatedCount ?? item.similarCount)>6&&<a className="ghost inline" href={'/'+l+'/'+type+'/related/'+encodeURIComponent(item.slug || item.id)} onClick={event=>{event.preventDefault();navigate(event,'/'+l+'/'+type+'/related/'+encodeURIComponent(item.slug || item.id))}}>{l==='zh'?'查看全部相关项目':'View all related projects'}</a>}</section>}

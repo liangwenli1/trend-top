@@ -9,10 +9,11 @@ process.env.PGLITE_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'trend-resources-'))
 const {ready,query,one}=await import('./db.js');
 await ready;
 const {acceptsRepoType,skillResources,auditCopiedAssets}=await import('./asset-classification.js');
-const {upsertAsset,collectTypedAssets}=await import('./jobs.js');
+const {upsertAsset,collectTypedAssets,copyRepoMetricsToAssets}=await import('./jobs.js');
 const {getCatalogItem,getSimilar,clearRelatedCache}=await import('./catalog.js');
 const {groupProductResources}=await import('../shared/product-resources.js');
 const {rankRelated}=await import('../shared/related-projects.js');
+const {githubRepoKey,applyDirectorySignals}=await import('./website-sources.js');
 const {digestEntryPath,digestDestination,loginUrl}=await import('../shared/account-paths.js');
 
 test('email entry preserves its intent without changing ordinary login',()=>{
@@ -90,3 +91,36 @@ test('Detail preview stays bounded while related pages expose all matches',async
   assert.equal(first.items.length,12);assert.equal(second.items.length,2);assert.equal(first.total,14);
   assert.equal(new Set([...first.items,...second.items].map(row=>row.id)).size,14);
 });
+
+test('Skill daily metrics copy from the parent GitHub repository', async () => {
+  const repo = { id: 8801, full_name: 'qa/skill-pack', description: 'A pack of skills', topics: ['agent-skills'], created_at: '2026-01-01T00:00:00.000Z', pushed_at: '2026-09-01T00:00:00.000Z', stargazers_count: 400, forks_count: 12, language: 'Markdown' };
+  await query(
+    `INSERT INTO repos (id,full_name,description,language,topics,stars,forks,created_at,pushed_at,source)
+     VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,'github')`,
+    [repo.id, repo.full_name, repo.description, repo.language, JSON.stringify(repo.topics), repo.stargazers_count, repo.forks_count, repo.created_at, repo.pushed_at]
+  );
+  await query(`INSERT INTO snapshots (repo_id,sampled_at,stars,forks,source) VALUES ($1,'2026-09-10T02:00:00.000Z',400,12,'github')`, [repo.id]);
+  await query(`INSERT INTO daily_metrics (repo_id,day,source,stars,star_created) VALUES ($1,'2026-09-08','github',380,40)`, [repo.id]);
+  const resource = skillResources(repo, [{ type: 'blob', path: 'pdf/SKILL.md' }])[0];
+  const id = await upsertAsset('skill', repo, 'asset:skill:test-history', undefined, resource);
+  const asset = await one('SELECT full_name,entity_key FROM assets WHERE id=$1', [id]);
+  assert.match(asset.full_name, /pdf$/);
+  assert.equal(asset.entity_key, 'repo:qa/skill-pack');
+  await copyRepoMetricsToAssets();
+  const copied = await one("SELECT star_created,stars FROM asset_daily WHERE asset_id=$1 AND day='2026-09-08'", [id]);
+  assert.equal(Number(copied.star_created), 40);
+  assert.equal(Number(copied.stars), 380);
+});
+
+test('Directory listings attach install counts to matching GitHub skills', async () => {
+  assert.equal(githubRepoKey('https://github.com/anthropics/skills'), 'anthropics/skills');
+  const repo = { id: 8802, full_name: 'qa/installed-skill', description: 'Skill with installs', topics: ['skills'], created_at: '2026-01-01T00:00:00.000Z', pushed_at: '2026-09-01T00:00:00.000Z', stargazers_count: 10, forks_count: 1 };
+  const resource = skillResources(repo, [{ type: 'blob', path: 'SKILL.md' }])[0];
+  const id = await upsertAsset('skill', repo, 'asset:skill:test-installs', undefined, resource);
+  const result = await applyDirectorySignals([{ type: 'skill', github: 'qa/installed-skill', installs: 12345, directory: 'skills-sh' }]);
+  assert.equal(result.applied, 1);
+  assert.equal(result.unmatched.length, 0);
+  const signals = (await one('SELECT ranking_signals FROM assets WHERE id=$1', [id])).ranking_signals;
+  assert.equal(Number(signals.installs), 12345);
+});
+

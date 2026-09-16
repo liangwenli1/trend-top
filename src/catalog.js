@@ -47,8 +47,8 @@ export const TRENDING_COPY = {
     en: { title: 'Components picking up steam', sub: 'Buttons, heros, primitives. When a category is crowded, start with the top movers.' }
   },
   website: {
-    zh: { title: '最近变热的开源网站', sub: '工具站、目录、画廊。先看涨幅，再决定收藏哪一个。' },
-    en: { title: 'Open-source sites heating up', sub: 'Tools, directories, galleries. Use the rise, then decide what to keep.' }
+    zh: { title: '开源相关网站', sub: '目录站和项目官网。有关联仓库时按仓库热度排，有用量也会标出来。' },
+    en: { title: 'Open-source sites', sub: 'Directories and project sites. Ranked by associated repository momentum, and by usage when we have it.' }
   },
   'github-repo': {
     zh: { title: '仓库近窗口热度', sub: 'Star 正在增加的仓库。这不是总榜，是最近在动的那些。' },

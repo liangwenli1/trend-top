@@ -55,15 +55,7 @@ async function directMetadata(source) {
 }
 
 async function firecrawlMetadata(source, settings) {
-  const base = String(settings.public.collection.firecrawlApiUrl || 'https://api.firecrawl.dev').replace(/\/$/, '');
-  const response = await fetchWithTimeout(`${base}/v2/scrape`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${settings.secret.firecrawlApiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: source.url, formats: ['markdown', 'links'], onlyMainContent: true, maxAge: 21600000, timeout: 30000 })
-  }, 45000);
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok || result.success === false) throw new Error(result.error || `Firecrawl ${response.status}`);
-  const document = result.data || result;
+  const document = await firecrawlScrape(source.url, settings, { formats: ['markdown', 'links'] });
   const metadata = document.metadata || {};
   const links = Array.isArray(document.links) ? document.links : [];
   return {
@@ -77,6 +69,169 @@ async function firecrawlMetadata(source, settings) {
     cachedAt: metadata.cachedAt || null,
     provider: 'firecrawl'
   };
+}
+
+async function firecrawlScrape(url, settings, extra = {}) {
+  const base = String(settings.public.collection.firecrawlApiUrl || 'https://api.firecrawl.dev').replace(/\/$/, '');
+  const response = await fetchWithTimeout(`${base}/v2/scrape`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${settings.secret.firecrawlApiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, onlyMainContent: true, maxAge: 21600000, timeout: extra.timeout || 30000, ...extra })
+  }, (extra.timeout || 30000) + 15000);
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result.success === false) throw new Error(result.error || `Firecrawl ${response.status}`);
+  return result.data || result;
+}
+
+const listingItem = {
+  type: 'object',
+  properties: {
+    name: { type: 'string' },
+    github: { type: 'string', description: 'GitHub owner/repo or https://github.com/owner/repo' },
+    installs: { type: 'number' },
+    usage: { type: 'number' },
+    downloads: { type: 'number' }
+  }
+};
+
+const DIRECTORY_LISTINGS = [
+  {
+    id: 'skills-sh',
+    url: 'https://skills.sh',
+    type: 'skill',
+    prompt: 'Extract the skill leaderboard. github must be owner/repo. installs is the install count.',
+    schema: { type: 'object', properties: { items: { type: 'array', items: listingItem } } }
+  },
+  {
+    id: 'glama',
+    url: 'https://glama.ai/mcp/servers',
+    type: 'plugin',
+    prompt: 'Extract MCP servers from the directory. github must be owner/repo. Prefer weekly downloads or recent usage.',
+    schema: { type: 'object', properties: { items: { type: 'array', items: listingItem } } }
+  }
+];
+
+export function githubRepoKey(value) {
+  const text = String(value || '').trim();
+  const fromUrl = text.match(/github\.com\/([^/\s]+)\/([^/\s?#]+)/i);
+  const fromShort = fromUrl || text.match(/^([^/\s]+)\/([^/\s]+)$/);
+  if (!fromShort) return '';
+  return `${fromShort[1]}/${fromShort[2].replace(/\.git$/i, '')}`.toLowerCase();
+}
+
+function assetRepoKey(row) {
+  if (String(row.entity_key || '').startsWith('repo:')) return String(row.entity_key).slice(5).toLowerCase();
+  const fromUrl = githubRepoKey(row.source_repo_url);
+  if (fromUrl) return fromUrl;
+  return String(row.full_name || '').split(' / ')[0].toLowerCase();
+}
+
+function listingSignals(item, directory) {
+  const signals = { directory, directoryUpdatedAt: new Date().toISOString() };
+  if (item.installs != null && item.installs !== '') signals.installs = Number(item.installs) || 0;
+  if (item.usage != null && item.usage !== '') signals.usage = Number(item.usage) || 0;
+  if (item.downloads != null && item.downloads !== '') signals.downloads = Number(item.downloads) || 0;
+  return signals;
+}
+
+async function extractDirectory(spec, settings) {
+  const document = await firecrawlScrape(spec.url, settings, {
+    timeout: 60000,
+    formats: [{ type: 'json', schema: spec.schema, prompt: spec.prompt }]
+  });
+  const payload = document.json || document.extract || document.data?.json || {};
+  const items = Array.isArray(payload.items) ? payload.items : Array.isArray(payload) ? payload : [];
+  return items.map(item => ({
+    ...item,
+    github: githubRepoKey(item.github || item.repo || item.repository || item.url),
+    directory: spec.id,
+    type: spec.type
+  })).filter(item => item.github);
+}
+
+export async function applyDirectorySignals(listings = []) {
+  if (!listings.length) return { applied: 0, unmatched: [] };
+  const types = [...new Set(listings.map(item => item.type))];
+  const rows = await many(
+    `SELECT id,type,full_name,entity_key,source_repo_url,ranking_signals FROM assets WHERE active=TRUE AND type = ANY($1::text[])`,
+    [types]
+  );
+  const byRepo = new Map();
+  for (const row of rows) {
+    const key = `${row.type}:${assetRepoKey(row)}`;
+    const list = byRepo.get(key) || [];
+    list.push(row);
+    byRepo.set(key, list);
+  }
+  let applied = 0;
+  const unmatched = [];
+  for (const item of listings) {
+    const matches = byRepo.get(`${item.type}:${item.github}`) || [];
+    if (!matches.length) { unmatched.push(item); continue; }
+    const extra = listingSignals(item, item.directory);
+    for (const row of matches) {
+      const current = asJson(row.ranking_signals, {});
+      await query(
+        `UPDATE assets SET ranking_signals=$1::jsonb,last_seen_at=$2 WHERE id=$3`,
+        [JSON.stringify({ ...current, ...extra }), extra.directoryUpdatedAt, row.id]
+      );
+      applied++;
+    }
+  }
+  return { applied, unmatched };
+}
+
+export async function collectDirectorySignals({ fetchGithub, upsertAsset, wait = (ms) => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+  const settings = await getSettings();
+  if (!settings.secret.firecrawlApiKey) return { applied: 0, created: 0, provider: 'skipped' };
+  const listings = [];
+  for (const spec of DIRECTORY_LISTINGS) {
+    try {
+      listings.push(...(await extractDirectory(spec, settings)).slice(0, 100));
+    } catch (error) {
+      console.error('[directory-signals]', spec.id, error);
+    }
+    await wait(400);
+  }
+  const { applied, unmatched } = await applyDirectorySignals(listings);
+  let created = 0;
+  if (fetchGithub && upsertAsset) {
+    const seen = new Set();
+    for (const item of unmatched) {
+      if (created >= 80 || seen.has(`${item.type}:${item.github}`)) continue;
+      seen.add(`${item.type}:${item.github}`);
+      try {
+        const repo = await fetchGithub(`https://api.github.com/repos/${item.github}`);
+        if (!repo?.full_name) continue;
+        if (item.type === 'skill') {
+          const body = await fetchGithub(`https://api.github.com/repos/${repo.full_name}/git/trees/${encodeURIComponent(repo.default_branch || 'main')}?recursive=1`);
+          const { skillResources } = await import('./asset-classification.js');
+          const resources = skillResources(repo, body.tree || []);
+          if (!resources.length) continue;
+          const at = new Date().toISOString();
+          for (const resource of resources.slice(0, 8)) {
+            const id = await upsertAsset('skill', repo, `directory:${item.directory}`, at, resource);
+            await query(
+              `UPDATE assets SET ranking_signals = COALESCE(ranking_signals,'{}'::jsonb) || $1::jsonb WHERE id=$2`,
+              [JSON.stringify(listingSignals(item, item.directory)), id]
+            );
+            created++;
+          }
+        } else {
+          const id = await upsertAsset(item.type, repo, `directory:${item.directory}`);
+          await query(
+            `UPDATE assets SET ranking_signals = COALESCE(ranking_signals,'{}'::jsonb) || $1::jsonb WHERE id=$2`,
+            [JSON.stringify(listingSignals(item, item.directory)), id]
+          );
+          created++;
+        }
+      } catch (error) {
+        console.error('[directory-signals] hydrate', item.github, error);
+      }
+      await wait(350);
+    }
+  }
+  return { applied, created, listings: listings.length, provider: 'firecrawl' };
 }
 
 export async function ensureWebsiteSources() {
