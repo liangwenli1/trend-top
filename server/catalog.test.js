@@ -170,6 +170,7 @@ test('architecture topics classify instead of staying uncategorized', async () =
   assert.equal(archify.useCase, 'coding');
   assert.equal(officialEvidenceFor({ type: 'plugin', full_name: 'someone/pg', ranking_signals: { directory: 'glama' } }), null);
   assert.match(officialEvidenceFor({ type: 'plugin', full_name: 'supabase/mcp', ranking_signals: { directory: 'glama' } }) || '', /Glama/);
+  assert.match(officialEvidenceFor({ type: 'plugin', full_name: 'acme/random-mcp', ranking_signals: { directory: 'official-mcp-registry' } }) || '', /Official MCP Registry/);
   const compared = compareFields({ type: 'plugin', full_name: 'modelcontextprotocol/postgres', description: 'stdio MCP for Postgres', language: 'TypeScript' });
   assert.equal(compared.protocol, 'MCP');
   assert.equal(compared.transport, 'stdio');

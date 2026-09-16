@@ -106,6 +106,7 @@ export function classify(item = {}) {
 
 function directoryEvidence(item) {
   const signals = item.rankingSignals || item.ranking_signals || {};
+  if (signals.directory === 'official-mcp-registry' || /directory:official-mcp-registry/i.test(item.source_query || '')) return 'Official MCP Registry';
   if (signals.directory === 'skills-sh') return 'Listed on skills.sh';
   if (signals.directory === 'glama') return 'Listed on Glama MCP directory';
   if (/directory:skills-sh|skills\.sh/i.test(item.source_query || '')) return 'Listed on skills.sh';
@@ -116,14 +117,15 @@ function directoryEvidence(item) {
 export function officialEvidenceFor(item = {}) {
   const org = String(item.org || String(item.full_name || '').split('/')[0] || '').toLowerCase();
   const text = hay(item);
+  const listed = directoryEvidence(item);
   const reasons = [];
   if (OFFICIAL_ORGS.has(org)) reasons.push(`Verified vendor org ${org}`);
-  if (item.type === 'plugin' && (org === 'modelcontextprotocol' || /registry\.modelcontextprotocol\.io|official mcp registry/.test(text))) {
+  if (item.type === 'plugin' && (org === 'modelcontextprotocol' || listed === 'Official MCP Registry' || /registry\.modelcontextprotocol\.io|official mcp registry/.test(text))) {
     reasons.push('Official MCP Registry');
   }
   if (item.type === 'skill' && org === 'anthropics') reasons.push('anthropics/skills');
   if (item.type === 'website' && item.trust === 'official') reasons.push('Website source registry: official');
-  if (OFFICIAL_ORGS.has(org) && directoryEvidence(item)) reasons.push(directoryEvidence(item));
+  if (OFFICIAL_ORGS.has(org) && listed && listed !== 'Official MCP Registry') reasons.push(listed);
   return reasons.length ? [...new Set(reasons)].join(' · ') : null;
 }
 
@@ -150,7 +152,7 @@ function transportFor(item) {
   if (item.type !== 'plugin' && item.type !== 'skill') return null;
   if (/streamable.?http|http.?sse|\bsse\b/.test(text)) return 'HTTP / SSE';
   if (/\bstdio\b/.test(text)) return 'stdio';
-  return item.type === 'plugin' ? 'MCP transport unspecified' : 'SKILL.md';
+  return item.type === 'skill' ? 'SKILL.md' : null;
 }
 
 export function compareFields(item = {}) {

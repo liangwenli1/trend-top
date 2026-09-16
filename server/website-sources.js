@@ -109,6 +109,13 @@ const DIRECTORY_LISTINGS = [
     type: 'plugin',
     prompt: 'Extract MCP servers from the directory. github must be owner/repo. Prefer weekly downloads or recent usage.',
     schema: { type: 'object', properties: { items: { type: 'array', items: listingItem } } }
+  },
+  {
+    id: 'official-mcp-registry',
+    url: 'https://registry.modelcontextprotocol.io',
+    type: 'plugin',
+    prompt: 'Extract official MCP registry servers. github must be owner/repo. Ignore entries without a GitHub repository.',
+    schema: { type: 'object', properties: { items: { type: 'array', items: listingItem } } }
   }
 ];
 
@@ -133,6 +140,16 @@ function listingSignals(item, directory) {
   if (item.usage != null && item.usage !== '') signals.usage = Number(item.usage) || 0;
   if (item.downloads != null && item.downloads !== '') signals.downloads = Number(item.downloads) || 0;
   return signals;
+}
+
+async function stampDirectory(row, extra) {
+  const current = asJson(row.ranking_signals, {});
+  const signals = { ...current, ...extra };
+  const evidence = officialEvidenceFor({ type: row.type, full_name: row.full_name, ranking_signals: signals, source_query: `directory:${extra.directory}` });
+  await query(
+    `UPDATE assets SET ranking_signals=$1::jsonb,last_seen_at=$2,official_evidence=$3,official=$4 WHERE id=$5`,
+    [JSON.stringify(signals), extra.directoryUpdatedAt, evidence, isOfficial(evidence), row.id]
+  );
 }
 
 async function extractDirectory(spec, settings) {
@@ -171,11 +188,7 @@ export async function applyDirectorySignals(listings = []) {
     if (!matches.length) { unmatched.push(item); continue; }
     const extra = listingSignals(item, item.directory);
     for (const row of matches) {
-      const current = asJson(row.ranking_signals, {});
-      await query(
-        `UPDATE assets SET ranking_signals=$1::jsonb,last_seen_at=$2 WHERE id=$3`,
-        [JSON.stringify({ ...current, ...extra }), extra.directoryUpdatedAt, row.id]
-      );
+      await stampDirectory(row, extra);
       applied++;
     }
   }
@@ -212,18 +225,12 @@ export async function collectDirectorySignals({ fetchGithub, upsertAsset, wait =
           const at = new Date().toISOString();
           for (const resource of resources.slice(0, 8)) {
             const id = await upsertAsset('skill', repo, `directory:${item.directory}`, at, resource);
-            await query(
-              `UPDATE assets SET ranking_signals = COALESCE(ranking_signals,'{}'::jsonb) || $1::jsonb WHERE id=$2`,
-              [JSON.stringify(listingSignals(item, item.directory)), id]
-            );
+            await stampDirectory({ id, type: 'skill', full_name: repo.full_name, ranking_signals: {} }, listingSignals(item, item.directory));
             created++;
           }
         } else {
           const id = await upsertAsset(item.type, repo, `directory:${item.directory}`);
-          await query(
-            `UPDATE assets SET ranking_signals = COALESCE(ranking_signals,'{}'::jsonb) || $1::jsonb WHERE id=$2`,
-            [JSON.stringify(listingSignals(item, item.directory)), id]
-          );
+          await stampDirectory({ id, type: item.type, full_name: repo.full_name, ranking_signals: {} }, listingSignals(item, item.directory));
           created++;
         }
       } catch (error) {
