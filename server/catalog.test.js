@@ -157,3 +157,21 @@ test('search expands use-case and type instead of only matching names', async ()
   assert.ok(found.items.some(item => item.category === 'postgres' || item.useCase === 'database'));
   assert.ok(found.items.every(item => item.type === 'plugin' || item.resources));
 });
+
+test('architecture topics classify instead of staying uncategorized', async () => {
+  const { classify, officialEvidenceFor, compareFields } = await import('../shared/taxonomy.js');
+  const archify = classify({
+    type: 'github-repo',
+    full_name: 'tt-a1i/archify',
+    description: 'Agent skill for architecture diagrams',
+    topics: ['uncategorized', 'agent-skills', 'architecture-diagram', 'claude-skill']
+  });
+  assert.equal(archify.category, 'diagrams');
+  assert.equal(archify.useCase, 'coding');
+  assert.equal(officialEvidenceFor({ type: 'plugin', full_name: 'someone/pg', ranking_signals: { directory: 'glama' } }), null);
+  assert.match(officialEvidenceFor({ type: 'plugin', full_name: 'supabase/mcp', ranking_signals: { directory: 'glama' } }) || '', /Glama/);
+  const compared = compareFields({ type: 'plugin', full_name: 'modelcontextprotocol/postgres', description: 'stdio MCP for Postgres', language: 'TypeScript' });
+  assert.equal(compared.protocol, 'MCP');
+  assert.equal(compared.transport, 'stdio');
+  assert.ok(!String(compared.identity).includes('npx'));
+});

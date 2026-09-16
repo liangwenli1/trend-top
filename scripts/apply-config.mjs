@@ -15,6 +15,7 @@ const site = config.site ?? {};
 const github = config.github ?? {};
 const admin = config.admin ?? {};
 const smtp = config.smtp ?? {};
+const firecrawl = config.firecrawl ?? {};
 const host = process.env.DATABASE_HOST || database.host || 'db';
 const user = encodeURIComponent(database.user || 'trend_top');
 const password = encodeURIComponent(database.password || '');
@@ -33,6 +34,8 @@ const env = {
   GITHUB_TOKEN: github.token || process.env.GITHUB_TOKEN || '',
   ADMIN_TOKEN: admin.token || process.env.ADMIN_TOKEN || '',
   ADMIN_EMAILS: (Array.isArray(admin.emails) ? admin.emails.join(',') : admin.emails) || process.env.ADMIN_EMAILS || '',
+  FIRECRAWL_API_KEY: firecrawl.apiKey || firecrawl.api_key || process.env.FIRECRAWL_API_KEY || '',
+  FIRECRAWL_API_URL: firecrawl.apiUrl || firecrawl.api_url || process.env.FIRECRAWL_API_URL || 'https://api.firecrawl.dev',
   CONFIG_PATH: path
 };
 

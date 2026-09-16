@@ -27,7 +27,8 @@ input[type="reset"],
 
 .detail-metrics > div,
 .repo-detail .repo-tags span,
-.repo-detail .repo-tags a {
+.repo-detail .repo-tags a,
+.repo-detail .repo-tags button {
   border-radius: 0 !important;
 }
 

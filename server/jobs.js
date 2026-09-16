@@ -7,6 +7,7 @@ import { sendMail } from './mail.js';
 import { buildDigest } from './digest.js';
 import { collectWebsiteSources, collectDirectorySignals } from './website-sources.js';
 import { classify, officialEvidenceFor, isOfficial } from '../shared/taxonomy.js';
+import { getSettings } from './settings.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const token = () => crypto.randomBytes(24).toString('hex');
@@ -250,29 +251,39 @@ async function recordQueryStat(runId, collectionType, spec, stat, error = null) 
 
 export async function collectTypedAssets(knownRepos, runId, at, manualAssets = new Map(), fetchGithub = github, wait = sleep) {
   const counts = {}, extra = new Map(), executedQueries = [], trees = new Map();
-  const skills = async repo => {
-    if(!trees.has(repo.id)) {
+  const skillTree = async repo => {
+    if (trees.has(repo.id)) return trees.get(repo.id);
+    const branches = [...new Set([repo.default_branch, 'main', 'master'].filter(Boolean))];
+    for (const branch of branches) {
       try {
-        const body=await fetchGithub('https://api.github.com/repos/'+repo.full_name+'/git/trees/'+encodeURIComponent(repo.default_branch || 'main')+'?recursive=1');
-        if(body.truncated){
-          console.error('[collect] skill tree truncated', repo.full_name);
-          trees.set(repo.id,[]);
-        } else {
-          trees.set(repo.id,skillResources(repo,body.tree || []));
-        }
+        const body = await fetchGithub('https://api.github.com/repos/' + repo.full_name + '/git/trees/' + encodeURIComponent(branch) + '?recursive=1');
+        const resources = body.truncated ? [] : skillResources(repo, body.tree || []);
+        trees.set(repo.id, resources);
+        return resources;
       } catch (error) {
-        console.error('[collect] skill tree', repo.full_name, error);
-        trees.set(repo.id,[]);
+        if (!/GitHub 404/.test(String(error))) {
+          console.warn('[collect] skill tree', repo.full_name, error.message || error);
+          trees.set(repo.id, []);
+          return [];
+        }
       }
     }
-    return trees.get(repo.id);
+    trees.set(repo.id, []);
+    return [];
+  };
+  const skills = async (repo, hintPath) => {
+    if (hintPath) {
+      const fromPath = skillResources(repo, [{ type: 'blob', path: hintPath }]);
+      if (fromPath.length) return fromPath;
+    }
+    return skillTree(repo);
   };
   for(const type of ASSET_TYPES) {
     const found = new Map();
-    const accept = async (repo,source,manual=false) => {
+    const accept = async (repo,source,manual=false,hintPath=null) => {
       if(!repo?.id)return 0;
       if(type!=='skill' && !manual && !acceptsRepoType(type,repo))return 0;
-      const resources=type==='skill'?await skills(repo):[null];
+      const resources=type==='skill'?await skills(repo,hintPath):[null];
       let added=0;
       for(const resource of resources){
         const key=repo.id+':'+(resource?.path || '');
@@ -302,7 +313,7 @@ export async function collectTypedAssets(knownRepos, runId, at, manualAssets = n
             const repo=spec.kind==='code'?(hit.repository || hit):hit;
             if(!repo?.full_name)continue;
             stat.unique++;
-            const n=await accept(repo,'asset:'+type+':'+spec.q);added+=n;stat.accepted+=n;
+            const n=await accept(repo,'asset:'+type+':'+spec.q,false,spec.kind==='code'?hit.path:null);added+=n;stat.accepted+=n;
             if(found.size>=MAX_ASSETS_PER_TYPE || added>=queryBudget)break;
           }
           await wait(spec.kind==='code'?2500:1200);
@@ -318,7 +329,7 @@ export async function collectTypedAssets(knownRepos, runId, at, manualAssets = n
       if(found.size>=MAX_ASSETS_PER_TYPE)break;
       if(type==='skill'){
         const blob=`${repo.full_name||''} ${repo.description||''} ${(repo.topics||[]).join(' ')}`.toLowerCase();
-        if(!/skill/.test(blob))continue;
+        if(!/skill\.md|agent-skills|claude-skills|claude-skill/.test(blob))continue;
       }
       await accept(repo,'inferred:'+type);
     }
@@ -469,6 +480,8 @@ export async function collect() {
   );
   const runId = run.rows[0].id;
   let found = 0, sampled = 0;
+  const firecrawlReady = Boolean((await getSettings()).secret.firecrawlApiKey);
+  console.log('[collect] firecrawl', firecrawlReady ? 'enabled' : 'disabled (set firecrawl.apiKey in config.json or Site admin)');
   try {
     const unique = new Map();
     const manual = await approvedCandidates();
@@ -546,6 +559,7 @@ export async function collect() {
     } catch (error) {
       console.error('[collect] directory signals', error);
     }
+    console.log('[collect] websites', websites, 'directories', directories);
     if (executedRepoQueries.length) {
       await query(
         `UPDATE repos SET missed_runs=missed_runs+1,active=CASE WHEN missed_runs+1>=3 THEN FALSE ELSE active END
@@ -575,7 +589,7 @@ export async function collect() {
       `UPDATE sync_runs SET finished_at = $1, status = $2, found = $3, sampled = $4, error = $5 WHERE id = $6`,
       [new Date().toISOString(), 'ok', found, sampled, historyError || (history.failed ? `${history.failed} star histories unavailable` : null), runId]
     );
-    return { found, sampled, history, historyError, assets: assets.counts, websites, directories };
+    return { found, sampled, history, historyError, assets: assets.counts, websites, directories, firecrawl: firecrawlReady ? (directories.provider || websites.provider || 'firecrawl') : 'skipped' };
   } catch (e) {
     await query(
       `UPDATE sync_runs SET finished_at = $1, status = $2, found = $3, sampled = $4, error = $5 WHERE id = $6`,

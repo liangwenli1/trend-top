@@ -78,6 +78,11 @@ export async function getSettings() {
   const stored = asJson(row.public_data, {});
   // Older settings stored one currency with integer cents and a weekly product; both are dropped here.
   const { currency: _c, weeklyPrice: _w, monthlyPrice: _m, weeklyProductId: _wp, ...storedBilling } = stored.billing || {};
+  const storedSecret = decrypt(row.secret_data);
+  const secret = { ...defaults.secret };
+  for (const [key, value] of Object.entries(storedSecret)) {
+    if (String(value || '').trim()) secret[key] = value;
+  }
   return {
     public: {
       authentication: { ...defaults.public.authentication, ...(stored.authentication || {}) },
@@ -86,7 +91,7 @@ export async function getSettings() {
       contact: { ...defaults.public.contact, ...(stored.contact || {}) },
       social: { ...defaults.public.social, ...(stored.social || {}) }
     },
-    secret: { ...defaults.secret, ...decrypt(row.secret_data) }
+    secret
   };
 }
 

@@ -943,16 +943,18 @@ html.is-scrolling .analytics-page-nav,
 .tag-btn,.back-btn{
   display:inline-flex;align-items:center;justify-content:center;
   width:max-content;min-height:36px;padding:7px 14px;border:1px solid #111;border-radius:0;
-  background:#fff;color:#111;font-size:13px;font-weight:650;line-height:1.2;
+  background:#fff;color:#111;font-family:inherit;font-size:13px;font-weight:650;line-height:1.2;
   text-decoration:none;cursor:pointer;white-space:nowrap
 }
+button.tag-btn{font:inherit;font-size:13px;font-weight:650;line-height:1.2;appearance:none;-webkit-appearance:none}
 .tag-btn:hover,.back-btn:hover{background:#111;color:#fff}
 .tag-btn-action{background:#111;color:#fff;border-color:#111}
 .tag-btn-action:hover{background:#333;color:#fff}
 .back-btn{margin:0 0 18px}
 .method-page .back-btn,.simple-page .back-btn{justify-self:start;width:max-content}
 .repo-tags{align-items:center;gap:8px}
-.repo-tags .tag-btn{min-height:30px;padding:4px 11px;font-size:12px;font-family:inherit}
+.repo-tags .tag-btn{min-height:30px;padding:4px 11px;font-family:inherit;font-size:12px;font-weight:650}
+.detail-actions{margin-top:10px}
 .search-page .back-btn{margin-bottom:22px}
 
 

@@ -24,12 +24,14 @@ export const CATEGORIES = {
   button: { zh: '按钮', en: 'Button', useCase: 'ui' },
   hero: { zh: 'Hero', en: 'Hero', useCase: 'ui' },
   chart: { zh: '图表', en: 'Chart', useCase: 'ui' },
+  diagrams: { zh: '架构图', en: 'Diagrams', useCase: 'coding' },
   'auth-form': { zh: '登录表单', en: 'Auth form', useCase: 'auth' },
   git: { zh: 'Git', en: 'Git', useCase: 'git' },
   postgres: { zh: 'Postgres', en: 'Postgres', useCase: 'database' },
   mysql: { zh: 'MySQL', en: 'MySQL', useCase: 'database' },
   sqlite: { zh: 'SQLite', en: 'SQLite', useCase: 'database' },
   redis: { zh: 'Redis', en: 'Redis', useCase: 'database' },
+  'vector-db': { zh: '向量库', en: 'Vector DB', useCase: 'database' },
   'object-storage': { zh: '对象存储', en: 'Object storage', useCase: 'storage' },
   browser: { zh: '浏览器', en: 'Browser', useCase: 'browser' },
   github: { zh: 'GitHub', en: 'GitHub', useCase: 'github' },
@@ -43,11 +45,13 @@ export const CATEGORIES = {
 
 const RULES = [
   { category: 'object-storage', keys: ['minio', 's3', 'r2', 'ceph', 'object-storage', 'blob storage', 'object storage'] },
+  { category: 'vector-db', keys: ['chromadb', 'chroma', 'milvus', 'qdrant', 'weaviate', 'pinecone', 'pgvector', 'vector database', 'vector db'] },
   { category: 'postgres', keys: ['postgres', 'postgresql'] },
   { category: 'mysql', keys: ['mysql', 'mariadb'] },
   { category: 'sqlite', keys: ['sqlite'] },
   { category: 'redis', keys: ['redis'] },
   { category: 'browser', keys: ['playwright', 'puppeteer', 'browser-use', 'browser automation', 'headless chrome'] },
+  { category: 'diagrams', keys: ['architecture-diagram', 'architecture-as-code', 'mermaid', 'plantuml', 'sequence diagram', 'code-visualization', 'diagrams'] },
   { category: 'pdf', keys: ['pdf'] },
   { category: 'xlsx', keys: ['xlsx', 'spreadsheet', 'excel'] },
   { category: 'docs', keys: ['document-skills', 'docx'] },
@@ -59,7 +63,7 @@ const RULES = [
   { category: 'chart', keys: ['recharts', 'chart primitive'] },
   { category: 'auth-form', keys: ['login', 'sign-in', 'auth form'] },
   { category: 'frontend', keys: ['frontend-design', 'shadcn', 'ui implementation'] },
-  { category: 'coding', keys: ['coding agent', 'claude-code', 'aider', 'continue.dev'] },
+  { category: 'coding', keys: ['coding agent', 'claude-code', 'aider', 'continue.dev', 'claude-skill', 'agent-skills', 'agent skill'] },
   { category: 'research', keys: ['gpt-researcher', 'research agent', 'wikipedia-style'] },
   { category: 'playground', keys: ['playground', 'inspector', 'try a server'] },
   { category: 'directory', keys: ['leaderboard', 'directory', 'registry', 'catalog of'] },
@@ -69,20 +73,26 @@ const RULES = [
 export const OFFICIAL_ORGS = new Set([
   'microsoft', 'vercel', 'anthropics', 'openai', 'modelcontextprotocol',
   'shadcn-ui', 'langchain-ai', 'ollama', 'supabase', 'astral-sh', 'github',
-  'vercel-labs', 'facebook', 'google', 'google-gemini', 'continuedev'
+  'vercel-labs', 'facebook', 'google', 'google-gemini', 'continuedev',
+  'minio', 'clickhouse', 'redis', 'elastic', 'apache'
 ]);
 
-const hay = item => `${item.full_name || ''} ${item.name || ''} ${item.description || ''} ${(item.topics || []).join(' ')} ${item.category || ''}`.toLowerCase();
+const hay = item => `${item.full_name || ''} ${item.name || ''} ${item.description || ''} ${(item.topics || []).join(' ')} ${item.category || ''} ${item.homepage || ''} ${item.source_query || ''}`.toLowerCase();
+
+function topicList(item) {
+  return (item.topics || []).map(value => String(value || '').toLowerCase());
+}
+
+function ruleHit(item) {
+  const text = hay(item);
+  const topics = topicList(item);
+  return RULES.find(rule => rule.keys.some(key => topics.includes(key) || text.includes(key))) || null;
+}
 
 export function classify(item = {}) {
-  const text = hay(item);
-  const known = CATEGORIES[String(item.category || '').toLowerCase()];
-  let category = known ? String(item.category).toLowerCase() : null;
-  if (!category) {
-    const hit = RULES.find(rule => rule.keys.some(key => text.includes(key)));
-    category = hit?.category || null;
-  }
-  if (!category) category = 'uncategorized';
+  const stored = String(item.category || '').toLowerCase();
+  const known = CATEGORIES[stored] && stored !== 'uncategorized' ? stored : null;
+  const category = known || ruleHit(item)?.category || 'uncategorized';
   const meta = CATEGORIES[category];
   const useCase = item.use_case && USE_CASES[item.use_case] ? item.use_case : (meta?.useCase || 'other');
   return {
@@ -94,13 +104,26 @@ export function classify(item = {}) {
   };
 }
 
+function directoryEvidence(item) {
+  const signals = item.rankingSignals || item.ranking_signals || {};
+  if (signals.directory === 'skills-sh') return 'Listed on skills.sh';
+  if (signals.directory === 'glama') return 'Listed on Glama MCP directory';
+  if (/directory:skills-sh|skills\.sh/i.test(item.source_query || '')) return 'Listed on skills.sh';
+  if (/directory:glama|glama\.ai/i.test(item.source_query || '')) return 'Listed on Glama MCP directory';
+  return null;
+}
+
 export function officialEvidenceFor(item = {}) {
   const org = String(item.org || String(item.full_name || '').split('/')[0] || '').toLowerCase();
+  const text = hay(item);
   const reasons = [];
   if (OFFICIAL_ORGS.has(org)) reasons.push(`Verified vendor org ${org}`);
-  if (item.type === 'plugin' && org === 'modelcontextprotocol') reasons.push('Official MCP Registry');
+  if (item.type === 'plugin' && (org === 'modelcontextprotocol' || /registry\.modelcontextprotocol\.io|official mcp registry/.test(text))) {
+    reasons.push('Official MCP Registry');
+  }
   if (item.type === 'skill' && org === 'anthropics') reasons.push('anthropics/skills');
   if (item.type === 'website' && item.trust === 'official') reasons.push('Website source registry: official');
+  if (OFFICIAL_ORGS.has(org) && directoryEvidence(item)) reasons.push(directoryEvidence(item));
   return reasons.length ? [...new Set(reasons)].join(' · ') : null;
 }
 
@@ -108,16 +131,42 @@ export function isOfficial(evidence) {
   return Boolean(evidence);
 }
 
+function hostsFor(item) {
+  const text = hay(item);
+  const hosts = [];
+  if (/claude|anthropic/.test(text)) hosts.push('Claude');
+  if (/cursor/.test(text)) hosts.push('Cursor');
+  if (/windsurf/.test(text)) hosts.push('Windsurf');
+  if (/copilot|vscode|visual studio code/.test(text)) hosts.push('VS Code');
+  if (/codex/.test(text)) hosts.push('Codex');
+  if (item.type === 'plugin') return hosts.length ? hosts.join(' / ') : 'MCP hosts';
+  if (item.type === 'skill') return hosts.length ? hosts.join(' / ') : 'Claude / compatible agents';
+  if (item.type === 'components') return 'shadcn-compatible apps';
+  return hosts.length ? hosts.join(' / ') : (classify(item).useCaseLabel?.en || '—');
+}
+
+function transportFor(item) {
+  const text = hay(item);
+  if (item.type !== 'plugin' && item.type !== 'skill') return null;
+  if (/streamable.?http|http.?sse|\bsse\b/.test(text)) return 'HTTP / SSE';
+  if (/\bstdio\b/.test(text)) return 'stdio';
+  return item.type === 'plugin' ? 'MCP transport unspecified' : 'SKILL.md';
+}
+
 export function compareFields(item = {}) {
   const classified = classify(item);
   const signals = item.rankingSignals || item.ranking_signals || {};
   const source = item.sourceRepoUrl || item.source_repo_url || item.url || null;
+  const listed = directoryEvidence(item);
   if (item.type === 'skill') {
     return {
       protocol: 'Agent Skills',
       identity: signals.resourcePath || 'SKILL.md',
       runtime: 'SKILL.md',
-      hosts: 'Claude / compatible agents',
+      transport: transportFor(item),
+      hosts: hostsFor(item),
+      listed,
+      language: item.language || 'Markdown',
       source
     };
   }
@@ -126,7 +175,10 @@ export function compareFields(item = {}) {
       protocol: 'MCP',
       identity: item.full_name,
       runtime: item.language || '—',
-      hosts: /claude|anthropic/i.test(hay(item)) ? 'Claude / MCP hosts' : 'MCP hosts',
+      transport: transportFor(item),
+      hosts: hostsFor(item),
+      listed,
+      language: item.language || '—',
       source
     };
   }
@@ -135,7 +187,10 @@ export function compareFields(item = {}) {
       protocol: 'Agent',
       identity: item.full_name,
       runtime: item.language || '—',
-      hosts: classified.useCase === 'coding' ? 'CLI / editor' : classified.useCase,
+      transport: null,
+      hosts: classified.useCase === 'coding' ? 'CLI / editor' : hostsFor(item),
+      listed,
+      language: item.language || '—',
       source
     };
   }
@@ -144,7 +199,10 @@ export function compareFields(item = {}) {
       protocol: 'UI registry',
       identity: item.full_name,
       runtime: item.language || 'TypeScript',
-      hosts: 'shadcn-compatible apps',
+      transport: null,
+      hosts: hostsFor(item),
+      listed,
+      language: item.language || 'TypeScript',
       source
     };
   }
@@ -152,7 +210,10 @@ export function compareFields(item = {}) {
     protocol: item.type === 'website' ? 'Website' : 'GitHub',
     identity: item.full_name,
     runtime: item.language || '—',
-    hosts: classified.useCaseLabel?.en || classified.useCase,
+    transport: null,
+    hosts: hostsFor(item),
+    listed,
+    language: item.language || '—',
     source
   };
 }

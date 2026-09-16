@@ -404,8 +404,11 @@ export function ComparePage({ l, t, type, ids, navigate }) {
               {item.usage != null && <div><dt>{item.usageKind === 'downloads' ? (l === 'zh' ? '下载' : 'Downloads') : item.usageKind === 'usage' ? (l === 'zh' ? '用量' : 'Usage') : (l === 'zh' ? '安装量' : 'Installs')}</dt><dd>{fmt(item.usage, l)}</dd></div>}
               {item.compare?.protocol && <div><dt>{l === 'zh' ? '协议' : 'Protocol'}</dt><dd>{item.compare.protocol}</dd></div>}
               {item.compare?.runtime && <div><dt>{l === 'zh' ? '形态' : 'Runtime'}</dt><dd>{item.compare.runtime}</dd></div>}
+              {item.compare?.transport && <div><dt>{l === 'zh' ? '传输' : 'Transport'}</dt><dd>{item.compare.transport}</dd></div>}
               {item.compare?.identity && <div><dt>{l === 'zh' ? '标识' : 'Identity'}</dt><dd>{item.compare.identity}</dd></div>}
               {item.compare?.hosts && <div><dt>{l === 'zh' ? '适用' : 'Works with'}</dt><dd>{item.compare.hosts}</dd></div>}
+              {item.compare?.listed && <div><dt>{l === 'zh' ? '目录' : 'Directory'}</dt><dd>{item.compare.listed}</dd></div>}
+              {item.compare?.language && <div><dt>{l === 'zh' ? '语言' : 'Language'}</dt><dd>{item.compare.language}</dd></div>}
               <div><dt>{l === 'zh' ? '距上次更新' : 'Last updated'}</dt><dd>{item.pushDays == null ? '—' : item.pushDays === 0 ? (l === 'zh' ? '今天' : 'Today') : l === 'zh' ? `${fmt(item.pushDays, l)} 天前` : `${fmt(item.pushDays, l)}d ago`}</dd></div>
             </dl>
             <div className="compare-option-foot"><p>{(item.recommendNote?.[l] || item.recommendNote?.en) || (item.officialEvidence ? `${l === 'zh' ? '官方依据' : 'Official source'}: ${item.officialEvidence}` : (l === 'zh' ? '社区来源，没有官方依据。' : 'Community source; no official evidence.'))}</p><div className="compare-option-links"><a href={detailHref(item)} onClick={e => navigate(e, detailHref(item))}>{l === 'zh' ? '查看详情' : 'View details'} <span aria-hidden="true">↗</span></a>{(item.compare?.source || item.url) && <a href={item.compare?.source || item.url} target="_blank" rel="noopener noreferrer">{l === 'zh' ? '打开来源' : 'Open source'} <span aria-hidden="true">↗</span></a>}</div></div>
@@ -513,7 +516,7 @@ export function ItemDetail({ l, t, type, id, navigate, viewer }) {
   }
   const category = String(item.category ?? '').trim();
   const categoryKey = category.toLowerCase();
-  const showCategory = category && !topicKeys.has(categoryKey);
+  const showCategory = category && category !== 'uncategorized' && category !== 'other' && !topicKeys.has(categoryKey);
   const topicHref = value => typePath(l, type, 'ranking', `topic=${encodeURIComponent(value)}`);
   const githubHref = item.sourceRepoUrl || (/github\.com/i.test(item.url || '') ? item.url : null);
   const siteHref = item.websiteUrl && item.websiteUrl !== githubHref ? item.websiteUrl : (type === 'website' ? (item.url || item.websiteUrl) : null);
@@ -528,7 +531,9 @@ export function ItemDetail({ l, t, type, id, navigate, viewer }) {
         {item.officialEvidence && <span className="source-tag" title={item.officialEvidence}>{l === 'zh' ? '官方' : 'Official'}</span>}
         {item.useCase && item.useCase !== 'other' && <a className="tag-btn" href={typePath(l, type, 'ranking', `useCase=${encodeURIComponent(item.useCase)}`)} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, 'ranking'), `useCase=${encodeURIComponent(item.useCase)}`); }}>{item.useCaseLabel?.[l === 'zh' ? 'zh' : 'en'] || item.useCase}</a>}
         {showCategory && <a className="tag-btn detail-category-tag" href={typePath(l, type, `c/${encodeURIComponent(category)}`)} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, `c/${encodeURIComponent(category)}`)); }}>{item.categoryLabel?.[l === 'zh' ? 'zh' : 'en'] || category}</a>}
-        {topicValues.slice(0, 5).map(value => <a className="tag-btn detail-topic-tag" key={value} href={topicHref(value)} onClick={e => { e.preventDefault(); navigate(e, topicHref(value)); }}>{value}</a>)}
+        {topicValues.filter(value => !['uncategorized', 'other'].includes(value.toLowerCase())).slice(0, 5).map(value => <a className="tag-btn detail-topic-tag" key={value} href={topicHref(value)} onClick={e => { e.preventDefault(); navigate(e, topicHref(value)); }}>{value}</a>)}
+      </div>
+      <div className="repo-tags detail-actions">
         <a className="tag-btn tag-btn-action" href={typePath(l, type, 'compare', `ids=${encodeURIComponent(item.slug || item.id)}`)} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, 'compare'), `ids=${encodeURIComponent(item.slug || item.id)}`); }}>{l === 'zh' ? '对比同类' : 'Compare'}</a>
         <WatchButton l={l} type={type} item={item} viewer={viewer} navigate={navigate} />
       </div>
@@ -585,7 +590,7 @@ function WatchButton({ l, type, item, viewer, navigate }) {
       setWatching(watching);
     } finally { setBusy(false); }
   };
-  return <button type="button" className={watching ? 'tag-btn tag-btn-action' : 'tag-btn'} disabled={busy} onClick={click}>{watching ? (l === 'zh' ? '已关注' : 'Watching') : (l === 'zh' ? '关注' : 'Watch')}</button>;
+  return <button type="button" className="tag-btn tag-btn-action" disabled={busy} onClick={click}>{watching ? (l === 'zh' ? '已关注' : 'Watching') : (l === 'zh' ? '关注' : 'Watch')}</button>;
 }
 
 function RelatedCards({l,items,navigate}) {
