@@ -18,12 +18,12 @@ const planRows = async (locale = 'en') => {
   {
     key: 'pro_monthly', name: { en: 'Pro Monthly', zh: 'Pro 月付' }, interval: 'month',
     productId: billing.monthlyProductId, price: positive(prices.monthly), currency: prices.currency, priced: priced('monthly'),
-    features: { en: ['Daily digest email across six collections', 'Growth charts inside every email', 'Language and topic filters', 'Your delivery hour and time zone', 'One renewal per month, cancel anytime'], zh: ['覆盖六大类型的每日摘要邮件', '每封邮件内置增长图表', '按编程语言和主题筛选', '自选发送时间与时区', '每月续费一次，随时可取消'] }
+    features: { en: ['Daily digest email across six collections', 'Watchlist with rank and star changes since last visit', 'Growth charts inside every email', 'Language and topic filters', 'Your delivery hour and time zone'], zh: ['覆盖六大类型的每日摘要邮件', '关注列表：距上次访问的名次和 Star 变化', '每封邮件内置增长图表', '按编程语言和主题筛选', '自选发送时间与时区'] }
   },
   {
     key: 'pro_yearly', name: { en: 'Pro Yearly', zh: 'Pro 年付' }, interval: 'year',
     productId: billing.yearlyProductId, price: positive(prices.yearly), currency: prices.currency, priced: priced('yearly'),
-    features: { en: ['Daily digest email across six collections', 'Growth charts inside every email', 'Language and topic filters', 'Your delivery hour and time zone', 'One renewal per year, cancel anytime'], zh: ['覆盖六大类型的每日摘要邮件', '每封邮件内置增长图表', '按编程语言和主题筛选', '自选发送时间与时区', '每年续费一次，随时可取消'] }
+    features: { en: ['Daily digest email across six collections', 'Watchlist with rank and star changes since last visit', 'Growth charts inside every email', 'Language and topic filters', 'Your delivery hour and time zone'], zh: ['覆盖六大类型的每日摘要邮件', '关注列表：距上次访问的名次和 Star 变化', '每封邮件内置增长图表', '按编程语言和主题筛选', '自选发送时间与时区'] }
   }
   ];
 };

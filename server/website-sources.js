@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { asJson, many, query } from './db.js';
 import { getSettings } from './settings.js';
+import { classify, officialEvidenceFor, isOfficial } from '../shared/taxonomy.js';
 
 const SOURCES = [
   { id: '21st-dev', name: '21st.dev', url: 'https://21st.dev', trust: 'curated', topics: ['components', 'design-system'] },
@@ -250,20 +251,21 @@ async function saveWebsite(source, metadata, now) {
   const slug = source.id;
   const id = `website-source-${slug}`;
   const topics = asJson(source.topics, []);
-  const category = topics[0] || 'directory';
   const description = metadata.description || `${source.name} open-source resource.`;
+  const classified = classify({ type: 'website', full_name: source.name, description, topics, trust: source.trust });
+  const evidence = officialEvidenceFor({ type: 'website', full_name: source.name, trust: source.trust, evidence: `Website source registry: ${source.trust}` });
   await query(
     `INSERT INTO assets (
-       id,type,slug,name,full_name,description,category,category_zh,category_en,official,official_evidence,
+       id,type,slug,name,full_name,description,category,category_zh,category_en,use_case,official,official_evidence,
        cluster_id,url,language,topics,stars,forks,created_at,pushed_at,website_url,source_repo_url,favicon_url,
        last_fetched_at,last_seen_at,source_query,entity_key,ranking_signals,active,missed_runs
-     ) VALUES ($1,'website',$2,$3,$4,$5,$6,$6,$6,$7,$8,$9,$10,'',$11::jsonb,0,0,$12,$12,$10,$13,$14,$12,$12,$15,$16,$17::jsonb,TRUE,0)
+     ) VALUES ($1,'website',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'',$14::jsonb,0,0,$15,$15,$13,$16,$17,$15,$15,$18,$19,$20::jsonb,TRUE,0)
      ON CONFLICT (type,slug) DO UPDATE SET name=EXCLUDED.name,full_name=EXCLUDED.full_name,description=EXCLUDED.description,
-       category=EXCLUDED.category,official=EXCLUDED.official,official_evidence=EXCLUDED.official_evidence,url=EXCLUDED.url,
+       category=EXCLUDED.category,category_zh=EXCLUDED.category_zh,category_en=EXCLUDED.category_en,use_case=EXCLUDED.use_case,official=EXCLUDED.official,official_evidence=EXCLUDED.official_evidence,url=EXCLUDED.url,
        website_url=EXCLUDED.website_url,source_repo_url=COALESCE(EXCLUDED.source_repo_url,assets.source_repo_url),favicon_url=EXCLUDED.favicon_url,
        topics=EXCLUDED.topics,pushed_at=EXCLUDED.pushed_at,last_fetched_at=EXCLUDED.last_fetched_at,last_seen_at=EXCLUDED.last_seen_at,
        source_query=EXCLUDED.source_query,entity_key=EXCLUDED.entity_key,ranking_signals=EXCLUDED.ranking_signals,active=TRUE,missed_runs=0`,
-    [id, slug, metadata.title || source.name, source.name, description, category, source.trust_level === 'official', `Website source registry: ${source.trust_level}`, `website:${slug}`, source.url, JSON.stringify(topics), now, source.source_repo_url, metadata.favicon, `website-source:${slug}`, `domain:${new URL(source.url).hostname.toLowerCase().replace(/^www\./, '')}`, JSON.stringify({ trust: source.trust_level, contentUpdatedAt: metadata.lastModified, provider: metadata.provider, confidence: metadata.lastModified ? 'partial' : 'metadata-only' })]
+    [id, slug, metadata.title || source.name, source.name, description, classified.category, classified.categoryZh, classified.categoryEn, classified.useCase, isOfficial(evidence), evidence, `website:${classified.category}`, source.url, JSON.stringify(topics), now, source.source_repo_url, metadata.favicon, `website-source:${slug}`, `domain:${new URL(source.url).hostname.toLowerCase().replace(/^www\./, '')}`, JSON.stringify({ trust: source.trust_level || source.trust, contentUpdatedAt: metadata.lastModified, provider: metadata.provider, confidence: metadata.lastModified ? 'partial' : 'metadata-only' })]
   );
   await query('UPDATE website_sources SET last_fetched_at=$1,next_retry_at=NULL,failure_count=0,last_error=NULL,metadata=$2::jsonb WHERE id=$3', [now, JSON.stringify(metadata), source.id]);
 }

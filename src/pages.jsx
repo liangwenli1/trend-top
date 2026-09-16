@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { TYPES, TYPE_META, typeLabel, typePath, itemPath, trendingCopy } from './catalog.js';
+import { loginUrl } from '../shared/account-paths.js';
 
 const fmt = (n, l) => n === null || n === undefined ? '—' : new Intl.NumberFormat(l === 'zh' ? 'zh-CN' : 'en-US').format(n);
 const api = (url,options) => fetch(url,options).then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Request failed'); return j; });
@@ -17,7 +18,7 @@ export function TagActions({ l, type, item, navigate, showMeta = false }) {
   const go = (href, query) => e => { e.preventDefault(); navigate(e, href, query); };
   return (
     <div className="repo-tags">
-      <span className="source-tag">{item.official ? (l === 'zh' ? '官方' : 'Official') : (l === 'zh' ? '社区' : 'Community')}</span>
+      <span className="source-tag" title={item.officialEvidence || undefined}>{item.officialEvidence ? (l === 'zh' ? '官方' : 'Official') : (l === 'zh' ? '社区' : 'Community')}</span>
       <a className="tag-btn tag-btn-action" href={typePath(l, type, 'compare', compareQuery)} onClick={go(typePath(l, type, 'compare'), compareQuery)}>
         {l === 'zh' ? '对比同类' : 'Compare'}
       </a>
@@ -401,9 +402,13 @@ export function ComparePage({ l, t, type, ids, navigate }) {
               <div><dt>{t.gain}</dt><dd>{item.gain == null ? <span className="compare-unavailable">{t.insufficient}</span> : `+${fmt(item.gain, l)}`}</dd></div>
               <div><dt>{t.forks}</dt><dd>{fmt(item.forks, l)}</dd></div>
               {item.usage != null && <div><dt>{item.usageKind === 'downloads' ? (l === 'zh' ? '下载' : 'Downloads') : item.usageKind === 'usage' ? (l === 'zh' ? '用量' : 'Usage') : (l === 'zh' ? '安装量' : 'Installs')}</dt><dd>{fmt(item.usage, l)}</dd></div>}
+              {item.compare?.protocol && <div><dt>{l === 'zh' ? '协议' : 'Protocol'}</dt><dd>{item.compare.protocol}</dd></div>}
+              {item.compare?.runtime && <div><dt>{l === 'zh' ? '形态' : 'Runtime'}</dt><dd>{item.compare.runtime}</dd></div>}
+              {item.compare?.identity && <div><dt>{l === 'zh' ? '标识' : 'Identity'}</dt><dd>{item.compare.identity}</dd></div>}
+              {item.compare?.hosts && <div><dt>{l === 'zh' ? '适用' : 'Works with'}</dt><dd>{item.compare.hosts}</dd></div>}
               <div><dt>{l === 'zh' ? '距上次更新' : 'Last updated'}</dt><dd>{item.pushDays == null ? '—' : item.pushDays === 0 ? (l === 'zh' ? '今天' : 'Today') : l === 'zh' ? `${fmt(item.pushDays, l)} 天前` : `${fmt(item.pushDays, l)}d ago`}</dd></div>
             </dl>
-            <div className="compare-option-foot"><p>{(item.recommendNote?.[l] || item.recommendNote?.en) || (item.officialEvidence ? `${l === 'zh' ? '官方依据' : 'Official source'}: ${item.officialEvidence}` : '')}</p><div className="compare-option-links"><a href={detailHref(item)} onClick={e => navigate(e, detailHref(item))}>{l === 'zh' ? '查看详情' : 'View details'} <span aria-hidden="true">↗</span></a>{item.url && <a href={item.url} target="_blank" rel="noopener noreferrer">{l === 'zh' ? '打开来源' : 'Open source'} <span aria-hidden="true">↗</span></a>}</div></div>
+            <div className="compare-option-foot"><p>{(item.recommendNote?.[l] || item.recommendNote?.en) || (item.officialEvidence ? `${l === 'zh' ? '官方依据' : 'Official source'}: ${item.officialEvidence}` : (l === 'zh' ? '社区来源，没有官方依据。' : 'Community source; no official evidence.'))}</p><div className="compare-option-links"><a href={detailHref(item)} onClick={e => navigate(e, detailHref(item))}>{l === 'zh' ? '查看详情' : 'View details'} <span aria-hidden="true">↗</span></a>{(item.compare?.source || item.url) && <a href={item.compare?.source || item.url} target="_blank" rel="noopener noreferrer">{l === 'zh' ? '打开来源' : 'Open source'} <span aria-hidden="true">↗</span></a>}</div></div>
           </article>)}</div>
         </section>
         <a className="compare-more-link" href={categoryHref} onClick={e => navigate(e, categoryHref)}>{l === 'zh' ? `浏览 ${label || ''} 完整排行` : `Explore the full ${label || ''} ranking`} <span aria-hidden="true">↗</span></a>
@@ -486,7 +491,7 @@ export function SearchPage({ l, t, q, typeFilter = '', navigate }) {
   );
 }
 
-export function ItemDetail({ l, t, type, id, navigate }) {
+export function ItemDetail({ l, t, type, id, navigate, viewer }) {
   const [item, setItem] = useState(null);
   const [msg, setMsg] = useState('');
   useEffect(() => {
@@ -520,12 +525,15 @@ export function ItemDetail({ l, t, type, id, navigate }) {
       <h1>{item.full_name}</h1>
       <p className="detail-description">{item.description}</p>
       <div className="repo-tags">
-        {item.official && <span className="source-tag">{l === 'zh' ? '官方' : 'Official'}</span>}
+        {item.officialEvidence && <span className="source-tag" title={item.officialEvidence}>{l === 'zh' ? '官方' : 'Official'}</span>}
+        {item.useCase && item.useCase !== 'other' && <a className="tag-btn" href={typePath(l, type, 'ranking', `useCase=${encodeURIComponent(item.useCase)}`)} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, 'ranking'), `useCase=${encodeURIComponent(item.useCase)}`); }}>{item.useCaseLabel?.[l === 'zh' ? 'zh' : 'en'] || item.useCase}</a>}
         {showCategory && <a className="tag-btn detail-category-tag" href={typePath(l, type, `c/${encodeURIComponent(category)}`)} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, `c/${encodeURIComponent(category)}`)); }}>{item.categoryLabel?.[l === 'zh' ? 'zh' : 'en'] || category}</a>}
         {topicValues.slice(0, 5).map(value => <a className="tag-btn detail-topic-tag" key={value} href={topicHref(value)} onClick={e => { e.preventDefault(); navigate(e, topicHref(value)); }}>{value}</a>)}
         <a className="tag-btn tag-btn-action" href={typePath(l, type, 'compare', `ids=${encodeURIComponent(item.slug || item.id)}`)} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, 'compare'), `ids=${encodeURIComponent(item.slug || item.id)}`); }}>{l === 'zh' ? '对比同类' : 'Compare'}</a>
+        <WatchButton l={l} type={type} item={item} viewer={viewer} navigate={navigate} />
       </div>
       {item.officialEvidence && <p>{l === 'zh' ? '官方依据：' : 'Official evidence: '}{item.officialEvidence}</p>}
+      {!item.officialEvidence && <p>{l === 'zh' ? '没有官方依据，按社区来源展示。' : 'No official evidence; shown as a community source.'}</p>}
       {note && <p>{l === 'zh' ? '和相邻选项的差别：' : 'How it differs: '}{note}</p>}
       {type === 'website' && !item.stars && item.gain == null && item.usage == null ? <p className="detail-data-pending">{l === 'zh' ? '独立网站还没有热度或用量数据。' : 'This site does not have momentum or usage data yet.'}</p> : <div className="detail-metrics">
         <div><small>{t.stars}</small><strong>{fmt(item.stars, l)}</strong></div>
@@ -541,6 +549,43 @@ export function ItemDetail({ l, t, type, id, navigate }) {
       {(item.similar || []).length>0&&<section className="related-section"><div className="related-heading"><h2>{l==='zh'?'相关项目':'Related projects'}</h2><span>{item.relatedCount ?? item.similarCount}</span></div><RelatedCards l={l} items={item.similar.slice(0,6)} navigate={navigate}/>{(item.relatedCount ?? item.similarCount)>6&&<a className="ghost inline" href={'/'+l+'/'+type+'/related/'+encodeURIComponent(item.slug || item.id)} onClick={event=>{event.preventDefault();navigate(event,'/'+l+'/'+type+'/related/'+encodeURIComponent(item.slug || item.id))}}>{l==='zh'?'查看全部相关项目':'View all related projects'}</a>}</section>}
     </main>
   );
+}
+
+function WatchButton({ l, type, item, viewer, navigate }) {
+  const [watching, setWatching] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const id = String(item.slug || item.id);
+  const detailPath = itemPath(l, type, id);
+  useEffect(() => {
+    if (!viewer) { setWatching(false); return; }
+    const controller = new AbortController();
+    fetch(`/api/watches/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, { signal: controller.signal }).then(async r => {
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) setWatching(Boolean(data.watching));
+    }).catch(error => { if (error.name !== 'AbortError') setWatching(false); });
+    return () => controller.abort();
+  }, [viewer, type, id]);
+  const click = async event => {
+    event.preventDefault();
+    if (!viewer) { navigate(event, loginUrl(l, detailPath)); return; }
+    if (busy) return;
+    setBusy(true);
+    try {
+      const response = await fetch('/api/watches', {
+        method: watching ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, id })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) { navigate(event, loginUrl(l, detailPath)); return; }
+      if (response.status === 403) { navigate(event, `/${l}/pricing`); return; }
+      if (!response.ok) throw new Error(data.error || 'Watch failed');
+      setWatching(Boolean(data.watching));
+    } catch {
+      setWatching(watching);
+    } finally { setBusy(false); }
+  };
+  return <button type="button" className={watching ? 'tag-btn tag-btn-action' : 'tag-btn'} disabled={busy} onClick={click}>{watching ? (l === 'zh' ? '已关注' : 'Watching') : (l === 'zh' ? '关注' : 'Watch')}</button>;
 }
 
 function RelatedCards({l,items,navigate}) {

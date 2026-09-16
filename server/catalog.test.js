@@ -106,3 +106,27 @@ test('existing raw topics deduplicate in detail, facets and alias-filtered ranki
     }
   }
 });
+
+test('use-case axis does not use the first GitHub topic as the category', async () => {
+  const { classify } = await import('../shared/taxonomy.js');
+  const storage = classify({ type: 'github-repo', full_name: 'minio/minio', description: 'High performance object storage', topics: ['ai', 'go', 'minio'] });
+  assert.equal(storage.useCase, 'storage');
+  assert.equal(storage.category, 'object-storage');
+  const database = classify({ type: 'plugin', full_name: 'modelcontextprotocol/postgres', description: 'Postgres MCP', topics: ['mcp', 'postgres'], category: 'postgres' });
+  assert.equal(database.useCase, 'database');
+  const ranking = await getCatalogRankings('plugin', { useCase: 'database', limit: 20 });
+  assert.ok(ranking.items.length >= 1);
+  assert.ok(ranking.items.every(item => item.useCase === 'database'));
+});
+
+test('official requires evidence and compare exposes protocol fields', async () => {
+  const item = await getCatalogItem('skill', 'anthropic-pdf');
+  assert.equal(item.official, true);
+  assert.ok(item.officialEvidence);
+  const community = await getCatalogItem('skill', 'pdf-extract-pro');
+  assert.equal(community.official, false);
+  assert.equal(community.officialEvidence, null);
+  const compared = await getCompare('plugin', 'postgres-official,supabase-mcp');
+  assert.ok(compared.items.every(row => row.compare?.protocol === 'MCP'));
+  assert.ok(compared.items.every(row => !String(row.compare?.identity || '').includes('npx')));
+});

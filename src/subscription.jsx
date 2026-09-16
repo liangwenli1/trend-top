@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { DesignSelect, TopicMultiSelect } from './components.jsx';
-import { TYPES, typeLabel } from './catalog.js';
+import { TYPES, typeLabel, itemPath } from './catalog.js';
 import { BillingCard } from './billing-ui.jsx';
 import './account.css';
 import { loginUrl, safeAccountReturn, digestDestination } from '../shared/account-paths.js';
@@ -269,6 +269,48 @@ export function LoginPage({ l, user, navigate }) {
   return <div className="login-page"><main className="login-main"><a className="brand login-brand" href={`/${l}/home`}>Trend Top</a><header className="login-heading"><p className="account-kicker">{zh ? '你的开源发现空间' : 'YOUR OPEN-SOURCE DISCOVERY SPACE'}</p><h1>{reset ? (zh ? '重设你的密码' : 'Reset your password') : (zh ? '欢迎来到 Trend Top' : 'Welcome to Trend Top')}</h1><p>{zh ? '登录后管理你的套餐和每日摘要。' : 'Manage your plan and daily digest in one place.'}</p></header><section className="login-card" aria-label={zh ? '登录与注册' : 'Sign in and registration'}>{errors[query.get('error')] && <p className="form-message" role="alert">{errors[query.get('error')]}</p>}<AuthForm key={reset ? 'reset' : 'auth'} l={l} initialMode={reset ? 'reset-request' : 'login'} googleEnabled={providers.google} nextPath={next} onAuthenticated={() => navigate(next, true)}/><p className="login-legal">{zh ? '继续即表示你同意' : 'By continuing, you agree to our'} <a href={`/${l}/terms`}>{zh ? '服务条款' : 'Terms of Service'}</a> {zh ? '和' : 'and'} <a href={`/${l}/privacy`}>{zh ? '隐私政策' : 'Privacy Policy'}</a>{zh ? '。' : '.'}</p></section><a className="login-back" href={`/${l}/home`}>{zh ? '返回首页' : 'Back to home'}</a></main><footer className="login-footer"><span>© {new Date().getFullYear()} Trend Top</span><a href={loginUrl(zh ? 'en' : 'zh', next, reset ? 'reset-request' : undefined)}>{zh ? 'English' : '简体中文'}</a></footer></div>;
 }
 
+function WatchPanel({ l, proActive, navigate }) {
+  const zh = l === 'zh';
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!proActive) { setData({ items: [] }); return; }
+    const requestWatch = async () => {
+      const response = await fetch('/api/watches');
+      const payload = await response.json().catch(() => ({}));
+      if (response.status === 403) { setData({ items: [], locked: true }); return; }
+      if (!response.ok) throw new Error(payload.error || 'Watchlist failed');
+      setData(payload);
+    };
+    requestWatch().catch(err => setError(err.message));
+  }, [proActive]);
+  if (!proActive) return <><p>{zh ? '关注列表是 Pro 功能。关注后可看到距上次访问的名次和 Star 变化。' : 'Watchlist is a Pro feature. After you watch a project, you can see rank and star changes since your last visit.'}</p><a className="primary billing-link" href={`/${l}/pricing`}>{zh ? '成为 Pro' : 'Become Pro'}</a></>;
+  if (!data) return <p>{error || (zh ? '加载关注列表…' : 'Loading watchlist…')}</p>;
+  if (!data.items?.length) return <p className="account-hint">{zh ? '还没有关注项目。打开任意详情页，点「关注」。' : 'Nothing watched yet. Open a project and choose Watch.'}</p>;
+  const deltaText = (value, zhUp, enUp, zhDown, enDown) => {
+    if (value == null) return '—';
+    if (value > 0) return `${zh ? zhUp : enUp} ${value}`;
+    if (value < 0) return `${zh ? zhDown : enDown} ${Math.abs(value)}`;
+    return zh ? '持平' : 'No change';
+  };
+  return <div className="watch-list">{data.items.map(item => {
+    const href = itemPath(l, item.type, item.slug || item.id);
+    return <article className="watch-item" key={item.type + item.id}>
+      <p className="watch-type">{typeLabel(item.type, l)}</p>
+      <h2><a href={href} onClick={event => { event.preventDefault(); navigate(href); }}>{item.full_name}</a></h2>
+      <p>{item.description || '—'}</p>
+      <div className="watch-deltas">
+        <span className={item.rankDelta > 0 ? 'positive' : item.rankDelta < 0 ? 'down' : ''}>{zh ? '名次' : 'Rank'} {item.rank ?? '—'} · {deltaText(item.rankDelta, '上升', 'up', '下降', 'down')}</span>
+        <span className={item.starDelta > 0 ? 'positive' : item.starDelta < 0 ? 'down' : ''}>Stars {item.stars} · {item.starDelta > 0 ? `+${item.starDelta}` : item.starDelta}</span>
+      </div>
+      <button type="button" className="ghost" onClick={async () => {
+        await fetch('/api/watches', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: item.type, id: item.id }) });
+        setData(current => ({ items: current.items.filter(row => !(row.type === item.type && row.id === item.id)) }));
+      }}>{zh ? '取消关注' : 'Unwatch'}</button>
+    </article>;
+  })}</div>;
+}
+
 function AccountSettings({ l, user }) {
   const zh = l === 'zh';
   const [methods, setMethods] = useState(null), [providers, setProviders] = useState({ google: false });
@@ -283,15 +325,17 @@ export function AccountPage({ l, section = '', navigate }) {
   const [subscription, setSubscription] = useState(undefined);
   const [proActive,setProActive]=useState(false);
   const [error, setError] = useState('');
-  const selected = section === 'subscription' ? 'subscription' : section === 'delivery' ? 'delivery' : '';
+  const selected = section === 'subscription' ? 'subscription' : section === 'delivery' ? 'delivery' : section === 'watch' ? 'watch' : '';
   useEffect(() => { if (user === null) navigate(loginUrl(l, location.pathname + location.search), true); }, [user]);
   useEffect(() => {
-    if (!user || selected !== 'delivery') return;
+    if (!user || (selected !== 'delivery' && selected !== 'watch')) return;
+    request('/api/billing/access').then(result => setProActive(result.active)).catch(() => setProActive(false));
+    if (selected !== 'delivery') return;
     request('/api/subscription').then(result => {setSubscription(result.subscription);setProActive(result.access.active)}).catch(e => setError(e.message));
   }, [user?.id, selected]);
   const zh = l === 'zh';
-  const titles = { '': zh ? '账户设置' : 'Account settings', subscription: zh ? '套餐与账单' : 'Plan & billing', delivery: zh ? '邮件推送设置' : 'Email delivery settings' };
-  const hints = { '': zh ? '管理邮箱、登录方式和账户安全。' : 'Manage your email, sign-in methods, and account security.', subscription: zh ? '查看付费套餐、续费日期、付款记录与退款申请。' : 'Review your paid plan, renewal date, payments, and refund requests.', delivery: zh ? '选择收到的内容和发送时间。推送偏好与付费续订独立管理。' : 'Choose what arrives and when. Delivery preferences are managed separately from paid renewal.' };
+  const titles = { '': zh ? '账户设置' : 'Account settings', watch: zh ? '关注列表' : 'Watchlist', subscription: zh ? '套餐与账单' : 'Plan & billing', delivery: zh ? '邮件推送设置' : 'Email delivery settings' };
+  const hints = { '': zh ? '管理邮箱、登录方式和账户安全。' : 'Manage your email, sign-in methods, and account security.', watch: zh ? '关注后，这里显示距上次访问的名次和 Star 变化。' : 'After you watch a project, this page shows rank and star changes since your last visit.', subscription: zh ? '查看付费套餐、续费日期、付款记录与退款申请。' : 'Review your paid plan, renewal date, payments, and refund requests.', delivery: zh ? '选择收到的内容和发送时间。推送偏好与付费续订独立管理。' : 'Choose what arrives and when. Delivery preferences are managed separately from paid renewal.' };
   const current = new URLSearchParams(location.search);
-  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{titles[selected]}</h1><p>{hints[selected]}</p></div><nav className="account-navigation" aria-label={zh ? '账户设置导航' : 'Account navigation'}>{Object.entries(titles).map(([key, title]) => <a key={key} aria-current={selected === key ? 'page' : undefined} href={`/${l}/account${key ? '/' + key : ''}`} onClick={event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(`/${l}/account${key ? '/' + key : ''}`); }}>{title}</a>)}</nav><div className="account-page-card">{!user ? <p>{zh ? '加载中…' : 'Loading…'}</p> : selected === 'subscription' ? <BillingCard l={l}/> : selected === 'delivery' ? subscription === undefined ? <p>{error || (zh ? '加载推送设置…' : 'Loading delivery settings…')}</p> : <><div hidden={proActive}><p>{zh?'每日摘要邮件仅向有效 Pro 用户开放。':'Daily digest emails are available with an active Pro plan.'}</p><a className="primary billing-link" href={digestDestination(l,false,location.search)}>{zh?'成为 Pro，获取每日最新热点':'Become Pro. Get the latest daily highlights'}</a></div><SubscriptionSettings proActive={proActive} key={user.id} l={l} subscription={subscription} currentType={current.get('type')} currentBoard={current.get('board')} account onSaved={setSubscription}/></> : <AccountSettings l={l} user={user}/>}</div>{error && <p role="alert">{error}</p>}</main>;
+  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{titles[selected]}</h1><p>{hints[selected]}</p></div><nav className="account-navigation" aria-label={zh ? '账户设置导航' : 'Account navigation'}>{Object.entries(titles).map(([key, title]) => <a key={key} aria-current={selected === key ? 'page' : undefined} href={`/${l}/account${key ? '/' + key : ''}`} onClick={event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(`/${l}/account${key ? '/' + key : ''}`); }}>{title}</a>)}</nav><div className="account-page-card">{!user ? <p>{zh ? '加载中…' : 'Loading…'}</p> : selected === 'subscription' ? <BillingCard l={l}/> : selected === 'watch' ? <WatchPanel l={l} proActive={proActive} navigate={navigate}/> : selected === 'delivery' ? subscription === undefined ? <p>{error || (zh ? '加载推送设置…' : 'Loading delivery settings…')}</p> : <><div hidden={proActive}><p>{zh?'每日摘要邮件仅向有效 Pro 用户开放。':'Daily digest emails are available with an active Pro plan.'}</p><a className="primary billing-link" href={digestDestination(l,false,location.search)}>{zh?'成为 Pro，获取每日最新热点':'Become Pro. Get the latest daily highlights'}</a></div><SubscriptionSettings proActive={proActive} key={user.id} l={l} subscription={subscription} currentType={current.get('type')} currentBoard={current.get('board')} account onSaved={setSubscription}/></> : <AccountSettings l={l} user={user}/>}</div>{error && <p role="alert">{error}</p>}</main>;
 }

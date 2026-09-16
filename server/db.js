@@ -115,6 +115,7 @@ async function init() {
   await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS source_query TEXT');
   await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS entity_key TEXT');
   await adapter.exec("ALTER TABLE assets ADD COLUMN IF NOT EXISTS ranking_signals JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS use_case TEXT');
   await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE');
   await adapter.exec('ALTER TABLE assets ADD COLUMN IF NOT EXISTS missed_runs INTEGER NOT NULL DEFAULT 0');
   await adapter.exec('ALTER TABLE website_sources ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ');
@@ -124,6 +125,16 @@ async function init() {
   await adapter.exec('CREATE INDEX IF NOT EXISTS assets_type_active_stars_idx ON assets (type, active, stars DESC)');
   await adapter.exec('CREATE INDEX IF NOT EXISTS assets_source_query_idx ON assets (source_query, last_seen_at)');
   await adapter.exec('CREATE INDEX IF NOT EXISTS assets_entity_key_idx ON assets (entity_key)');
+  await adapter.exec(`CREATE TABLE IF NOT EXISTS watches (
+    user_id TEXT NOT NULL,
+    item_type TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    last_viewed_at TIMESTAMPTZ,
+    snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+    PRIMARY KEY (user_id, item_type, item_id)
+  )`);
+  await adapter.exec('CREATE INDEX IF NOT EXISTS watches_user_idx ON watches (user_id, created_at DESC)');
   if (dataSource() === 'demo') {
     await seedDemo();
     const { seedCatalog } = await import('./catalog.js');

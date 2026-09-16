@@ -13,7 +13,7 @@ export function rankRelated(item, candidates) {
   const scored = candidates.filter(other => other.type === item.type && String(other.id) !== String(item.id)).map(other => {
     const shared = narrowTopics(other).filter(topic => topics.has(topic)).length;
     const purpose = purposes(other).filter(use => uses.has(use)).length;
-    const sameCategory = category && !broadTopics.has(category) && category !== item.type && category === String(other.category || '').toLowerCase();
+    const sameCategory = category && !broadTopics.has(category) && category !== item.type && category !== 'uncategorized' && category !== 'other' && category === String(other.category || '').toLowerCase();
     return { item: other, score: shared * 4 + purpose * 5 + (sameCategory ? 6 : 0) };
   }).filter(entry => entry.score >= 4).sort((a,b) => b.score-a.score || Number(b.item.stars || 0)-Number(a.item.stars || 0) || String(a.item.id).localeCompare(String(b.item.id)));
   return scored.filter(entry => { const key=productKey(entry.item); if(seen.has(key))return false;seen.add(key);return true; }).map(entry => entry.item);

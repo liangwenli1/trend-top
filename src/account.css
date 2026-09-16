@@ -62,3 +62,18 @@
 .login-footer{display:flex;justify-content:space-between;gap:20px;padding:20px 28px;color:#777;font-size:12px}
 .login-footer a{color:#666;text-decoration:none}
 @media(max-width:500px){.login-main{width:calc(100% - 32px);padding-top:30px}.login-card{padding:22px}.login-footer{padding:16px}.account-navigation a{padding:12px 10px;font-size:13px}}
+
+.watch-list{display:grid;gap:14px}
+.watch-item{padding:18px 0;border-bottom:1px solid #dedede}
+.watch-item:last-child{border-bottom:0;padding-bottom:0}
+.watch-type{margin:0 0 6px;color:#315fd9;font-size:12px;font-weight:780;letter-spacing:.09em;text-transform:uppercase}
+.watch-item h2{margin:0 0 8px;font-size:clamp(20px,2vw,26px);letter-spacing:-.03em}
+.watch-item h2 a{color:inherit;text-decoration:none}
+.watch-item h2 a:hover{text-decoration:underline}
+.watch-item p{margin:0;color:#555;line-height:1.5}
+.watch-deltas{display:flex;flex-wrap:wrap;gap:16px;margin:14px 0;font-size:14px;font-variant-numeric:tabular-nums}
+.watch-deltas .down{color:#b42318}
+.watch-item .ghost{min-height:40px;padding:8px 14px}
+button.tag-btn{font:inherit;cursor:pointer;border-radius:0}
+button.tag-btn:disabled{opacity:.6;cursor:wait}
+

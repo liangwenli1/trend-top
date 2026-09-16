@@ -23,7 +23,7 @@ export async function proAccess(userId, now = new Date()) {
 
 export async function requirePro(req, res, next) {
   try {
-    if (!(await proAccess(req.user.id)).active) return res.status(403).json({ error: 'Pro is required for email delivery', code: 'PRO_REQUIRED' });
+    if (!(await proAccess(req.user.id)).active) return res.status(403).json({ error: 'Pro is required', code: 'PRO_REQUIRED' });
     next();
   } catch (error) { next(error); }
 }

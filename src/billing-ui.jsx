@@ -34,11 +34,13 @@ export function PricingPage({ l, user, navigate }) {
   const selected = data?.plans.find(plan => plan.interval === cycle) || data?.plans[0];
   const benefits = zh ? [
     ['每日摘要邮件', '在你选定的时区和时间，每天最多一封，覆盖你关注的类型与榜单。'],
+    ['关注列表', '关注项目后，可在账户里看到距上次访问的名次和 Star 变化。'],
     ['邮件内置图表', '为领先条目附上紧凑的增长图，不打开网站也能看到势头。'],
     ['按你的筛选推送', '只推送你关心的编程语言和主题；留空则接收全部。'],
     ['随时调整', '邮件推送设置中暂停、恢复或修改摘要；在套餐与账单页单独管理续订。']
   ] : [
     ['Daily digest email', 'At most one email per day, at the hour and time zone you choose, covering the collections and boards you follow.'],
+    ['Watchlist', 'Watch projects, then see rank and star changes since your last visit.'],
     ['Charts in every email', 'Compact growth charts for the leading items, so you can see momentum without opening the site.'],
     ['Filters that follow you', 'Limit the digest to the programming languages and topics you care about, or leave them empty to receive everything.'],
     ['Change it anytime', 'Pause, resume, or edit delivery preferences. Manage paid renewal separately in Plan & billing.']

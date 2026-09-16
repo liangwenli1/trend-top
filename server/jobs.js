@@ -6,6 +6,7 @@ import { asJson, asNumber, many, one, query, ready, rebuildDerivedMetrics } from
 import { sendMail } from './mail.js';
 import { buildDigest } from './digest.js';
 import { collectWebsiteSources, collectDirectorySignals } from './website-sources.js';
+import { classify, officialEvidenceFor, isOfficial } from '../shared/taxonomy.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const token = () => crypto.randomBytes(24).toString('hex');
@@ -77,11 +78,6 @@ export function keepCandidate(unique, repo) {
 }
 
 const ASSET_TYPES = ['skill', 'plugin', 'agent', 'components', 'website'];
-const OFFICIAL_ORGS = new Set([
-  'microsoft', 'vercel', 'anthropics', 'openai', 'modelcontextprotocol',
-  'shadcn-ui', 'langchain-ai', 'ollama', 'supabase', 'astral-sh', 'github',
-  'vercel-labs', 'facebook', 'google', 'google-gemini', 'continuedev'
-]);
 const ASSET_QUERIES = {
   skill: [
     { kind: 'code', q: 'filename:SKILL.md', pages: 2, perPage: 50 },
@@ -187,17 +183,17 @@ export async function upsertAsset(type, repo, sourceQuery = null, at = new Date(
   const slug = assetSlug(repo.full_name)+(resource?'-'+assetSlug(resource.path):'');
   const id = `${type}-${slug}`;
   const org = String(repo.full_name || '').split('/')[0];
-  const official = OFFICIAL_ORGS.has(org.toLowerCase());
   const topics = repo.topics || [];
-  const category = topics[0] || type;
+  const classified = classify({ type, full_name: repo.full_name, name: repo.name, description: repo.description, topics, category: resource?.name });
+  const evidence = officialEvidenceFor({ type, full_name: repo.full_name, org });
   await query(
     `INSERT INTO assets (
-       id, type, slug, name, full_name, description, category, category_zh, category_en,
+       id, type, slug, name, full_name, description, category, category_zh, category_en, use_case,
        official, official_evidence, cluster_id, url, install, language, topics, stars, forks,
        created_at, pushed_at, recommend_rank, recommend_note_zh, recommend_note_en,
        website_url,source_repo_url,last_fetched_at,last_seen_at,source_query,entity_key,ranking_signals,active,missed_runs
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$26,$27,$28,$29::jsonb,TRUE,0
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$27,$28,$29,$30::jsonb,TRUE,0
      )
      ON CONFLICT (id) DO UPDATE SET
        name = EXCLUDED.name,
@@ -206,6 +202,7 @@ export async function upsertAsset(type, repo, sourceQuery = null, at = new Date(
        category = EXCLUDED.category,
        category_zh = EXCLUDED.category_zh,
        category_en = EXCLUDED.category_en,
+       use_case = EXCLUDED.use_case,
        official = EXCLUDED.official,
        official_evidence = EXCLUDED.official_evidence,
        cluster_id = EXCLUDED.cluster_id,
@@ -227,8 +224,8 @@ export async function upsertAsset(type, repo, sourceQuery = null, at = new Date(
        missed_runs = 0`,
     [
       id, type, slug, resource?.name || String(repo.full_name).split('/')[1] || repo.full_name, resource?`${repo.full_name} / ${resource.name}`:repo.full_name,
-      resource?`${resource.name} skill from ${repo.full_name}.`:repo.description || '', category, category, category, official,
-      official ? `Verified vendor org ${org}` : null, `${type}:${category}`,
+      resource?`${resource.name} skill from ${repo.full_name}.`:repo.description || '', classified.category, classified.categoryZh, classified.categoryEn, classified.useCase,
+      isOfficial(evidence), evidence, `${type}:${classified.category}`,
       resource?.url || (type === 'website' ? websiteUrl(repo) : (repo.html_url || `https://github.com/${repo.full_name}`)), resource?`Copy ${resource.path} from ${resource.url}`:null, repo.language || '',
       JSON.stringify(topics), repo.stargazers_count || 0, repo.forks_count || 0,
       repo.created_at, repo.pushed_at, null, null, null,
@@ -255,9 +252,18 @@ export async function collectTypedAssets(knownRepos, runId, at, manualAssets = n
   const counts = {}, extra = new Map(), executedQueries = [], trees = new Map();
   const skills = async repo => {
     if(!trees.has(repo.id)) {
-      const body=await fetchGithub('https://api.github.com/repos/'+repo.full_name+'/git/trees/'+encodeURIComponent(repo.default_branch || 'main')+'?recursive=1');
-      if(body.truncated)throw Error('Skill verification tree is truncated: '+repo.full_name);
-      trees.set(repo.id,skillResources(repo,body.tree || []));
+      try {
+        const body=await fetchGithub('https://api.github.com/repos/'+repo.full_name+'/git/trees/'+encodeURIComponent(repo.default_branch || 'main')+'?recursive=1');
+        if(body.truncated){
+          console.error('[collect] skill tree truncated', repo.full_name);
+          trees.set(repo.id,[]);
+        } else {
+          trees.set(repo.id,skillResources(repo,body.tree || []));
+        }
+      } catch (error) {
+        console.error('[collect] skill tree', repo.full_name, error);
+        trees.set(repo.id,[]);
+      }
     }
     return trees.get(repo.id);
   };
@@ -305,7 +311,7 @@ export async function collectTypedAssets(knownRepos, runId, at, manualAssets = n
         await recordQueryStat(runId,type,{...spec,family:'asset:'+type},stat);
       }catch(error){
         await recordQueryStat(runId,type,{...spec,family:'asset:'+type},stat,error);
-        if(spec.kind!=='code')throw error;
+        console.error('[collect] asset query', type, spec.q, error);
       }
     }
     for(const repo of knownRepos){
@@ -390,21 +396,33 @@ async function github(url, version = '2022-11-28') {
   const headers = {
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': version,
-    'User-Agent': 'trend-top'
+    'User-Agent': 'trend-top',
+    Connection: 'close'
   };
   if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const response = await fetch(url, { headers });
-    if (response.ok) return response.json();
-    if (response.status === 403 || response.status === 429) {
-      const reset = Number(response.headers.get('x-ratelimit-reset')) * 1000;
-      if (reset > Date.now() + 60000) throw new Error('GitHub rate limit reached; retry after reset');
+  let lastError;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const response = await fetch(url, { headers, cache: 'no-store', signal: AbortSignal.timeout(25000) });
+      if (response.ok) return response.json();
+      if (response.status === 403 || response.status === 429) {
+        const reset = Number(response.headers.get('x-ratelimit-reset')) * 1000;
+        const remaining = Number(response.headers.get('x-ratelimit-remaining'));
+        if (remaining === 0 && reset > Date.now() + 60000) throw new Error('GitHub rate limit reached; retry after reset');
+      }
+      if (![403, 429, 500, 502, 503, 504].includes(response.status) || attempt === 4) {
+        throw new Error(`GitHub ${response.status}: ${await response.text()}`);
+      }
+    } catch (error) {
+      lastError = error;
+      const retryable = /UND_ERR_SOCKET|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT|ECONNRESET|ETIMEDOUT|EAI_AGAIN|fetch failed|TimeoutError|AbortError/i.test(
+        `${error?.code || ''} ${error?.cause?.code || ''} ${error}`
+      );
+      if (!retryable || attempt === 4) throw error;
     }
-    if (![403, 429, 500, 502, 503, 504].includes(response.status) || attempt === 2) {
-      throw new Error(`GitHub ${response.status}: ${await response.text()}`);
-    }
-    await sleep(1000 * 2 ** attempt);
+    await sleep(1500 * 2 ** attempt);
   }
+  throw lastError;
 }
 
 export async function syncStarHistory(repositories) {
@@ -468,9 +486,11 @@ export async function collect() {
         const fresh = await github(`https://api.github.com/repos/${repo.full_name}`);
         unique.set(fresh.id, fresh);
       } catch (e) {
-        if (String(e).startsWith('Error: GitHub 404')) {
+        if (String(e).includes('GitHub 404')) {
           await query('UPDATE repos SET deleted = TRUE WHERE id = $1', [repo.id]);
-        } else throw e;
+        } else {
+          console.error('[collect] skip known repo', repo.full_name, e);
+        }
       }
       await sleep(150);
     }
@@ -500,7 +520,10 @@ export async function collect() {
         }
         executedRepoQueries.push(spec.q);
         await recordQueryStat(runId, 'github-repo', spec, stat);
-      } catch (error) { await recordQueryStat(runId, 'github-repo', spec, stat, error); throw error; }
+      } catch (error) {
+        await recordQueryStat(runId, 'github-repo', spec, stat, error);
+        console.error('[collect] repo query', spec.q, error);
+      }
     }
 
     found = unique.size;

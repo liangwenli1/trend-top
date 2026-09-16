@@ -3,6 +3,7 @@ import { aiEvidence, getChart as getRepoChart, getFilters as getRepoFilters, get
 import { groupProductResources } from '../shared/product-resources.js';
 import { rankRelated, broadTopics } from '../shared/related-projects.js';
 import { normalizeTopics, topicFilterValues } from '../shared/topics.js';
+import { classify, compareFields, officialEvidenceFor, isOfficial, useCaseOptions } from '../shared/taxonomy.js';
 
 export const TYPES = ['skill', 'plugin', 'agent', 'components', 'website', 'github-repo'];
 export const TYPE_META = {
@@ -20,11 +21,6 @@ export const ASSET_BOARDS = {
   official: { zh: '官方', en: 'Official', metric: 'score' },
   stars: { zh: '关注最多', en: 'Most starred', metric: 'stars' }
 };
-
-const OFFICIAL_ORGS = new Set([
-  'microsoft', 'vercel', 'anthropics', 'openai', 'modelcontextprotocol',
-  'shadcn-ui', 'langchain-ai', 'ollama', 'supabase', 'astral-sh'
-]);
 
 const catalogItems = [
   ['skill', 'anthropic-pdf', 'pdf', 'PDF', 'PDF', 'anthropics/pdf', 'Anthropic document skill for reading and writing PDFs.', true, 'anthropics/skills · document-skills', 'skill:pdf', 'https://github.com/anthropics/skills', '/plugin install document-skills@anthropic-agent-skills', 'Markdown', ['pdf', 'documents'], 18400, 920, 210, '2025-10-18', 1, '官方文档 skill，适合生产。', 'Official document skill; start here for production.'],
@@ -138,6 +134,8 @@ function rankedTopics(row, frequency = null) {
 function mapAsset(row, extras = {}) {
   const rankingSignals = asJson(row.ranking_signals, {});
   const usageKind = rankingSignals.installs != null ? 'installs' : rankingSignals.usage != null ? 'usage' : rankingSignals.downloads != null ? 'downloads' : null;
+  const classified = classify(row);
+  const evidence = row.official_evidence || null;
   return {
     id: row.id,
     type: row.type,
@@ -145,10 +143,13 @@ function mapAsset(row, extras = {}) {
     name: row.name,
     full_name: row.full_name,
     description: row.description,
-    category: row.category,
-    categoryLabel: { zh: row.category_zh, en: row.category_en },
-    official: Boolean(row.official),
-    officialEvidence: row.official_evidence,
+    category: classified.category,
+    categoryLabel: { zh: classified.categoryZh, en: classified.categoryEn },
+    official: isOfficial(evidence),
+    officialEvidence: evidence,
+    useCase: classified.useCase,
+    useCaseLabel: classified.useCaseLabel,
+    compare: compareFields({ ...row, rankingSignals, sourceRepoUrl: row.source_repo_url, type: row.type }),
     clusterId: row.cluster_id,
     similarCount: extras.similarCount || 0,
     url: row.url,
@@ -243,17 +244,18 @@ export async function seedCatalog() {
     if (found) continue;
     const createdAt = `${created}T00:00:00Z`;
     const pushed = new Date(now.getTime() - (i % 5) * 86400000).toISOString();
+    const classified = classify({ type, full_name: fullName, description, topics, category });
     await query(
       `INSERT INTO assets (
-         id, type, slug, name, full_name, description, category, category_zh, category_en,
+         id, type, slug, name, full_name, description, category, category_zh, category_en, use_case,
          official, official_evidence, cluster_id, url, install, language, topics, stars, forks,
          created_at, pushed_at, recommend_rank, recommend_note_zh, recommend_note_en
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18,$19,$20,$21,$22,$23
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19,$20,$21,$22,$23,$24
        )`,
       [
-        id, type, slug, fullName.split('/').pop(), fullName, description, category, categoryZh, categoryEn,
-        official, evidence, cluster, url, install, language, JSON.stringify(topics), stars, forks,
+        id, type, slug, fullName.split('/').pop(), fullName, description, classified.category, categoryZh || classified.categoryZh, categoryEn || classified.categoryEn, classified.useCase,
+        isOfficial(evidence), evidence, cluster, url, install, language, JSON.stringify(topics), stars, forks,
         createdAt, pushed, recRank, recZh, recEn
       ]
     );
@@ -283,16 +285,20 @@ export async function seedCatalog() {
 }
 
 function decorateRepo(item) {
-  const org = String(item.full_name || '').split('/')[0];
+  const classified = classify({ ...item, type: 'github-repo', topics: item.topics || [] });
+  const evidence = officialEvidenceFor({ ...item, type: 'github-repo' });
   return {
     ...item,
     type: 'github-repo',
     slug: String(item.id),
     name: String(item.full_name || '').split('/')[1] || item.full_name,
-    category: (item.topics && item.topics[0]) || item.language || 'other',
-    categoryLabel: { zh: (item.topics && item.topics[0]) || item.language || '其他', en: (item.topics && item.topics[0]) || item.language || 'Other' },
-    official: OFFICIAL_ORGS.has(org),
-    officialEvidence: OFFICIAL_ORGS.has(org) ? `Verified vendor org ${org}` : null,
+    category: classified.category,
+    categoryLabel: { zh: classified.categoryZh, en: classified.categoryEn },
+    useCase: classified.useCase,
+    useCaseLabel: classified.useCaseLabel,
+    official: isOfficial(evidence),
+    officialEvidence: evidence,
+    compare: compareFields({ ...item, type: 'github-repo', rankingSignals: {}, sourceRepoUrl: `https://github.com/${item.full_name}` }),
     similarCount: 0,
     clusterId: null,
     install: null,
@@ -322,7 +328,7 @@ export async function getCatalogFilters(type) {
   if (!isType(type)) return { languages: [], topics: [], categories: [] };
   if (type === 'github-repo') {
     const base = await getRepoFilters();
-    return { ...base, categories: base.topics };
+    return { ...base, categories: base.topics, useCases: useCaseOptions() };
   }
   const [languages, categories, topics] = await Promise.all([
     many(
@@ -347,7 +353,8 @@ export async function getCatalogFilters(type) {
   return {
     languages: languages.map(r => r.name),
     topics: topics.map(r => r.name),
-    categories: categories.map(r => ({ id: r.id, zh: r.zh, en: r.en, count: asNumber(r.count) }))
+    categories: categories.map(r => ({ id: r.id, zh: r.zh, en: r.en, count: asNumber(r.count) })),
+    useCases: useCaseOptions()
   };
 }
 
@@ -356,8 +363,9 @@ export async function getCatalogRankings(type, query = {}) {
   if (type === 'github-repo') {
     const ranking = await getRepoRankings(query);
     let items = ranking.items.map(decorateRepo);
+    if (query.useCase) items = items.filter(item => item.useCase === query.useCase);
     if (query.official === '1' || query.official === 'true' || query.board === 'official') {
-      items = items.filter(item => item.official).map((item, i) => ({ ...item, rank: i + 1 }));
+      items = items.filter(item => item.officialEvidence).map((item, i) => ({ ...item, rank: i + 1 }));
     }
     return {
       ...ranking,
@@ -365,7 +373,7 @@ export async function getCatalogRankings(type, query = {}) {
       board: query.board === 'official' ? 'official' : ranking.board,
       boards: boardsFor(type),
       items,
-      total: query.official === '1' || query.board === 'official' ? items.length : ranking.total
+      total: query.useCase || query.official === '1' || query.board === 'official' ? items.length : ranking.total
     };
   }
   const boards = boardsFor(type);
@@ -410,7 +418,12 @@ export async function getCatalogRankings(type, query = {}) {
     params.push(q);
     sql += ` AND (full_name ILIKE '%' || $${params.length} || '%' OR COALESCE(description,'') ILIKE '%' || $${params.length} || '%' OR category ILIKE '%' || $${params.length} || '%')`;
   }
-  if (officialOnly) sql += ' AND official = TRUE';
+  if (officialOnly) sql += " AND COALESCE(official_evidence,'') <> ''";
+  const useCase = String(query.useCase || query.use_case || '');
+  if (useCase) {
+    params.push(useCase);
+    sql += ` AND use_case = $${params.length}`;
+  }
   const rows = await many(sql, params);
   const similars = await similarCounts();
   const statsById = await periodStatsBatch(rows.map(row => row.id), period, endpoint);
@@ -678,7 +691,7 @@ export async function getCompare(type, ids) {
       if (items.length >= 3) break;
     }
   }
-  return { type, items: items.slice(0, 3) };
+  return { type, items: items.slice(0, 3).map(item => ({ ...item, compare: item.compare || compareFields(item) })) };
 }
 
 export async function searchCatalog(q, type) {

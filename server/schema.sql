@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS assets (
   category TEXT NOT NULL,
   category_zh TEXT,
   category_en TEXT,
+  use_case TEXT,
   official BOOLEAN NOT NULL DEFAULT FALSE,
   official_evidence TEXT,
   cluster_id TEXT,
@@ -400,3 +401,15 @@ CREATE INDEX IF NOT EXISTS asset_daily_day_idx ON asset_daily (day);
 CREATE INDEX IF NOT EXISTS sync_query_stats_run_idx ON sync_query_stats (run_id, collection_type);
 CREATE INDEX IF NOT EXISTS website_sources_due_idx ON website_sources (active, last_fetched_at);
 CREATE INDEX IF NOT EXISTS catalog_candidates_status_idx ON catalog_candidates (status, created_at);
+
+CREATE TABLE IF NOT EXISTS watches (
+  user_id TEXT NOT NULL,
+  item_type TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  last_viewed_at TIMESTAMPTZ,
+  snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+  PRIMARY KEY (user_id, item_type, item_id)
+);
+CREATE INDEX IF NOT EXISTS watches_user_idx ON watches (user_id, created_at DESC);
+
