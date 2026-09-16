@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { loginUrl } from '../shared/account-paths.js';
+import { loginUrl, safeAccountReturn }  from '../shared/account-paths.js';
 import './billing.css';
 import { pricingCache } from './pricing-data.js';
 
@@ -26,9 +26,9 @@ export function PricingPage({ l, user, navigate }) {
     return () => { live = false; };
   }, [l, retry]);
   const checkout = async plan => {
-    if (!user) { navigate(loginUrl(l, `/${l}/pricing?cycle=${cycle}`)); return; }
+    if (!user) { navigate(loginUrl(l, location.pathname+location.search)); return; }
     setBusy(plan.key); setMessage('');
-    try { const result = await post('/api/billing/checkout', { planKey: plan.key }); location.assign(result.checkoutUrl); }
+    try { const result = await post('/api/billing/checkout', { planKey: plan.key, type:new URLSearchParams(location.search).get('type'),board:new URLSearchParams(location.search).get('board') }); location.assign(result.checkoutUrl); }
     catch (error) { setMessage(error.message); setBusy(''); }
   };
   const selected = data?.plans.find(plan => plan.interval === cycle) || data?.plans[0];
@@ -86,17 +86,19 @@ export function BillingCard({ l }) {
   </section>;
 }
 
-export function BillingResultPage({ l, status }) {
+export function BillingResultPage({ l, status, navigate }) {
   const zh = l === 'zh', success = status === 'success';
   const [state, setState] = useState(success ? 'pending' : 'cancelled');
   useEffect(() => {
     if (!success) return;
-    const requestId = new URLSearchParams(location.search).get('request_id');
-    history.replaceState({}, '', location.pathname + (requestId ? `?request_id=${encodeURIComponent(requestId)}` : ''));
+    const resultQuery=new URLSearchParams(location.search);
+    const next=safeAccountReturn(resultQuery.get('next') || '/'+l+'/account/delivery',l);
+    const requestId = resultQuery.get('request_id');
+    history.replaceState({}, '', location.pathname + (requestId ? `?${new URLSearchParams({request_id:requestId,next})}` : ''));
     if (!requestId) return;
-    let stopped = false, attempts = 0;
-    const poll = async () => { try { const result = await api(`/api/billing/checkout-status?requestId=${encodeURIComponent(requestId)}`); if (!stopped) setState(result.status); if (!['completed', 'failed', 'expired'].includes(result.status) && attempts++ < 12) setTimeout(poll, 2000); } catch { if (!stopped && attempts++ < 12) setTimeout(poll, 2000); } };
-    poll(); return () => { stopped = true; };
+    let stopped = false, attempts = 0, timer;
+    const poll = async () => { try { const result = await api(`/api/billing/checkout-status?requestId=${encodeURIComponent(requestId)}`); if(stopped)return; setState(result.billing?.access?.active && result.status==='completed'?'completed':'pending'); if(result.status==='completed' && result.billing?.access?.active){navigate(next,true);return;} if(!['failed','expired'].includes(result.status) && attempts++ < 12) timer=setTimeout(poll,2000); } catch { if (!stopped && attempts++ < 12) timer=setTimeout(poll, 2000); } };
+    poll(); return () => { stopped = true; clearTimeout(timer); };
   }, [success]);
   return <main className="billing-result"><p className="billing-kicker">CREEM / {status.toUpperCase()}</p><h1>{success ? (state === 'completed' ? (zh ? 'Pro 已开通。' : 'Pro is active.') : (zh ? '付款已提交。' : 'Payment submitted.')) : (zh ? '未完成付款。' : 'Payment not completed.')}</h1><p>{success && state !== 'completed' ? (zh ? '我们正在等待 Creem 确认，页面会自动更新。' : 'We are waiting for Creem to confirm the payment. This page updates automatically.') : !success ? (zh ? '你的账户不会被扣款，也不会开通 Pro。' : 'Your account will not be charged and Pro will not be enabled.') : (zh ? '现在可以在账户中查看付费状态。' : 'You can now review billing from your account.')}</p><div><a className="primary billing-link" href={`/${l}/account/subscription`}>{zh ? '返回套餐与账单' : 'Back to plan & billing'}</a><a className="ghost billing-link" href={`/${l}/pricing`}>{zh ? '查看套餐' : 'View plans'}</a></div></main>;
 }

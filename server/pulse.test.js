@@ -1,4 +1,5 @@
 import test from 'node:test';
+
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import os from 'node:os';
@@ -13,6 +14,7 @@ const { ready, query, one, many, asDay, expandStarHistoryToDaily, applySnapshots
 const { getRankings, getStarSeries } = await import('./rankings.js');
 const { digest, encryptManageToken, discoveryPlan, keepCandidate } = await import('./jobs.js');
 await ready;
+const { attachTestPro } = await import('./test-pro-fixture.js');
 
 test('rankings use boundary snapshots and expose demo provenance', async () => {
   const week = await getRankings({ board: 'rising', period: 'week' });
@@ -124,6 +126,7 @@ test('daily digest is one combined message and is idempotent', async () => {
      VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11)`,
     [id, 'test@example.com', 'en', JSON.stringify(['hot', 'rising']), '', '', 9, 'UTC', 'active', encryptManageToken(raw), new Date().toISOString()]
   );
+  await attachTestPro(id);
   const first = await digest({ force: true });
   const second = await digest({ force: true });
   assert.equal(first.sent, 1);
@@ -158,6 +161,7 @@ test('daily digest skips an empty selection instead of sending an empty email', 
      VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7::jsonb,$8,$9,$10,$11,$12)`,
     [id, 'empty@example.com', 'en', JSON.stringify(['hot']), '', '', JSON.stringify(['no-such-topic']), 9, 'UTC', 'active', encryptManageToken(`${id}.test-secret`), new Date().toISOString()]
   );
+  await attachTestPro(id);
   const result = await digest({ force: true });
   assert.equal(result.sent, 0);
   assert.equal((await many('SELECT * FROM outbox WHERE to_email = $1', ['empty@example.com'])).length, 0);

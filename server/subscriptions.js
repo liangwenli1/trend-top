@@ -3,6 +3,7 @@ import { asJson, asNumber, one, query } from './db.js';
 import { TYPES, getCatalogFilters } from './catalog.js';
 import { boards as repoBoards } from './rankings.js';
 import { encryptManageToken, token } from './jobs.js';
+import { proAccess, requirePro } from './pro-access.js';
 import { requireUser } from './auth.js';
 import { normalizeTopics } from '../shared/topics.js';
 
@@ -38,10 +39,10 @@ export function registerSubscriptionRoutes(app) {
 
   app.get('/api/subscription', requireUser, async (req, res) => {
     const sub = await one('SELECT * FROM subscriptions WHERE user_id = $1', [req.user.id]);
-    res.json({ subscription: toResponse(sub) });
+    res.json({ subscription: toResponse(sub), access: await proAccess(req.user.id) });
   });
 
-  app.put('/api/subscription', requireUser, async (req, res) => {
+  app.put('/api/subscription', requireUser, requirePro, async (req, res) => {
     const body = req.body || {};
     const types = selectedTypes(body.types);
     const allowedBoards = new Set([...commonBoards, ...(types.includes('github-repo') ? repoOnlyBoards : [])]);
@@ -78,6 +79,7 @@ export function registerSubscriptionRoutes(app) {
   app.patch('/api/subscription/status', requireUser, async (req, res) => {
     const status = String(req.body?.status || '');
     if (!['active', 'paused', 'cancelled'].includes(status)) return res.status(400).json({ error: 'Invalid subscription status' });
+    if (status === 'active' && !(await proAccess(req.user.id)).active) return res.status(403).json({ error: 'Pro is required for email delivery', code: 'PRO_REQUIRED' });
     const updated = await query('UPDATE subscriptions SET status = $1 WHERE user_id = $2 RETURNING id', [status, req.user.id]);
     if (!updated.rows.length) return res.status(404).json({ error: 'No subscription found' });
     res.json({ ok: true, status });

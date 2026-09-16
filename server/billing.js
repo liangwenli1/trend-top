@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import { asIso, asNumber, many, one, query } from './db.js';
+import { digestDestination } from '../shared/account-paths.js';
+import { proAccess } from './pro-access.js';
 import { requireUser } from './auth.js';
 import { createCreemCheckout, createCreemPortal, cancelCreemSubscription, creemConfig, creemReady } from './creem-client.js';
 import { transactionSummary } from './refunds.js';
@@ -46,11 +48,12 @@ export async function billingSummary(userId) {
   const customer = await one('SELECT email, mode FROM billing_customers WHERE user_id = $1 AND mode=$2', [userId, mode]);
   const subscription = await one('SELECT * FROM billing_subscriptions WHERE user_id = $1 AND mode=$2 ORDER BY updated_at DESC LIMIT 1', [userId, mode]);
   const entitlements = await many('SELECT feature_key, state, plan_key, starts_at, ends_at FROM user_entitlements WHERE user_id = $1 ORDER BY feature_key', [userId]);
-  return { configured: await creemReady(), mode, customer: customer || null, subscription: serializeSubscription(subscription), ...await transactionSummary(userId, mode), entitlements: entitlements.map(row => ({ featureKey: row.feature_key, state: row.state, planKey: row.plan_key, startsAt: asIso(row.starts_at), endsAt: asIso(row.ends_at) })) };
+  return { access: await proAccess(userId), configured: await creemReady(), mode, customer: customer || null, subscription: serializeSubscription(subscription), ...await transactionSummary(userId, mode), entitlements: entitlements.map(row => ({ featureKey: row.feature_key, state: row.state, planKey: row.plan_key, startsAt: asIso(row.starts_at), endsAt: asIso(row.ends_at) })) };
 }
 
 export function registerBillingRoutes(app) {
   app.get('/api/billing/plans', async (req, res) => { const config = await creemConfig(); res.json({ mode: config.mode, configured: await creemReady(), locale: localeOf(req.query.locale), plans: await billingPlans(req.query.locale) }); });
+  app.get('/api/billing/access', requireUser, async (req,res) => res.json(await proAccess(req.user.id)));
   app.get('/api/billing/me', requireUser, async (req, res) => res.json(await billingSummary(req.user.id)));
   app.post('/api/billing/checkout', requireUser, async (req, res) => {
     const config = await creemConfig();
@@ -59,6 +62,7 @@ export function registerBillingRoutes(app) {
     if (!await creemReady() || !plan.productId || !plan.priced) return res.status(503).json({ error: 'This plan is not available yet' });
     const active = await one("SELECT id FROM billing_subscriptions WHERE user_id = $1 AND mode=$2 AND status IN ('active','trialing','paid','scheduled_cancel') LIMIT 1", [req.user.id, config.mode]);
     if (active) return res.status(409).json({ error: 'Manage your current plan from Account' });
+    const returnTo=digestDestination(req.user.locale==='zh'?'zh':'en',true,new URLSearchParams({type:String(req.body?.type || 'github-repo'),board:String(req.body?.board || 'hot')}));
     const id = crypto.randomUUID(), requestId = `tt_${crypto.randomUUID()}`, now = new Date().toISOString();
     await query(`INSERT INTO billing_checkouts (id,user_id,request_id,plan_key,creem_product_id,mode,status,metadata,provider_payload,created_at)
       VALUES ($1,$2,$3,$4,$5,$6,'pending',$7::jsonb,'{}'::jsonb,$8)`, [id, req.user.id, requestId, plan.key, plan.productId, config.mode, JSON.stringify({ userId: req.user.id, billingCheckoutId: id, planKey: plan.key }), now]);
@@ -67,7 +71,7 @@ export function registerBillingRoutes(app) {
         product_id: plan.productId,
         request_id: requestId,
         units: 1,
-        success_url: `${publicUrl(req)}/${req.user.locale === 'zh' ? 'zh' : 'en'}/billing/success`,
+        success_url: `${publicUrl(req)}/${req.user.locale === 'zh' ? 'zh' : 'en'}/billing/success?next=${encodeURIComponent(returnTo)}`,
         customer: { email: req.user.email },
         metadata: { userId: req.user.id, billingCheckoutId: id, planKey: plan.key }
       });

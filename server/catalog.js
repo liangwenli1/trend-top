@@ -1,5 +1,7 @@
 import { asDay, asIso, asJson, asNumber, dataSource, DAYS, many, one, query, utcDay } from './db.js';
 import { aiEvidence, getChart as getRepoChart, getFilters as getRepoFilters, getRankings as getRepoRankings, getStarSeries } from './rankings.js';
+import { groupProductResources } from '../shared/product-resources.js';
+import { rankRelated, broadTopics } from '../shared/related-projects.js';
 import { normalizeTopics, topicFilterValues } from '../shared/topics.js';
 
 export const TYPES = ['skill', 'plugin', 'agent', 'components', 'website', 'github-repo'];
@@ -110,7 +112,7 @@ async function similarCounts() {
   const rows = await many(
     `SELECT cluster_id, COUNT(*)::int AS n FROM assets WHERE cluster_id IS NOT NULL AND active=TRUE GROUP BY cluster_id`
   );
-  return new Map(rows.map(r => [r.cluster_id, Math.max(0, asNumber(r.n) - 1)]));
+  return new Map(rows.filter(row=>!broadTopics.has(String(row.cluster_id).split(':').slice(1).join(':'))).map(r => [r.cluster_id, Math.max(0, asNumber(r.n) - 1)]));
 }
 
 function rankedTopics(row, frequency = null) {
@@ -529,6 +531,19 @@ export async function getCatalogChart(type, query = {}, sampleOverride = null) {
   };
 }
 
+const relatedCache = new Map();
+export function clearRelatedCache(){relatedCache.clear();}
+async function relatedRows(row) {
+  const key=row.type, cached=relatedCache.get(key);
+  let rows;
+  if(cached && Date.now()-cached.at<60000)rows=cached.rows;
+  else{
+    rows=await many('SELECT id,type,slug,full_name,description,category,topics,stars,url,source_repo_url FROM assets WHERE type=$1 AND active=TRUE',[key]);
+    rows=rows.map(value=>({...value,topics:asJson(value.topics,[])}));
+    relatedCache.set(key,{at:Date.now(),rows});
+  }
+  return rankRelated({...row,topics:asJson(row.topics,[])},rows);
+}
 export async function getCatalogItem(type, id) {
   if (type === 'github-repo') {
     const repo = await one(
@@ -573,12 +588,9 @@ export async function getCatalogItem(type, id) {
     latestAssetDay()
   ]);
   if (!row) return null;
-  const [week, similars, similarRows, series] = await Promise.all([
+  const [week, similarRows, series] = await Promise.all([
     periodStats(row.id, 'week', endpoint),
-    similarCounts(),
-    row.cluster_id
-      ? many('SELECT * FROM assets WHERE cluster_id = $1 AND id <> $2 AND active=TRUE ORDER BY stars DESC', [row.cluster_id, row.id])
-      : Promise.resolve([]),
+    relatedRows(row),
     many('SELECT day, star_created, stars FROM asset_daily WHERE asset_id = $1 ORDER BY day', [row.id])
   ]);
   const ageDays = Math.round(Math.max(0, (endpoint - new Date(row.created_at)) / 86400000));
@@ -588,18 +600,21 @@ export async function getCatalogItem(type, id) {
       ...week,
       ageDays,
       pushDays,
-      similarCount: similars.get(row.cluster_id) || 0,
+      similarCount: similarRows.length,
       sampledAt: endpoint.toISOString()
     }),
-    similar: similarRows.map(item => mapAsset(item, { similarCount: similars.get(item.cluster_id) || 0 })),
+    similar: similarRows.slice(0,6).map(item => ({...item, stars:asNumber(item.stars)})),
+    relatedCount: similarRows.length,
     series: series.map(r => ({ date: asDay(r.day), count: asNumber(r.star_created), stars: asNumber(r.stars) })),
     mode: dataSource() === 'demo' ? 'demo' : 'live'
   };
 }
 
-export async function getSimilar(type, id) {
-  const item = await getCatalogItem(type, id);
-  return item ? { items: item.similar || [], clusterId: item.clusterId } : { items: [] };
+export async function getSimilar(type, id, options={}) {
+  const page=Math.max(1,Math.min(1000,Math.trunc(Number(options.page)||1))), limit=Math.max(1,Math.min(24,Math.trunc(Number(options.limit)||12)));
+  const row=type==='github-repo'?null:await one('SELECT * FROM assets WHERE type=$1 AND (id=$2 OR slug=$2)',[type,id]);
+  const rows=row?await relatedRows(row):[];
+  return {items:rows.slice((page-1)*limit,page*limit),total:rows.length,page,limit,clusterId:row?.cluster_id};
 }
 
 export async function getCategories(type) {
@@ -666,13 +681,13 @@ export async function searchCatalog(q, type) {
   if (!queryText) return { items: [] };
   const types = type && isType(type) ? [type] : TYPES;
   const rankings = await Promise.all(types.map(current =>
-    getCatalogRankings(current, { q: queryText, limit: 8, page: 1, board: 'stars' })
+    getCatalogRankings(current, { q: queryText, limit: 24, page: 1, board: 'stars' })
   ));
   const items = rankings.flatMap((ranking, index) =>
     ranking.items.map(item => ({ ...item, type: types[index] }))
   );
   items.sort((a, b) => (b.stars || 0) - (a.stars || 0));
-  return { q: queryText, items: items.slice(0, 20) };
+  return { q: queryText, grouped: types.length>1, items: (types.length>1?groupProductResources(items):items).slice(0,20) };
 }
 
 export { isType, boardsFor, getStarSeries };

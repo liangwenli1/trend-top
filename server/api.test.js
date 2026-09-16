@@ -9,9 +9,10 @@ process.env.DATA_MODE = 'demo';
 process.env.PGLITE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pulse-api-'));
 
 const { app } = await import('./index.js');
-const { ready, one } = await import('./db.js');
+const { ready, one, query } = await import('./db.js');
 const { digest, decryptManageToken } = await import('./jobs.js');
 await ready;
+const {attachTestPro,grantTestPro}=await import('./test-pro-fixture.js');
 
 test('verification gates delivery and management controls the subscription', async () => {
   const server = app.listen(0);
@@ -48,6 +49,8 @@ test('verification gates delivery and management controls the subscription', asy
     assert.ok(verify);
     const verified = await request('/api/verify', 'POST', { token: decodeURIComponent(verify[1]) });
     assert.equal(verified.status, 200);
+    assert.equal((await digest({force:true})).sent,0);
+    await attachTestPro((await one('SELECT id FROM subscriptions WHERE email=$1',["hello@example.invalid"])).id);
     assert.equal((await digest({ force: true })).sent, 1);
     const mail = (await one('SELECT text FROM outbox ORDER BY id DESC LIMIT 1')).text;
     assert.match(mail, /近期热门/);
@@ -98,6 +101,10 @@ test('email-code registration, login, and account-managed digest cover all six t
     const typeFilters = await Promise.all(['skill', 'plugin'].map(type => request(`/api/${type}/filters`)));
     assert.deepEqual(filters.data.topics, [...new Set(typeFilters.flatMap(result => result.data.topics))].sort());
     const types = ['skill', 'plugin', 'agent', 'components', 'website', 'github-repo'];
+    assert.equal((await request('/api/billing/access','GET',undefined,true)).data.active,false);
+    assert.equal((await request('/api/subscription','PUT',{types,boards:['hot'],sendHour:9,timezone:'UTC'},true)).status,403);
+    await grantTestPro(verified.data.user.id);
+    assert.equal((await request('/api/billing/access','GET',undefined,true)).data.active,true);
     const saved = await request('/api/subscription', 'PUT', { types, boards: ['hot'], languages: [], topics: [], sendHour: 9, timezone: 'UTC', locale: 'en' }, true);
     assert.equal(saved.status, 200);
     assert.deepEqual(saved.data.subscription.types, types);
@@ -120,6 +127,9 @@ test('email-code registration, login, and account-managed digest cover all six t
     assert.equal((await request('/api/subscription/status', 'PATCH', { status: 'cancelled' }, true)).data.status, 'cancelled');
     assert.equal((await request('/api/subscription', 'GET', undefined, true)).data.subscription.status, 'cancelled');
     assert.equal((await request('/api/subscription/status', 'PATCH', { status: 'paused' }, true)).data.status, 'paused');
+    await query("UPDATE user_entitlements SET state='revoked' WHERE user_id=$1",[verified.data.user.id]);
+    assert.equal((await request('/api/subscription/status','PATCH',{status:'active'},true)).status,403);
+    assert.equal((await request('/api/subscription/status','PATCH',{status:'paused'},true)).status,200);
     assert.equal((await request('/api/auth/logout', 'POST', {}, true)).status, 200);
     assert.equal((await request('/api/subscription', 'GET', undefined, true)).status, 401);
     assert.equal((await request('/api/auth/login', 'POST', { email, password })).status, 200);

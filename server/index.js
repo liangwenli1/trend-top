@@ -15,6 +15,8 @@ import { collect, digest, encryptManageToken, decryptManageToken, token, hash } 
 import { registerAuthRoutes } from './auth.js';
 import { registerGoogleAuthRoutes } from './google-auth.js';
 import { registerSubscriptionRoutes } from './subscriptions.js';
+import { auditCopiedAssets } from './asset-classification.js';
+import { proAccess } from './pro-access.js';
 import { registerBillingRoutes } from './billing.js';
 import { registerRefundRoutes } from './refunds.js';
 import { normalizeTopics as canonicalTopics } from '../shared/topics.js';
@@ -121,7 +123,7 @@ app.get('/api/:type/compare', publicCatalogCache, async (req, res) => {
 });
 app.get('/api/:type/items/:id/similar', publicCatalogCache, async (req, res) => {
   if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
-  res.json(await getSimilar(req.params.type, req.params.id));
+  res.json(await getSimilar(req.params.type, req.params.id, req.query));
 });
 app.get('/api/:type/items/:id', publicCatalogCache, async (req, res) => {
   if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
@@ -262,6 +264,7 @@ app.patch('/api/manage', async (req, res) => {
     : normalizeTopics(b.languages, b.language);
   if (!selected.length || !Number.isInteger(hour) || hour < 0 || hour > 23 || !validZone(zone)) return fail(res, 400, 'Invalid settings');
   const status = ['active', 'paused', 'cancelled'].includes(b.status) ? b.status : sub.status;
+  if (status === 'active' && !(await proAccess(sub.user_id)).active) return fail(res, 403, 'Pro is required for email delivery');
   if (sub.status === 'cancelled' && status !== 'cancelled') return fail(res, 409, 'Cancelled subscription cannot be resumed');
   await query(
     `UPDATE subscriptions SET locale = $1, boards = $2::jsonb, language = $3, languages = $4::jsonb, topic = $5, topics = $6::jsonb, send_hour = $7, timezone = $8, status = $9 WHERE id = $10`,
@@ -325,7 +328,8 @@ app.get('/{*path}', (req, res) => {
 const port = Number(process.env.PORT || 3001);
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   ready
-    .then(adapter => {
+    .then(async adapter => {
+      console.log('Catalog classification audit', await auditCopiedAssets());
       app.listen(port, '0.0.0.0', () => {
         console.log(`Trend Top API at http://localhost:${port} (${demo ? 'DEMO' : 'LIVE'}, ${adapter.kind})`);
       });

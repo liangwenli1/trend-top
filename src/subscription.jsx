@@ -4,8 +4,27 @@ import { DesignSelect, TopicMultiSelect } from './components.jsx';
 import { TYPES, typeLabel } from './catalog.js';
 import { BillingCard } from './billing-ui.jsx';
 import './account.css';
-import { loginUrl, safeAccountReturn } from '../shared/account-paths.js';
+import { loginUrl, safeAccountReturn, digestDestination } from '../shared/account-paths.js';
 export const AuthContext = React.createContext(undefined);
+export function useProStatus(user) {
+  const [access,setAccess]=useState(false);
+  useEffect(()=>{
+    let live=true;setAccess(false);
+    if(user)request('/api/billing/access').then(result=>{if(live)setAccess(result.active)}).catch(()=>{});
+    return()=>{live=false};
+  },[user?.id]);
+  return access;
+}
+export function DigestEntryPage({l,navigate}) {
+  const user=React.useContext(AuthContext), [error,setError]=useState(''), [retry,setRetry]=useState(0);
+  useEffect(()=>{
+    let live=true;setError('');
+    if(user===null)navigate(loginUrl(l,location.pathname+location.search),true);
+    if(user)request('/api/billing/access').then(access=>{if(live)navigate(digestDestination(l,access.active,location.search),true)}).catch(error=>{if(live)setError(error.message)});
+    return()=>{live=false};
+  },[user?.id,user===null,l,retry]);
+  return <main className="simple-page"><p role="status">{error || (l==='zh'?'正在打开每日摘要…':'Opening daily digest…')}</p>{error&&<button type="button" onClick={()=>setRetry(value=>value+1)}>{l==='zh'?'重试':'Retry'}</button>}</main>;
+}
 
 const boardLabels = {
   hot: ['近期热门', 'Trending now'],
@@ -147,7 +166,7 @@ export function AuthForm({ l, onAuthenticated, initialMode = 'register', googleE
   </div>;
 }
 
-function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSaved, account = false }) {
+function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSaved, account = false, proActive = true }) {
   const zh = l === 'zh';
   const [types, setTypes] = useState(subscription?.types?.length ? subscription.types : [currentType || 'github-repo']);
   const [boards, setBoards] = useState(subscription?.boards?.length ? subscription.boards : [currentType === 'github-repo' || commonBoards.includes(currentBoard) ? (currentBoard || 'hot') : 'hot']);
@@ -201,19 +220,20 @@ function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSa
   };
   return <form className="subscribe-form account-settings" onSubmit={submit}>
     {account && <p className="account-status">{zh ? '邮件推送：' : 'Email delivery: '}{status === 'active' ? (zh ? '发送中' : 'Active') : status === 'paused' ? (zh ? '已暂停' : 'Paused') : status === 'cancelled' ? (zh ? '已停止' : 'Stopped') : (zh ? '尚未设置' : 'Not set up')}</p>}
-    <fieldset><legend>{zh ? '订阅内容' : 'Content types'}</legend><div className="checks account-type-grid">{TYPES.map(type => <label key={type}><input type="checkbox" checked={types.includes(type)} onChange={() => toggleType(type)}/>{typeLabel(type, l)}</label>)}</div></fieldset>
-    <fieldset><legend>{zh ? '关注榜单' : 'Boards to follow'}</legend><div className="checks account-board-grid">{boardChoices.map(board => <label key={board}><input type="checkbox" checked={boards.includes(board)} onChange={() => setBoards(old => old.includes(board) ? old.filter(value => value !== board) : [...old, board])}/>{boardLabels[board][zh ? 0 : 1]}</label>)}</div></fieldset>
-    <div className="form-grid">
+    <fieldset disabled={!proActive}><legend>{zh ? '订阅内容' : 'Content types'}</legend><div className="checks account-type-grid">{TYPES.map(type => <label key={type}><input type="checkbox" checked={types.includes(type)} onChange={() => toggleType(type)}/>{typeLabel(type, l)}</label>)}</div></fieldset>
+    <fieldset disabled={!proActive}><legend>{zh ? '关注榜单' : 'Boards to follow'}</legend><div className="checks account-board-grid">{boardChoices.map(board => <label key={board}><input type="checkbox" checked={boards.includes(board)} onChange={() => setBoards(old => old.includes(board) ? old.filter(value => value !== board) : [...old, board])}/>{boardLabels[board][zh ? 0 : 1]}</label>)}</div></fieldset>
+    <fieldset disabled={!proActive} className="delivery-fields"><div className="form-grid">
       <div className="field"><label htmlFor="digest-language">{zh ? '编程语言' : 'Language'}</label><TopicMultiSelect id="digest-language" value={languages} onChange={setLanguages} options={options([...new Set([...languages, ...filters.languages])])} placeholder={zh ? '全部语言' : 'All languages'} ariaLabel={zh ? '编程语言' : 'Language'}/></div>
       <div className="field"><label htmlFor="digest-topic">{zh ? '主题' : 'Topic'}</label><TopicMultiSelect id="digest-topic" value={topics} onChange={setTopics} options={options([...new Set([...topics, ...filters.topics])])} placeholder={zh ? '全部主题' : 'All topics'} ariaLabel={zh ? '主题' : 'Topic'}/></div>
       <div className="field"><label htmlFor="digest-hour">{zh ? '发送时间' : 'Send time'}</label><DesignSelect id="digest-hour" value={hour} onChange={setHour} options={Array.from({ length: 24 }, (_, index) => ({ value: String(index), label: String(index).padStart(2, '0') + ':00' }))}/></div>
       <div className="field"><label htmlFor="digest-zone">{zh ? '时区' : 'Timezone'}</label><DesignSelect id="digest-zone" value={zone} onChange={setZone} options={zoneOptions(zone)}/></div>
       <div className="field"><label htmlFor="digest-locale">{zh ? '邮件语言' : 'Email language'}</label><DesignSelect id="digest-locale" value={locale} onChange={setLocale} options={[{ value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }]}/></div>
     </div>
+    </fieldset>
     <p className="account-hint">{zh ? '语言和主题留空即表示全部。邮件按类型展示榜单与增长图表。' : 'Leave language and topic empty for all. Emails include rankings and compact growth charts.'}</p>
-    <button ref={saveButton} type="submit" className="primary wide" disabled={busy}>{busy ? '…' : status ? (zh ? '保存推送设置' : 'Save delivery settings') : (zh ? '开启每日摘要' : 'Start daily digest')}</button>
+    <button ref={saveButton} type="submit" className="primary wide" disabled={busy || !proActive}>{busy ? '…' : status ? (zh ? '保存推送设置' : 'Save delivery settings') : (zh ? '开启每日摘要' : 'Start daily digest')}</button>
     {account && status && <div className="account-status-actions">
-      {status === 'active' ? <button type="button" className="ghost" disabled={busy} onClick={() => changeStatus('paused')}>{zh ? '暂停发送' : 'Pause'}</button> : <button type="button" className="ghost" disabled={busy} onClick={() => changeStatus('active')}>{zh ? '恢复发送' : 'Resume'}</button>}
+      {status === 'active' ? <button type="button" className="ghost" disabled={busy} onClick={() => changeStatus('paused')}>{zh ? '暂停发送' : 'Pause'}</button> : <button type="button" className="ghost" disabled={busy || !proActive} onClick={() => changeStatus('active')}>{zh ? '恢复发送' : 'Resume'}</button>}
       {status !== 'cancelled' && <button ref={stopButton} type="button" className="danger" disabled={busy} onClick={() => { setMessage(''); setConfirmStop(true); }}>{zh ? '停止邮件推送' : 'Stop emails'}</button>}
     </div>}
     {account && <p className="account-hint">{zh ? '暂停或停止邮件不会取消付费续订。' : 'Pausing or stopping emails does not cancel paid renewal.'} <a href={`/${l}/account/subscription`}>{zh ? '管理套餐与账单' : 'Manage plan & billing'}</a></p>}
@@ -261,16 +281,17 @@ function AccountSettings({ l, user }) {
 export function AccountPage({ l, section = '', navigate }) {
   const user = React.useContext(AuthContext);
   const [subscription, setSubscription] = useState(undefined);
+  const [proActive,setProActive]=useState(false);
   const [error, setError] = useState('');
   const selected = section === 'subscription' ? 'subscription' : section === 'delivery' ? 'delivery' : '';
   useEffect(() => { if (user === null) navigate(loginUrl(l, location.pathname + location.search), true); }, [user]);
   useEffect(() => {
     if (!user || selected !== 'delivery') return;
-    request('/api/subscription').then(result => setSubscription(result.subscription)).catch(e => setError(e.message));
+    request('/api/subscription').then(result => {setSubscription(result.subscription);setProActive(result.access.active)}).catch(e => setError(e.message));
   }, [user?.id, selected]);
   const zh = l === 'zh';
   const titles = { '': zh ? '账户设置' : 'Account settings', subscription: zh ? '套餐与账单' : 'Plan & billing', delivery: zh ? '邮件推送设置' : 'Email delivery settings' };
   const hints = { '': zh ? '管理邮箱、登录方式和账户安全。' : 'Manage your email, sign-in methods, and account security.', subscription: zh ? '查看付费套餐、续费日期、付款记录与退款申请。' : 'Review your paid plan, renewal date, payments, and refund requests.', delivery: zh ? '选择收到的内容和发送时间。推送偏好与付费续订独立管理。' : 'Choose what arrives and when. Delivery preferences are managed separately from paid renewal.' };
   const current = new URLSearchParams(location.search);
-  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{titles[selected]}</h1><p>{hints[selected]}</p></div><nav className="account-navigation" aria-label={zh ? '账户设置导航' : 'Account navigation'}>{Object.entries(titles).map(([key, title]) => <a key={key} aria-current={selected === key ? 'page' : undefined} href={`/${l}/account${key ? '/' + key : ''}`} onClick={event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(`/${l}/account${key ? '/' + key : ''}`); }}>{title}</a>)}</nav><div className="account-page-card">{!user ? <p>{zh ? '加载中…' : 'Loading…'}</p> : selected === 'subscription' ? <BillingCard l={l}/> : selected === 'delivery' ? subscription === undefined ? <p>{error || (zh ? '加载推送设置…' : 'Loading delivery settings…')}</p> : <SubscriptionSettings key={user.id} l={l} subscription={subscription} currentType={current.get('type')} currentBoard={current.get('board')} account onSaved={setSubscription}/> : <AccountSettings l={l} user={user}/>}</div>{error && <p role="alert">{error}</p>}</main>;
+  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{titles[selected]}</h1><p>{hints[selected]}</p></div><nav className="account-navigation" aria-label={zh ? '账户设置导航' : 'Account navigation'}>{Object.entries(titles).map(([key, title]) => <a key={key} aria-current={selected === key ? 'page' : undefined} href={`/${l}/account${key ? '/' + key : ''}`} onClick={event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(`/${l}/account${key ? '/' + key : ''}`); }}>{title}</a>)}</nav><div className="account-page-card">{!user ? <p>{zh ? '加载中…' : 'Loading…'}</p> : selected === 'subscription' ? <BillingCard l={l}/> : selected === 'delivery' ? subscription === undefined ? <p>{error || (zh ? '加载推送设置…' : 'Loading delivery settings…')}</p> : <><div hidden={proActive}><p>{zh?'每日摘要邮件仅向有效 Pro 用户开放。':'Daily digest emails are available with an active Pro plan.'}</p><a className="primary billing-link" href={digestDestination(l,false,location.search)}>{zh?'成为 Pro，获取每日最新热点':'Become Pro. Get the latest daily highlights'}</a></div><SubscriptionSettings proActive={proActive} key={user.id} l={l} subscription={subscription} currentType={current.get('type')} currentBoard={current.get('board')} account onSaved={setSubscription}/></> : <AccountSettings l={l} user={user}/>}</div>{error && <p role="alert">{error}</p>}</main>;
 }

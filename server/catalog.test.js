@@ -54,12 +54,13 @@ test('compare with one id fills same-category peers', async () => {
   assert.equal(categories.size, 1);
 });
 
-test('search and detail include similar cluster members', async () => {
+test('search and detail expose a bounded related preview', async () => {
   const found = await searchCatalog('pdf', 'skill');
   assert.ok(found.items.length > 0);
   const item = await getCatalogItem('skill', 'anthropic-pdf');
   assert.equal(item.official, true);
-  assert.ok(item.similar.length >= 1);
+  assert.ok(item.similar.length <= 6);
+  assert.ok(item.relatedCount >= item.similar.length);
 });
 
 test('github-repo catalog still ranks live demo repos', async () => {

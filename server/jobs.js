@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import { proAccess, proUsers } from './pro-access.js';
+import { acceptsRepoType, skillResources, auditCopiedAssets } from './asset-classification.js';
 import crypto from 'node:crypto';
 import { asJson, asNumber, many, one, query, ready, rebuildDerivedMetrics } from './db.js';
 import { sendMail } from './mail.js';
@@ -112,16 +114,7 @@ const ASSET_QUERIES = {
   ]
 };
 
-function inferAssetType(repo) {
-  const topics = (repo.topics || []).map(item => String(item).toLowerCase());
-  const blob = `${repo.full_name} ${repo.description || ''} ${topics.join(' ')}`.toLowerCase();
-  if (topics.some(item => item.includes('mcp')) || /\bmcp[- ]server\b/.test(blob) || blob.includes('model context protocol')) return 'plugin';
-  if (topics.some(item => item.includes('skill')) || blob.includes('skill.md') || blob.includes('claude skill')) return 'skill';
-  if (topics.some(item => ['ai-agent', 'ai-agents', 'coding-agent', 'autonomous-agent'].includes(item)) || /\b(coding agent|ai agent)\b/.test(blob)) return 'agent';
-  if (topics.some(item => ['shadcn-ui', 'react-components', 'ui-components', 'component-library', 'ui-library'].includes(item))) return 'components';
-  if (topics.includes('awesome-list') || /\b(directory|registry|awesome mcp|skills\.sh)\b/.test(blob)) return 'website';
-  return null;
-}
+
 
 function assetSlug(fullName) {
   return String(fullName || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'item';
@@ -189,8 +182,8 @@ async function upsertGithubRepo(repo, at, sourceQuery = null) {
   );
 }
 
-async function upsertAsset(type, repo, sourceQuery = null, at = new Date().toISOString()) {
-  const slug = assetSlug(repo.full_name);
+export async function upsertAsset(type, repo, sourceQuery = null, at = new Date().toISOString(), resource = null) {
+  const slug = assetSlug(repo.full_name)+(resource?'-'+assetSlug(resource.path):'');
   const id = `${type}-${slug}`;
   const org = String(repo.full_name || '').split('/')[0];
   const official = OFFICIAL_ORGS.has(org.toLowerCase());
@@ -216,6 +209,7 @@ async function upsertAsset(type, repo, sourceQuery = null, at = new Date().toISO
        official_evidence = EXCLUDED.official_evidence,
        cluster_id = EXCLUDED.cluster_id,
        url = EXCLUDED.url,
+       install = EXCLUDED.install,
        language = EXCLUDED.language,
        topics = EXCLUDED.topics,
        stars = EXCLUDED.stars,
@@ -231,10 +225,10 @@ async function upsertAsset(type, repo, sourceQuery = null, at = new Date().toISO
        active = TRUE,
        missed_runs = 0`,
     [
-      id, type, slug, String(repo.full_name).split('/')[1] || repo.full_name, repo.full_name,
-      repo.description || '', category, category, category, official,
+      id, type, slug, resource?.name || String(repo.full_name).split('/')[1] || repo.full_name, resource?`${repo.full_name} / ${resource.name}`:repo.full_name,
+      resource?`${resource.name} skill from ${repo.full_name}.`:repo.description || '', category, category, category, official,
       official ? `Verified vendor org ${org}` : null, `${type}:${category}`,
-      type === 'website' ? websiteUrl(repo) : (repo.html_url || `https://github.com/${repo.full_name}`), null, repo.language || '',
+      resource?.url || (type === 'website' ? websiteUrl(repo) : (repo.html_url || `https://github.com/${repo.full_name}`)), resource?`Copy ${resource.path} from ${resource.url}`:null, repo.language || '',
       JSON.stringify(topics), repo.stargazers_count || 0, repo.forks_count || 0,
       repo.created_at, repo.pushed_at, null, null, null,
       type === 'website' ? websiteUrl(repo) : null,
@@ -242,7 +236,7 @@ async function upsertAsset(type, repo, sourceQuery = null, at = new Date().toISO
       at,
       sourceQuery,
       type === 'website' ? websiteEntityKey(repo) : `repo:${String(repo.full_name || '').toLowerCase()}`,
-      JSON.stringify({ associatedRepoStars: repo.stargazers_count || 0, associatedRepoForks: repo.forks_count || 0, contentUpdatedAt: repo.pushed_at || repo.updated_at || null, confidence: 'github-associated' })
+      JSON.stringify({ associatedRepoStars: repo.stargazers_count || 0, associatedRepoForks: repo.forks_count || 0, contentUpdatedAt: repo.pushed_at || repo.updated_at || null, confidence: 'github-associated', typeVerified: true, resourcePath: resource?.path || null, classificationEvidence: resource?'SKILL.md file':sourceQuery?.startsWith('manual:')?'administrator-approved':type==='website'?'repository-homepage':'primary-purpose-description' })
     ]
   );
   return id;
@@ -256,52 +250,65 @@ async function recordQueryStat(runId, collectionType, spec, stat, error = null) 
   );
 }
 
-async function collectTypedAssets(knownRepos, runId, at, manualAssets = new Map()) {
-  const counts = {};
-  const extra = new Map();
-  const executedQueries = [];
-  for (const type of ASSET_TYPES) {
+export async function collectTypedAssets(knownRepos, runId, at, manualAssets = new Map(), fetchGithub = github, wait = sleep) {
+  const counts = {}, extra = new Map(), executedQueries = [], trees = new Map();
+  const skills = async repo => {
+    if(!trees.has(repo.id)) {
+      const body=await fetchGithub('https://api.github.com/repos/'+repo.full_name+'/git/trees/'+encodeURIComponent(repo.default_branch || 'main')+'?recursive=1');
+      if(body.truncated)throw Error('Skill verification tree is truncated: '+repo.full_name);
+      trees.set(repo.id,skillResources(repo,body.tree || []));
+    }
+    return trees.get(repo.id);
+  };
+  for(const type of ASSET_TYPES) {
     const found = new Map();
-    for (const repo of manualAssets.get(type) || []) {
-      repo._trendTopAssetSourceQuery = `manual:${type}`;
-      found.set(repo.id, repo);
-    }
-    const queryBudget = Math.max(40, Math.ceil(MAX_ASSETS_PER_TYPE / ASSET_QUERIES[type].length));
-    for (const spec of ASSET_QUERIES[type]) {
-      let added = 0;
-      const stat = { requested: 0, returned: 0, unique: 0, accepted: 0 };
+    const accept = async (repo,source,manual=false) => {
+      if(!repo?.id)return 0;
+      if(type!=='skill' && !manual && !acceptsRepoType(type,repo))return 0;
+      const resources=type==='skill'?await skills(repo):[null];
+      let added=0;
+      for(const resource of resources){
+        const key=repo.id+':'+(resource?.path || '');
+        if(found.has(key))continue;
+        if(found.size>=MAX_ASSETS_PER_TYPE)break;
+        found.set(key,{repo,resource,source});added++;
+      }
+      return added;
+    };
+    for(const repo of manualAssets.get(type) || [])await accept(repo,'manual:'+type,true);
+    const queryBudget=Math.max(40,Math.ceil(MAX_ASSETS_PER_TYPE/ASSET_QUERIES[type].length));
+    for(const spec of ASSET_QUERIES[type]) {
+      let added=0;
+      const stat={requested:0,returned:0,unique:0,accepted:0};
       try {
-        for (let page = 1; page <= spec.pages; page++) {
-          if (found.size >= MAX_ASSETS_PER_TYPE || added >= queryBudget) break;
-          const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(spec.q)}&sort=${encodeURIComponent(spec.sort)}&order=desc&per_page=${spec.perPage}&page=${page}`;
+        for(let page=1;page<=spec.pages;page++){
+          if(found.size>=MAX_ASSETS_PER_TYPE || added>=queryBudget)break;
+          const url='https://api.github.com/search/repositories?q='+encodeURIComponent(spec.q)+'&sort='+encodeURIComponent(spec.sort)+'&order=desc&per_page='+spec.perPage+'&page='+page;
           stat.requested++;
-          const body = await github(url);
-          stat.returned += (body.items || []).length;
-          for (const repo of body.items || []) {
-            if (!repo?.id || found.has(repo.id)) continue;
+          const body=await fetchGithub(url);stat.returned+=(body.items || []).length;
+          for(const repo of body.items || []){
             stat.unique++;
-            repo._trendTopAssetSourceQuery = `asset:${type}:${spec.q}`;
-            found.set(repo.id, repo);
-            added++;stat.accepted++;
-            if (found.size >= MAX_ASSETS_PER_TYPE || added >= queryBudget) break;
+            const n=await accept(repo,'asset:'+type+':'+spec.q);added+=n;stat.accepted+=n;
+            if(found.size>=MAX_ASSETS_PER_TYPE || added>=queryBudget)break;
           }
-          await sleep(1200);
+          await wait(1200);
         }
-        executedQueries.push(`asset:${type}:${spec.q}`);
-        await recordQueryStat(runId, type, { ...spec, family: `asset:${type}` }, stat);
-      } catch (error) { await recordQueryStat(runId, type, { ...spec, family: `asset:${type}` }, stat, error); throw error; }
+        executedQueries.push('asset:'+type+':'+spec.q);
+        await recordQueryStat(runId,type,{...spec,family:'asset:'+type},stat);
+      }catch(error){await recordQueryStat(runId,type,{...spec,family:'asset:'+type},stat,error);throw error;}
     }
-    for (const repo of knownRepos) {
-      if (found.size >= MAX_ASSETS_PER_TYPE) break;
-      if (inferAssetType(repo) === type) found.set(repo.id, repo);
+    for(const repo of knownRepos){
+      if(found.size>=MAX_ASSETS_PER_TYPE)break;
+      if(type==='skill' && !acceptsRepoType('skill',repo))continue;
+      await accept(repo,'inferred:'+type);
     }
-    for (const repo of found.values()) {
-      await upsertAsset(type, repo, repo._trendTopAssetSourceQuery || `inferred:${type}`, at);
-      if (!knownRepos.some(item => item.id === repo.id)) extra.set(repo.id, repo);
+    for(const {repo,resource,source} of found.values()){
+      await upsertAsset(type,repo,source,at,resource);
+      if(!knownRepos.some(item=>item.id===repo.id))extra.set(repo.id,repo);
     }
-    counts[type] = found.size;
+    counts[type]=found.size;
   }
-  return { counts, extra: [...extra.values()], executedQueries };
+  return {counts,extra:[...extra.values()],executedQueries};
 }
 
 async function approvedCandidates() {
@@ -542,7 +549,8 @@ export async function digest({ force = false } = {}) {
   if ((process.env.DATA_MODE || 'demo') === 'live' && (!last?.t || now - new Date(last.t) > 36 * 3600000)) {
     throw new Error('Fresh ranking data unavailable; digest skipped');
   }
-  const subs = await many("SELECT * FROM subscriptions WHERE status = 'active'");
+  const eligible = new Set((await proUsers(now)).map(row => row.user_id));
+  const subs = (await many("SELECT * FROM subscriptions WHERE status = 'active'")).filter(sub => eligible.has(sub.user_id));
   let sent = 0, failed = 0;
   for (const sub of subs) {
     const { date, hour } = localParts(now, sub.timezone);
@@ -575,6 +583,11 @@ export async function digest({ force = false } = {}) {
       const mail = await buildDigest(sub, raw, { previous: asJson(previous?.snapshot, null) });
       if (!mail.sections.length) {
         await query('UPDATE deliveries SET status = $1, last_error = NULL WHERE id = $2', ['skipped', delivery.id]);
+        continue;
+      }
+      const current = await one('SELECT status FROM subscriptions WHERE id=$1', [sub.id]);
+      if (current?.status !== 'active' || !(await proAccess(sub.user_id)).active) {
+        await query("UPDATE deliveries SET status='pending' WHERE id=$1", [delivery.id]);
         continue;
       }
       await sendMail(sub.email, mail.subject, mail.text, mail.html, {
@@ -616,6 +629,7 @@ if (process.argv[1]?.endsWith('jobs.js')) {
   const task = process.argv[2];
   ready
     .then(() => {
+      if (task === 'catalog-audit') return auditCopiedAssets();
       if (task === 'collect') return collect();
       if (task === 'history') return syncStarHistory();
       if (task === 'digest') return digest({ force: process.argv.includes('--force') });

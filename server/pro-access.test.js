@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+delete process.env.DATABASE_URL;
+process.env.DATA_MODE='demo';
+process.env.PGLITE_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'trend-pro-'));
+const {ready,query}=await import('./db.js');
+await ready;
+const {proAccess,proUsers}=await import('./pro-access.js');
+const {grantTestPro}=await import('./test-pro-fixture.js');
+const {creemConfig}=await import('./creem-client.js');
+
+test('Pro access follows dates, provider mode, ownership and revocation',async()=>{
+  const now=new Date(), future=new Date(now.getTime()+86400000).toISOString(), past=new Date(now.getTime()-86400000).toISOString();
+  assert.equal((await proAccess('free')).active,false);
+  await grantTestPro('paid',{status:'scheduled_cancel'});
+  assert.equal((await proAccess('paid')).active,true);
+  await grantTestPro('expired',{endsAt:past});
+  await grantTestPro('not-started',{startsAt:future,endsAt:future});
+  await grantTestPro('revoked',{state:'revoked'});
+  await grantTestPro('wrong-mode',{mode:(await creemConfig()).mode==='test'?'prod':'test'});
+  await grantTestPro('other-owner',{sourceSubId:'test-provider-paid'});
+  for(const id of ['expired','not-started','revoked','wrong-mode','other-owner'])assert.equal((await proAccess(id)).active,false,id);
+  await grantTestPro('grace',{state:'grace',status:'past_due'});
+  assert.equal((await proAccess('grace')).active,true);
+  await query("UPDATE billing_subscriptions SET status='refunded' WHERE user_id='paid'");
+  assert.equal((await proAccess('paid')).active,false);
+  assert.deepEqual((await proUsers()).map(row=>row.user_id),['grace']);
+});

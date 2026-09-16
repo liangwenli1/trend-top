@@ -13,3 +13,13 @@ export function safeAccountReturn(value, locale = 'en') {
 }
 
 export const loginUrl = (locale = 'en', next, mode) => `/login?${new URLSearchParams({ locale, next: safeAccountReturn(next, locale), ...(mode ? { mode } : {}) })}`;
+
+export function digestEntryPath(locale='en', type='github-repo', board='hot') {
+  return '/'+locale+'/digest?'+new URLSearchParams({type:type || 'github-repo',board:board || 'hot'});
+}
+export function digestDestination(locale, active, query='') {
+  const context=new URLSearchParams(query), selected=new URLSearchParams();
+  if (context.get('type')) selected.set('type',context.get('type'));
+  if (context.get('board')) selected.set('board',context.get('board'));
+  return '/'+locale+(active?'/account/delivery':'/pricing')+(selected.size?'?'+selected:'');
+}
