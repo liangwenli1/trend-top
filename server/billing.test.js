@@ -7,6 +7,7 @@ import path from 'node:path';
 
 delete process.env.DATABASE_URL;
 process.env.DATA_MODE = 'demo';
+process.env.CONTACT_EMAIL = 'bootstrap-support@example.invalid';
 process.env.PGLITE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'trend-top-billing-'));
 process.env.ADMIN_TOKEN = 'test-admin-token-with-enough-entropy';
 process.env.AUTH_SECRET = 'test-auth-secret-with-enough-entropy';
@@ -56,12 +57,19 @@ test('admin configures one Pro tier, checkout and signed webhook activate it ide
     assert.equal(coverage.status, 200);
     assert.equal(coverage.response.headers.get('cache-control'), 'no-store');
     assert.equal(coverage.data.expected, 100);
+    assert.equal((await call('/api/site-settings')).data.contact.email, 'bootstrap-support@example.invalid');
     const configured = await call('/api/admin/settings', 'PUT', {
       billing: { enabled: true, mode: 'test', prices: { en: { currency: 'USD', monthly: '9.99', yearly: 79 }, zh: { currency: 'CNY', monthly: 68, yearly: 560 } }, monthlyProductId: 'prod_month', yearlyProductId: 'prod_year', apiBaseUrl: 'https://test-api.creem.io', graceDays: 3 },
       contact: { email: 'support@example.com' }, social: { x: 'https://x.com/trendtop', facebook: '', telegram: '' },
       secrets: { creemApiKey: 'creem_test_key', creemWebhookSecret: 'webhook_test_secret' }
     }, adminCookie);
     assert.equal(configured.status, 200);
+    assert.equal((await call('/api/site-settings')).data.contact.email, 'support@example.com');
+    const emptyContact = await call('/api/admin/settings', 'PUT', { ...configured.data.public, contact: { email: '' } }, adminCookie);
+    assert.equal(emptyContact.status, 200);
+    assert.equal((await call('/api/site-settings')).data.contact.email, 'support@tapzm.com');
+    await call('/api/admin/settings', 'PUT', configured.data.public, adminCookie);
+    assert.equal((await call('/api/site-settings')).data.contact.email, 'support@example.com');
     assert.equal(configured.data.secretFlags.creemApiKey, true);
     assert.doesNotMatch((await one("SELECT secret_data FROM app_settings WHERE key='site'")).secret_data, /creem_test_key/);
     const plans = await call('/api/billing/plans');

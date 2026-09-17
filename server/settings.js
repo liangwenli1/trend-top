@@ -1,3 +1,4 @@
+import { DEFAULT_CONTACT_EMAIL } from '../shared/site-contact.js';
 import crypto from 'node:crypto';
 import { asJson, one, query } from './db.js';
 import { publicResponseCache } from './catalog-cache.js';
@@ -65,7 +66,7 @@ export function defaultSettings() {
         websiteEnrichment: true,
         firecrawlApiUrl: cleanUrl(process.env.FIRECRAWL_API_URL || 'https://api.firecrawl.dev')
       },
-      contact: { email: process.env.CONTACT_EMAIL || '' },
+      contact: { email: process.env.CONTACT_EMAIL || DEFAULT_CONTACT_EMAIL },
       social: { x: safeUrl(process.env.SOCIAL_X_URL), facebook: safeUrl(process.env.SOCIAL_FACEBOOK_URL), telegram: safeUrl(process.env.SOCIAL_TELEGRAM_URL) }
     },
     secret: { creemApiKey: process.env.CREEM_API_KEY || '', creemWebhookSecret: process.env.CREEM_WEBHOOK_SECRET || '', firecrawlApiKey: process.env.FIRECRAWL_API_KEY || '', googleClientSecret: '' }
@@ -89,7 +90,7 @@ export async function getSettings() {
       authentication: { ...defaults.public.authentication, ...(stored.authentication || {}) },
       billing: { ...defaults.public.billing, ...storedBilling, prices: normalizePrices(stored.billing?.prices || legacyPrices(stored.billing), defaults.public.billing.prices) },
       collection: { ...defaults.public.collection, ...(stored.collection || {}) },
-      contact: { ...defaults.public.contact, ...(stored.contact || {}) },
+      contact: { email: String(stored.contact?.email || defaults.public.contact.email).trim() || DEFAULT_CONTACT_EMAIL },
       social: { ...defaults.public.social, ...(stored.social || {}) }
     },
     secret
@@ -116,7 +117,7 @@ export async function saveSettings(input) {
       websiteEnrichment: collection.websiteEnrichment === undefined ? current.public.collection.websiteEnrichment : Boolean(collection.websiteEnrichment),
       firecrawlApiUrl: cleanUrl(collection.firecrawlApiUrl || current.public.collection.firecrawlApiUrl || 'https://api.firecrawl.dev')
     },
-    contact: { email: String(contact.email || '').trim().slice(0, 254) },
+    contact: { email: String(contact.email ?? current.public.contact.email).trim().slice(0, 254) || DEFAULT_CONTACT_EMAIL },
     social: { x: safeUrl(social.x), facebook: safeUrl(social.facebook), telegram: safeUrl(social.telegram) }
   };
   const secret = {

@@ -34,6 +34,12 @@
 .account-navigation a{padding:14px 18px;border-bottom:3px solid transparent;color:#666;font-size:15px;font-weight:700;text-decoration:none}
 .account-navigation a[aria-current=page]{border-color:#315fd9;color:#111}
 .account-navigation a:hover{color:#111;background:#f7f7f7}
+.account-overview-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:28px}
+.account-overview-links article{display:flex;flex-direction:column;align-items:flex-start;padding:22px;border:1px solid #dedede;min-width:0}
+.account-overview-links h2{margin:0 0 10px;font-size:20px;letter-spacing:-.025em}
+.account-overview-links p{margin:0 0 20px;color:#666;font-size:14px;line-height:1.6}
+.account-overview-links .primary{margin-top:auto;min-height:44px;background:#111;border-color:#111;border-radius:0;color:#fff;padding:10px 18px;font-size:14px}
+@media(max-width:640px){.account-overview-links{grid-template-columns:1fr}.account-overview-links article{padding:20px}}
 .account-verified{color:#315fd9!important;letter-spacing:0!important;text-transform:none!important}
 .account-method{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:18px 0;border-bottom:1px solid #e8e8e8}
 .account-method>span{color:#666;font-size:14px}
