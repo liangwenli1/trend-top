@@ -19,12 +19,18 @@ export function TagActions({ l, type, item, navigate, showMeta = false }) {
   const compareQuery = `ids=${encodeURIComponent(id)}`;
   const go = (href, query) => e => { e.preventDefault(); navigate(e, href, query); };
   const skills=item.skillResources || [];
+  const skillGroups = [];
+  for (const resource of skills.slice(0, 6)) {
+    let group = skillGroups.find(entry => entry.name.toLowerCase() === resource.name.toLowerCase());
+    if (!group) { group = { name: resource.name, resources: [] }; skillGroups.push(group); }
+    group.resources.push(resource);
+  }
   return <>
     <div className="repo-tags">
       <span className="source-tag" title={item.officialEvidence ? (l==='zh'?'已识别的发布者；不是安全认证。':'Recognized publisher; not a security certification. ')+item.officialEvidence : undefined}>{item.officialEvidence ? (l === 'zh' ? '官方' : 'Official') : (l === 'zh' ? '社区' : 'Community')}</span>
       <a className="tag-btn tag-btn-action" href={typePath(l, type, 'compare', compareQuery)} onClick={go(typePath(l, type, 'compare'), compareQuery)}>{l === 'zh' ? '对比同类' : 'Compare'}</a>
     </div>
-    {skills.length>0&&<details className="skill-result-list"><summary>{l==='zh'?`查看 ${item.skillCount} 个匹配 Skill`:`Explore ${item.skillCount} matching ${item.skillCount===1?'skill':'skills'}`}{skills.length>item.skillCount&&<small>{l==='zh'?` · ${skills.length} 个文件路径`:` · ${skills.length} file paths`}</small>}</summary><ul>{skills.slice(0,6).map(resource=><li key={resource.id}><a href={itemPath(l,'skill',resource.slug || resource.id)} onClick={go(itemPath(l,'skill',resource.slug || resource.id))}>{resource.name}<small>{resource.path}</small></a></li>)}</ul>{skills.length>6&&<a className="hero-ranking-link" href={itemPath(l,type,id)} onClick={go(itemPath(l,type,id))}>{l==='zh'?'查看产品全部资源':'View all product resources'}</a>}</details>}
+    {skills.length>0&&<details className="skill-result-list"><summary>{l==='zh'?`查看 ${item.skillCount} 个匹配 Skill`:`Explore ${item.skillCount} matching ${item.skillCount===1?'skill':'skills'}`}{skills.length>item.skillCount&&<small>{l==='zh'?` · ${skills.length} 个文件路径`:` · ${skills.length} file paths`}</small>}</summary><ul>{skillGroups.map(group => <li className="skill-resource-group" key={group.name}><div className="skill-resource-heading"><strong>{group.name}</strong>{group.resources.length > 1 && <span>{l === 'zh' ? group.resources.length + ' 个路径' : group.resources.length + ' locations'}</span>}</div>{group.resources.map(resource => <a key={resource.id} href={itemPath(l,'skill',resource.slug || resource.id)} onClick={go(itemPath(l,'skill',resource.slug || resource.id))}><code>{resource.path}</code><span aria-hidden="true">→</span></a>)}</li>)}</ul>{skills.length>6&&<a className="hero-ranking-link" href={itemPath(l,type,id)} onClick={go(itemPath(l,type,id))}>{l==='zh'?'查看产品全部资源':'View all product resources'}</a>}</details>}
   </>;
 }
 
@@ -552,7 +558,7 @@ export function ItemDetail({ l, t, type, id, navigate, viewer }) {
       </div>
       <SourceProvenance l={l} provenance={item.provenance}/>
       <ResourceGuide l={l} item={item}/>
-      {item.resources?.length>1&&<section className="resource-family"><h2>{l==='zh'?'同一产品的资源':'Resources in this product'}</h2><details><summary>{l==='zh'?`查看 ${item.resources.length} 个关联资源`:`View ${item.resources.length} related resources`}</summary><div className="repo-tags">{item.resources.map(resource=><a className="tag-btn" key={resource.type+resource.id} href={itemPath(l,resource.type,resource.slug || resource.id)} onClick={event=>{event.preventDefault();navigate(event,itemPath(l,resource.type,resource.slug || resource.id))}}>{typeLabel(resource.type,l)} · {resource.full_name.split(' / ').pop()}</a>)}</div></details></section>}
+      {item.resources?.length>1&&<section className="resource-family"><h2>{l==='zh'?'同一产品的资源':'Resources in this product'}</h2><details><summary>{l==='zh'?`查看 ${item.resources.length} 个关联资源`:`View ${item.resources.length} related resources`}</summary><div className="resource-family-list">{item.resources.map(resource=><a className="resource-family-link" key={resource.type+resource.id} href={itemPath(l,resource.type,resource.slug || resource.id)} onClick={event=>{event.preventDefault();navigate(event,itemPath(l,resource.type,resource.slug || resource.id))}}><span>{typeLabel(resource.type,l)}</span><strong>{resource.full_name.split(' / ').pop()}</strong>{resource.resourcePath && <code>{resource.resourcePath}</code>}</a>)}</div></details></section>}
       {(item.similar || []).length>0&&<section className="related-section"><div className="related-heading"><h2>{l==='zh'?'相关项目':'Related projects'}</h2><span>{item.relatedCount ?? item.similarCount}</span></div><RelatedCards l={l} items={item.similar.slice(0,6)} navigate={navigate}/>{(item.relatedCount ?? item.similarCount)>6&&<a className="ghost inline" href={'/'+l+'/'+type+'/related/'+encodeURIComponent(item.slug || item.id)} onClick={event=>{event.preventDefault();navigate(event,'/'+l+'/'+type+'/related/'+encodeURIComponent(item.slug || item.id))}}>{l==='zh'?'查看全部相关项目':'View all related projects'}</a>}</section>}
     </main>
   );

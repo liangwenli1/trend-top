@@ -86,3 +86,23 @@ button.tag-btn:disabled{opacity:.6;cursor:wait}
 .delivery-upgrade p { margin: 0 0 16px; }
 
 .delivery-upgrade .billing-link { max-inline-size: 100%; margin-inline-end: 0; padding-block: 12px; white-space: normal; overflow-wrap: anywhere; text-align: center; }
+
+/* Passwordless sign-in retains the site's square controls and black actions. */
+.auth-continue{display:flex;align-items:center;justify-content:center;gap:10px;inline-size:100%;font-family:inherit;cursor:pointer;border-radius:0;transition:background-color 150ms,color 150ms}
+button.login-google{background:#fff;padding:12px}
+.auth-continue:disabled{cursor:wait;opacity:.7}
+.auth-spinner{display:inline-block;inline-size:18px;block-size:18px;flex:0 0 18px;border:2px solid currentColor;border-inline-end-color:transparent;border-radius:50%;animation:auth-spin .75s linear infinite}
+@keyframes auth-spin{to{transform:rotate(360deg)}}
+.auth-passwordless-note{margin:18px 0 0;font-size:12px;line-height:1.6;color:#666}
+.auth-code-heading{text-align:center;margin-block-end:24px}
+.auth-code-mark{display:grid;place-items:center;inline-size:44px;block-size:44px;margin:0 auto 16px;background:#f2f5ff;color:#315fd9;font-size:24px;font-weight:650}
+.auth-code-heading h2{margin:0 0 12px;font-size:26px;letter-spacing:-.03em}
+.auth-code-heading p{margin:0;color:#666;font-size:15px;line-height:1.6}
+.auth-code-heading strong{display:block;color:#111;overflow-wrap:anywhere}
+.auth-code-heading small{display:block;margin-block-start:8px;color:#666;font-size:12px}
+.auth-code-inputs{justify-content:center}
+.auth-code-actions{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.auth-code-actions button{min-block-size:44px;font-size:13px}
+.auth-code-actions button:disabled{color:#777;text-decoration:none;cursor:default}
+.login-card .account-code-inputs{inline-size:100%;justify-content:center}
+@media(prefers-reduced-motion:reduce){.auth-spinner{animation:none}.auth-continue{transition:none}}

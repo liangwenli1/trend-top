@@ -106,6 +106,8 @@ test('Skill daily metrics copy from the parent GitHub repository', async () => {
   const asset = await one('SELECT full_name,entity_key FROM assets WHERE id=$1', [id]);
   assert.match(asset.full_name, /pdf$/);
   assert.equal(asset.entity_key, 'repo:qa/skill-pack');
+  const detail = await getCatalogItem('skill', id);
+  assert.equal(detail.resources.find(resource => resource.id === id).resourcePath, 'pdf/SKILL.md');
   await copyRepoMetricsToAssets();
   const copied = await one("SELECT star_created,stars FROM asset_daily WHERE asset_id=$1 AND day='2026-09-08'", [id]);
   assert.equal(Number(copied.star_created), 40);

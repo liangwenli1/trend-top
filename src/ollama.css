@@ -1065,3 +1065,35 @@ button.tag-btn{font:inherit;font-size:13px;font-weight:650;line-height:1.2;appea
 .save-search-control>.saved-search-form{position:absolute;inset-inline-end:0;inset-block-start:100%;z-index:12;width:min(480px,calc(100vw - 32px));max-height:70vh;overflow:auto;background:var(--surface,#fff);text-align:start;box-shadow:0 12px 32px rgba(0,0,0,.12)}
 .save-search-control>[role="status"]{position:absolute;inset-inline-end:0;inset-block-start:100%;z-index:12;width:min(360px,calc(100vw - 32px));padding:16px;border:1px solid var(--line,#ddd);background:var(--surface,#fff);text-align:start}
 @media(max-width:700px){.ranking-page .section-heading{align-items:flex-start;flex-wrap:wrap;gap:16px}.ranking-heading-actions{width:100%;justify-content:space-between}.ranking-heading-actions .section-count{display:inline}.save-search-control{margin-inline-start:auto}}
+
+/* A skill name is shown once, with its separate source locations underneath. */
+.skill-result-list summary{flex-wrap:wrap;gap:6px;line-height:1.5}
+.skill-result-list summary small{font-size:12px;font-weight:500;color:var(--muted,#666)}
+.skill-resource-group{border:1px solid var(--line,#ddd);background:var(--surface,#fff)}
+.skill-resource-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px;font-size:14px;overflow-wrap:anywhere}
+.skill-resource-heading>span{padding:3px 6px;background:#f4f4f4;color:#666;font-size:11px;font-weight:500}
+.skill-result-list .skill-resource-group a{display:flex;align-items:center;justify-content:space-between;gap:12px;border:0;border-block-start:1px solid var(--line,#ddd);font-size:12px;line-height:1.5;padding:10px 12px;color:#555}
+.skill-resource-group code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere;min-inline-size:0}
+.skill-result-list .skill-resource-group a:hover{background:#f2f5ff;color:var(--accent,#315fd9)}
+.resource-guide{border-block-start:1px solid var(--line,#ddd);padding-block-start:28px}
+.resource-guide dl{margin-block:24px;font-size:15px}
+.resource-guide dl>div{padding-block:12px;border-block-end:1px solid var(--line,#ddd)}
+.resource-guide dt{color:var(--muted,#666);font-size:13px;font-weight:600}
+.resource-guide dd{line-height:1.6}
+.resource-installation{margin-block-start:24px;position:relative}
+.resource-installation-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-block-end:12px;font-size:13px;font-weight:650}
+.resource-installation-heading small{font-size:12px;color:var(--muted,#666);font-weight:400}
+.resource-command-box{display:flex;align-items:flex-start;gap:12px;padding:16px;background:#111;color:#f4f4f4;border:1px solid #111;min-inline-size:0}
+.resource-command-box .resource-instruction{flex:1;min-inline-size:0;margin:0;padding:10px 0;background:transparent;color:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.resource-copy{display:grid;place-items:center;flex:0 0 44px;inline-size:44px;block-size:44px;padding:0;border:1px solid #555;border-radius:0;background:#111;color:#fff;cursor:pointer;transition:background-color 150ms,border-color 150ms}
+.resource-copy:hover{background:#292929;border-color:#fff}
+.resource-copy:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.resource-copy-status{display:block;margin-block-start:8px;color:var(--muted,#666);font-size:12px}
+.resource-family-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-block-start:12px}
+.resource-family-link{display:flex;flex-direction:column;gap:8px;min-inline-size:0;padding:16px;border:1px solid var(--line,#ddd);color:inherit;text-decoration:none;overflow-wrap:anywhere}
+.resource-family-link>span{color:var(--muted,#666);font-size:12px}
+.resource-family-link>strong{font-size:16px}
+.resource-family-link>code{font-size:12px;color:var(--muted,#666)}
+.resource-family-link:hover{border-color:var(--accent,#315fd9)}
+@media(max-width:620px){.resource-family-list{grid-template-columns:1fr}.resource-command-box{padding:12px;gap:10px}}
+@media(prefers-reduced-motion:reduce){.resource-copy{transition:none}}

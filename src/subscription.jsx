@@ -55,8 +55,9 @@ export const announceAuthChange = user => window.dispatchEvent(new CustomEvent(A
 
 const emptyCode = () => Array(6).fill('');
 
-function EmailCodeInput({ digits, onChange, zh }) {
+function EmailCodeInput({ digits, onChange, zh, disabled = false }) {
   const inputs = useRef([]);
+  useEffect(() => { if (!disabled) inputs.current[0]?.focus(); }, [disabled]);
   const updateDigits = (start, text) => {
     const values = String(text).replace(/\D/g, '');
     if (!values) return;
@@ -91,6 +92,7 @@ function EmailCodeInput({ digits, onChange, zh }) {
         ref={element => { inputs.current[index] = element; }}
         id={`account-code-${index}`}
         type="text"
+        disabled={disabled}
         inputMode="numeric"
         autoComplete={index === 0 ? 'one-time-code' : 'off'}
         aria-label={zh ? `第 ${index + 1} 位，共 6 位` : `Digit ${index + 1} of 6`}
@@ -108,63 +110,80 @@ function EmailCodeInput({ digits, onChange, zh }) {
   </div>;
 }
 
-export function AuthForm({ l, onAuthenticated, initialMode = 'register', googleEnabled = false, nextPath }) {
+export function AuthForm({ l, onAuthenticated, initialMode = 'email', googleEnabled = false, nextPath }) {
   const zh = l === 'zh';
-  const [mode, setMode] = useState(initialMode);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [mode, setMode] = useState(initialMode.startsWith('reset') ? initialMode : 'email');
+  const [email, setEmail] = useState(''), [password, setPassword] = useState('');
   const [codeDigits, setCodeDigits] = useState(emptyCode);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
-  const changeMode = next => { setMode(next); setMessage(''); setCodeDigits(emptyCode()); };
+  const [busy, setBusy] = useState(false), [googleBusy, setGoogleBusy] = useState(false);
+  const [message, setMessage] = useState(''), [resendIn, setResendIn] = useState(0);
+  useEffect(() => {
+    if (!resendIn) return;
+    const timer = setTimeout(() => setResendIn(value => Math.max(0, value - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [resendIn]);
+  useEffect(() => {
+    const resetBusy = () => { setBusy(false); setGoogleBusy(false); };
+    window.addEventListener('pageshow', resetBusy);
+    return () => window.removeEventListener('pageshow', resetBusy);
+  }, []);
+  const explainError = error => {
+    const translations = {
+      'Enter a valid email address': '请输入有效的邮箱地址。',
+      'Wait one minute before requesting another code': '请等待一分钟后再发送验证码。',
+      'Sign-in email could not be sent': '登录邮件暂时无法发送，请稍后重试。',
+      'Code expired or incorrect': '验证码错误或已过期，请检查或重新发送。',
+      'Too many account requests. Try again later.': '请求过于频繁，请稍后重试。'
+    };
+    return zh ? translations[error.message] || '操作未完成，请稍后重试。' : error.message;
+  };
+  const sendLoginCode = async () => {
+    const result = await request('/api/auth/email/request', 'POST', { email, locale: l });
+    setResendIn(result.retryAfter || 60); setCodeDigits(emptyCode()); setMode('email-code');
+  };
   const submit = async event => {
     event.preventDefault();
-    const code = codeDigits.join('');
+    if (busy || googleBusy) return;
     setBusy(true); setMessage('');
     try {
-      if (mode === 'register') {
-        await request('/api/auth/register', 'POST', { email, password, locale: l });
-        setMode('verify');
-        setMessage(zh ? '验证码已发送，10 分钟内有效。' : 'Code sent. It expires in 10 minutes.');
-      } else if (mode === 'verify') {
-        const result = await request('/api/auth/register/verify', 'POST', { email, code });
-        announceAuthChange(result.user);
-        onAuthenticated(result.user);
-      } else if (mode === 'login') {
-        const result = await request('/api/auth/login', 'POST', { email, password });
-        announceAuthChange(result.user);
-        onAuthenticated(result.user);
+      if (mode === 'email') await sendLoginCode();
+      else if (mode === 'email-code') {
+        const result = await request('/api/auth/email/verify', 'POST', { email, code: codeDigits.join('') });
+        announceAuthChange(result.user); onAuthenticated(result.user);
       } else if (mode === 'reset-request') {
         await request('/api/auth/password/reset/request', 'POST', { email, locale: l });
-        setMode('reset');
-        setMessage(zh ? '如果该邮箱已注册，验证码已发送。' : 'If this email has an account, a code was sent.');
+        setMode('reset'); setMessage(zh ? '如果该邮箱已注册，验证码已发送。' : 'If this email has an account, a code was sent.');
       } else if (mode === 'reset') {
-        await request('/api/auth/password/reset', 'POST', { email, code, password });
-        announceAuthChange(null);
-        setMode('login');
-        setCodeDigits(emptyCode()); setPassword('');
-        setMessage(zh ? '密码已重设，请登录。' : 'Password reset. Please sign in.');
+        await request('/api/auth/password/reset', 'POST', { email, code: codeDigits.join(''), password });
+        announceAuthChange(null); setMode('email'); setPassword(''); setCodeDigits(emptyCode());
+        setMessage(zh ? '密码已更新。现在可以通过邮箱验证码登录。' : 'Password updated. Continue with an email code to sign in.');
       }
-    } catch (error) { setMessage(error.message); }
+    } catch (error) { setMessage(explainError(error)); }
     finally { setBusy(false); }
   };
-  const needsCode = mode === 'verify' || mode === 'reset';
-  const needsPassword = mode === 'register' || mode === 'login' || mode === 'reset';
+  const resend = async () => {
+    if (busy || googleBusy || resendIn) return;
+    setBusy(true); setMessage('');
+    try { await sendLoginCode(); setMessage(zh ? '新的验证码已发送。' : 'A new code was sent.'); }
+    catch (error) {
+      if (error.message === 'Wait one minute before requesting another code') setResendIn(60);
+      setMessage(explainError(error));
+    } finally { setBusy(false); }
+  };
+  const disabled = busy || googleBusy, needsCode = mode === 'email-code' || mode === 'reset';
+  const label = mode === 'email' ? (zh ? '使用邮箱继续' : 'Continue with email') : mode === 'email-code' ? (zh ? '验证并继续' : 'Verify and continue') : mode === 'reset-request' ? (zh ? '发送重设验证码' : 'Send reset code') : (zh ? '重设密码' : 'Reset password');
   return <div className="account-auth">
-    <div className="account-tabs">
-      <button type="button" aria-current={['register', 'verify'].includes(mode) ? 'page' : undefined} onClick={() => changeMode('register')}>{zh ? '注册' : 'Register'}</button>
-      <button type="button" aria-current={mode === 'login' ? 'page' : undefined} onClick={() => changeMode('login')}>{zh ? '登录' : 'Sign in'}</button>
-    </div>
+    {mode === 'email-code' && <div className="auth-code-heading"><span className="auth-code-mark" aria-hidden="true">@</span><h2>{zh ? '查看你的邮箱' : 'Check your email'}</h2><p>{zh ? '输入发送到以下邮箱的六位验证码' : 'Enter the six-digit code sent to'}<strong>{email.trim()}</strong></p><small>{zh ? '验证码 10 分钟内有效。' : 'Your code expires in 10 minutes.'}</small></div>}
     <form onSubmit={submit} className="subscribe-form">
-      <div className="field"><label htmlFor="account-email">{zh ? '邮箱' : 'Email'}</label><input id="account-email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com"/></div>
-      {needsPassword && <div className="field"><label htmlFor="account-password">{mode === 'reset' ? (zh ? '新密码' : 'New password') : (zh ? '密码' : 'Password')}</label><input id="account-password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required minLength={mode === 'login' ? undefined : 10} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} placeholder={mode === 'login' ? undefined : zh ? '至少 10 个字符' : 'At least 10 characters'}/></div>}
-      {needsCode && <EmailCodeInput digits={codeDigits} onChange={setCodeDigits} zh={zh}/>}
-      <button type="submit" className="primary wide" disabled={busy}>{busy ? '…' : mode === 'register' ? (zh ? '发送注册验证码' : 'Send registration code') : mode === 'verify' ? (zh ? '验证并注册' : 'Verify and register') : mode === 'login' ? (zh ? '登录' : 'Sign in') : mode === 'reset-request' ? (zh ? '发送重设验证码' : 'Send reset code') : (zh ? '重设密码' : 'Reset password')}</button>
-      {mode === 'login' && <button type="button" className="account-text-button" onClick={() => changeMode('reset-request')}>{zh ? '忘记密码？' : 'Forgot password?'}</button>}
-      {mode === 'verify' && <button type="button" className="account-text-button" onClick={() => changeMode('register')}>{zh ? '重新发送验证码' : 'Send another code'}</button>}
+      {mode !== 'email-code' && <div className="field"><label htmlFor="account-email">{zh ? '邮箱' : 'Email'}</label><input id="account-email" type="email" autoComplete="email" required maxLength={254} disabled={disabled} value={email} onChange={event => setEmail(event.target.value)} placeholder={zh ? '你的邮箱地址' : 'Your email address'}/></div>}
+      {mode === 'reset' && <div className="field"><label htmlFor="account-password">{zh ? '新密码' : 'New password'}</label><input id="account-password" type="password" autoComplete="new-password" required minLength={10} maxLength={128} disabled={disabled} value={password} onChange={event => setPassword(event.target.value)}/></div>}
+      {needsCode && <EmailCodeInput digits={codeDigits} onChange={setCodeDigits} zh={zh} disabled={disabled}/>}
+      <button type="submit" className="primary wide auth-continue" disabled={disabled} aria-busy={busy}>{busy && <span className="auth-spinner" aria-hidden="true"/>}{label}</button>
+      {mode === 'email-code' && <div className="auth-code-actions"><button type="button" className="account-text-button" disabled={disabled || resendIn > 0} onClick={resend}>{resendIn ? (zh ? '重新发送（' + resendIn + ' 秒）' : 'Resend in ' + resendIn + 's') : (zh ? '重新发送验证码' : 'Resend code')}</button><button type="button" className="account-text-button" disabled={disabled} onClick={() => { setMode('email'); setCodeDigits(emptyCode()); setMessage(''); }}>{zh ? '使用其他邮箱' : 'Use a different email'}</button></div>}
       {message && <p className="form-message" role="status">{message}</p>}
     </form>
-    {googleEnabled && ['register', 'login'].includes(mode) && <><div className="login-divider"><span>{zh ? '或' : 'or'}</span></div><a className="login-google" href={`/api/auth/google?${new URLSearchParams({ locale: l, next: safeAccountReturn(nextPath, l) })}`}><img src="/google-signin.png" width="20" height="20" alt=""/>{zh ? '使用 Google 继续' : 'Continue with Google'}</a></>}
+    {googleEnabled && mode === 'email' && <><div className="login-divider"><span>{zh ? '或' : 'or'}</span></div><button type="button" className="login-google auth-continue" disabled={disabled} aria-busy={googleBusy} onClick={() => { setGoogleBusy(true); window.location.assign('/api/auth/google?' + new URLSearchParams({ locale: l, next: safeAccountReturn(nextPath, l) })); }}>{googleBusy ? <span className="auth-spinner" aria-hidden="true"/> : <img src="/google-signin.png" width="20" height="20" alt=""/>}{zh ? '使用 Google 继续' : 'Continue with Google'}</button></>}
+    {mode === 'email' && <p className="auth-passwordless-note">{zh ? '无需密码。首次验证邮箱后将自动创建账户。' : 'No password needed. New accounts are created after email verification.'}</p>}
   </div>;
 }
 
@@ -266,10 +285,10 @@ export function LoginPage({ l, user, navigate }) {
   const errors = {
     google_failed: zh ? 'Google 登录未完成，请重试或使用邮箱登录。' : 'Google sign-in did not finish. Retry or use email.',
     google_unavailable: zh ? 'Google 登录暂不可用，请使用邮箱。' : 'Google sign-in is unavailable. Please use email.',
-    email_verification_required: zh ? '此 Google 账户使用第三方邮箱。请先通过邮件验证码注册，再在账户设置中关联 Google。' : 'This Google account uses a third-party email. Register with an email code first, then connect Google in Account settings.',
+    email_verification_required: zh ? '请使用邮箱验证码验证此邮箱并继续登录。' : 'Please continue with an email code to verify ownership of this address.',
     link_failed: zh ? '无法关联此 Google 账户。请确认登录邮箱一致，且未关联其他账户。' : 'Could not connect Google. Check that the emails match and the Google account is not connected elsewhere.'
   };
-  return <div className="login-page"><main className="login-main"><a className="brand login-brand" href={`/${l}/home`}>Trend Top</a><header className="login-heading"><p className="account-kicker">{zh ? '你的开源发现空间' : 'YOUR OPEN-SOURCE DISCOVERY SPACE'}</p><h1>{reset ? (zh ? '重设你的密码' : 'Reset your password') : (zh ? '欢迎来到 Trend Top' : 'Welcome to Trend Top')}</h1><p>{zh ? '登录后管理你的套餐和每日摘要。' : 'Manage your plan and daily digest in one place.'}</p></header><section className="login-card" aria-label={zh ? '登录与注册' : 'Sign in and registration'}>{errors[query.get('error')] && <p className="form-message" role="alert">{errors[query.get('error')]}</p>}<AuthForm key={reset ? 'reset' : 'auth'} l={l} initialMode={reset ? 'reset-request' : 'login'} googleEnabled={providers.google} nextPath={next} onAuthenticated={() => navigate(next, true)}/><p className="login-legal">{zh ? '继续即表示你同意' : 'By continuing, you agree to our'} <a href={`/${l}/terms`}>{zh ? '服务条款' : 'Terms of Service'}</a> {zh ? '和' : 'and'} <a href={`/${l}/privacy`}>{zh ? '隐私政策' : 'Privacy Policy'}</a>{zh ? '。' : '.'}</p></section><a className="login-back" href={`/${l}/home`}>{zh ? '返回首页' : 'Back to home'}</a></main><footer className="login-footer"><span>© {new Date().getFullYear()} Trend Top</span><a href={loginUrl(zh ? 'en' : 'zh', next, reset ? 'reset-request' : undefined)}>{zh ? 'English' : '简体中文'}</a></footer></div>;
+  return <div className="login-page"><main className="login-main"><a className="brand login-brand" href={`/${l}/home`}>Trend Top</a><header className="login-heading"><p className="account-kicker">{zh ? '你的开源发现空间' : 'YOUR OPEN-SOURCE DISCOVERY SPACE'}</p><h1>{reset ? (zh ? '重设你的密码' : 'Reset your password') : (zh ? '发现开源新动向' : 'Discover what’s next')}</h1><p>{zh ? '登录后管理你的套餐和每日摘要。' : 'Manage your plan and daily digest in one place.'}</p></header><section className="login-card" aria-label={zh ? '登录' : 'Sign in'}>{errors[query.get('error')] && <p className="form-message" role="alert">{errors[query.get('error')]}</p>}<AuthForm key={reset ? 'reset' : 'auth'} l={l} initialMode={reset ? 'reset-request' : 'email'} googleEnabled={providers.google} nextPath={next} onAuthenticated={() => navigate(next, true)}/><p className="login-legal">{zh ? '继续即表示你同意' : 'By continuing, you agree to our'} <a href={`/${l}/terms`}>{zh ? '服务条款' : 'Terms of Service'}</a> {zh ? '和' : 'and'} <a href={`/${l}/privacy`}>{zh ? '隐私政策' : 'Privacy Policy'}</a>{zh ? '。' : '.'}</p></section><a className="login-back" href={`/${l}/home`}>{zh ? '返回首页' : 'Back to home'}</a></main><footer className="login-footer"><span>© {new Date().getFullYear()} Trend Top</span><a href={loginUrl(zh ? 'en' : 'zh', next, reset ? 'reset-request' : undefined)}>{zh ? 'English' : '简体中文'}</a></footer></div>;
 }
 
 function WatchPanel({ l, proActive, navigate }) {
@@ -329,11 +348,11 @@ function WatchPanel({ l, proActive, navigate }) {
 
 function AccountSettings({ l, user }) {
   const zh = l === 'zh';
-  const [methods, setMethods] = useState(null), [providers, setProviders] = useState({ google: false });
+  const [methods, setMethods] = useState(null);
   const [currentPassword, setCurrentPassword] = useState(''), [password, setPassword] = useState(''), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
-  useEffect(() => { request('/api/auth/methods').then(setMethods).catch(error => setMessage(error.message)); request('/api/auth/providers').then(setProviders).catch(() => {}); }, []);
+  useEffect(() => { request('/api/auth/methods').then(setMethods).catch(error => setMessage(error.message)); }, []);
   const changePassword = async event => { event.preventDefault(); setBusy(true); setMessage(''); try { await request('/api/auth/password/change', 'POST', { currentPassword, password }); setCurrentPassword(''); setPassword(''); setMessage(zh ? '密码已更新，其他设备的登录已退出。' : 'Password updated. Other devices have been signed out.'); } catch (error) { setMessage(error.message); } finally { setBusy(false); } };
-  return <><div className="account-user"><div><span>{zh ? '账户邮箱' : 'Account email'}</span><strong>{user.email}</strong></div><span className="account-verified">{zh ? '已验证' : 'Verified'}</span></div>{methods && (methods.google || providers.google) && <section className="account-section"><div className="account-section-heading"><h2>{zh ? '关联账户' : 'Connected accounts'}</h2></div><div className="account-method"><strong>Google</strong>{methods.google ? <StatusBadge tone="active">{zh ? '已关联' : 'Connected'}</StatusBadge> : <a className="ghost billing-link" href={`/api/auth/google?${new URLSearchParams({ locale: l, next: `/${l}/account`, link: '1' })}`}>{zh ? '关联 Google' : 'Connect Google'}</a>}</div></section>}{methods && <section className="account-section"><div className="account-section-heading"><h2>{methods.passwordEnabled ? (zh ? '修改密码' : 'Change password') : (zh ? '设置邮箱密码' : 'Set an email password')}</h2></div>{methods.passwordEnabled ? <form className="subscribe-form" onSubmit={changePassword}><div className="field"><label htmlFor="settings-current-password">{zh ? '当前密码' : 'Current password'}</label><input id="settings-current-password" type="password" autoComplete="current-password" maxLength={128} required value={currentPassword} onChange={event => setCurrentPassword(event.target.value)}/></div><div className="field"><label htmlFor="settings-new-password">{zh ? '新密码' : 'New password'}</label><input id="settings-new-password" type="password" autoComplete="new-password" minLength={10} maxLength={128} required value={password} onChange={event => setPassword(event.target.value)}/><small>{zh ? '10–128 个字符。' : '10–128 characters.'}</small></div><button className="primary" disabled={busy}>{busy ? '…' : (zh ? '更新密码' : 'Update password')}</button></form> : <><p className="account-hint">{zh ? '通过邮件验证码设置密码，以后也可以用邮箱登录。' : 'Set a password with an email code to also sign in using email.'}</p><a className="ghost billing-link" href={loginUrl(l, `/${l}/account`, 'reset-request')}>{zh ? '通过邮箱设置' : 'Set up with email'}</a></>}</section>}{message && <p className="form-message" role="status">{message}</p>}</>;
+  return <><div className="account-user"><div><span>{zh ? '账户邮箱' : 'Account email'}</span><strong>{user.email}</strong></div><span className="account-verified">{zh ? '已验证' : 'Verified'}</span></div><p className="account-hint">{zh ? '可随时使用邮箱验证码登录，无需设置密码。' : 'Sign in anytime with an email code. No password is required.'}</p>{methods?.passwordEnabled && <section className="account-section"><div className="account-section-heading"><h2>{zh ? '修改密码' : 'Change password'}</h2></div><form className="subscribe-form" onSubmit={changePassword}><div className="field"><label htmlFor="settings-current-password">{zh ? '当前密码' : 'Current password'}</label><input id="settings-current-password" type="password" autoComplete="current-password" maxLength={128} required value={currentPassword} onChange={event => setCurrentPassword(event.target.value)}/></div><div className="field"><label htmlFor="settings-new-password">{zh ? '新密码' : 'New password'}</label><input id="settings-new-password" type="password" autoComplete="new-password" minLength={10} maxLength={128} required value={password} onChange={event => setPassword(event.target.value)}/><small>{zh ? '10–128 个字符。' : '10–128 characters.'}</small></div><button className="primary" disabled={busy}>{busy ? '…' : (zh ? '更新密码' : 'Update password')}</button></form></section>}{message && <p className="form-message" role="status">{message}</p>}</>;
 }
 
 export function AccountPage({ l, section = '', navigate }) {

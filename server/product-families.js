@@ -41,7 +41,7 @@ export async function familyResources(item) {
     many(`SELECT id,type,slug,full_name,url,source_repo_url,ranking_signals FROM assets WHERE active=TRUE AND
       (lower(entity_key)=ANY($1::text[]) OR lower(rtrim(source_repo_url,'/'))=ANY($2::text[]) OR lower(rtrim(url,'/'))=ANY($2::text[]) OR lower(split_part(full_name,' / ',1))=ANY($3::text[])) LIMIT 100`,[names.map(name=>'repo:'+name),urls,names])
   ]);
-  return [...repositories.map(row=>({...row,type:'github-repo'})),...assets].map(row=>({type:row.type,id:String(row.id),slug:row.slug,full_name:row.full_name})).slice(0,100);
+  return [...repositories.map(row=>({...row,type:'github-repo'})),...assets].map(row=>({type:row.type,id:String(row.id),slug:row.slug,full_name:row.full_name,resourcePath:asJson(row.ranking_signals,{})?.resourcePath || null})).slice(0,100);
 }
 
 export async function removeProductRelationship(repository, evidence, reviewer) {

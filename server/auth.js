@@ -104,20 +104,20 @@ export function authRate(req, res, next) {
 const rate = authRate;
 
 async function sendCode(email, locale, purpose, passwordHash) {
-  const existing = await one('SELECT sent_at FROM auth_codes WHERE email = $1 AND purpose = $2', [email, purpose]);
-  if (existing && Date.now() - new Date(existing.sent_at).getTime() < 60000) return false;
   const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
   const now = new Date();
-  await query(
+  const sent = await query(
     `INSERT INTO auth_codes (email, purpose, code_hash, password_hash, locale, expires_at, sent_at, attempts)
      VALUES ($1,$2,$3,$4,$5,$6,$7,0)
      ON CONFLICT (email, purpose) DO UPDATE SET code_hash=EXCLUDED.code_hash,
        password_hash=EXCLUDED.password_hash, locale=EXCLUDED.locale,
-       expires_at=EXCLUDED.expires_at, sent_at=EXCLUDED.sent_at, attempts=0`,
-    [email, purpose, codeHash(email, purpose, code), passwordHash, locale, new Date(now.getTime() + CODE_MINUTES * 60000).toISOString(), now.toISOString()]
+       expires_at=EXCLUDED.expires_at, sent_at=EXCLUDED.sent_at, attempts=0
+       WHERE auth_codes.sent_at <= $8 RETURNING email`,
+    [email, purpose, codeHash(email, purpose, code), passwordHash, locale, new Date(now.getTime() + CODE_MINUTES * 60000).toISOString(), now.toISOString(), new Date(now.getTime() - 60000).toISOString()]
   );
+  if (!sent.rows.length) return false;
   const zh = locale === 'zh';
-  const action = purpose === 'register' ? (zh ? '注册' : 'registration') : (zh ? '重设密码' : 'password reset');
+  const action = purpose === 'login' ? (zh ? '登录' : 'sign-in') : purpose === 'register' ? (zh ? '注册' : 'registration') : (zh ? '重设密码' : 'password reset');
   const subject = zh ? `Trend Top ${action}验证码` : `Trend Top ${action} code`;
   const text = zh ? `你的${action}验证码：${code}\n10 分钟内有效。若非本人操作，请忽略。` : `Your ${action} code: ${code}\nIt expires in 10 minutes. Ignore this message if you did not request it.`;
   const html = `<div style="font:16px/1.6 Arial,sans-serif;max-width:520px;margin:auto;padding:28px;color:#171717"><h1>Trend Top</h1><p>${zh ? `你的${action}验证码：` : `Your ${action} code:`}</p><p style="font-size:32px;font-weight:700;letter-spacing:8px">${code}</p><p>${zh ? '10 分钟内有效。若非本人操作，请忽略。' : 'Expires in 10 minutes. Ignore if you did not request it.'}</p></div>`;
@@ -130,14 +130,44 @@ async function sendCode(email, locale, purpose, passwordHash) {
 }
 
 async function consumeCode(email, purpose, code) {
-  const record = await one('SELECT * FROM auth_codes WHERE email = $1 AND purpose = $2', [email, purpose]);
-  if (!record || new Date(record.expires_at).getTime() < Date.now() || Number(record.attempts) >= 5) return null;
-  await query('UPDATE auth_codes SET attempts = attempts + 1 WHERE email = $1 AND purpose = $2', [email, purpose]);
+  const attempted = await query('UPDATE auth_codes SET attempts = attempts + 1 WHERE email = $1 AND purpose = $2 AND expires_at > $3 AND attempts < 5 RETURNING *', [email, purpose, new Date().toISOString()]);
+  const record = attempted.rows[0];
+  if (!record) return null;
   if (!equalHex(record.code_hash, codeHash(email, purpose, code))) return null;
-  return record;
+  const consumed = await query('DELETE FROM auth_codes WHERE email=$1 AND purpose=$2 AND code_hash=$3 RETURNING email', [email, purpose, record.code_hash]);
+  return consumed.rows.length ? record : null;
 }
 
 export function registerAuthRoutes(app) {
+  const emailRequest = (req, res, next) => {
+    const origin = req.get('origin');
+    const expected = process.env.PUBLIC_URL ? new URL(process.env.PUBLIC_URL).origin : `${req.protocol}://${req.get('host')}`;
+    if (origin && origin !== expected && origin !== `${req.protocol}://${req.get('host')}`) return respondError(res, 403, 'Invalid request origin');
+    if (!req.is('application/json')) return respondError(res, 415, 'JSON request required');
+    next();
+  };
+  app.post('/api/auth/email/request', emailRequest, rate, async (req, res) => {
+    const email = normalizeEmail(req.body?.email), locale = req.body?.locale === 'en' ? 'en' : 'zh';
+    if (!emailRe.test(email) || email.length > 254) return respondError(res, 400, 'Enter a valid email address');
+    try {
+      if (!await sendCode(email, locale, 'login', null)) return respondError(res, 429, 'Wait one minute before requesting another code');
+      res.json({ ok: true, retryAfter: 60 });
+    } catch { respondError(res, 503, 'Sign-in email could not be sent'); }
+  });
+  app.post('/api/auth/email/verify', emailRequest, rate, async (req, res) => {
+    const email = normalizeEmail(req.body?.email), code = String(req.body?.code || '');
+    if (!emailRe.test(email) || email.length > 254 || !/^\d{6}$/.test(code)) return respondError(res, 400, 'Invalid verification code');
+    const record = await consumeCode(email, 'login', code);
+    if (!record) return respondError(res, 400, 'Code expired or incorrect');
+    const now = new Date().toISOString();
+    const result = await query(`INSERT INTO users (id,email,password_hash,password_enabled,locale,created_at,verified_at)
+      VALUES ($1,$2,$3,FALSE,$4,$5,$5) ON CONFLICT (email) DO UPDATE SET email=EXCLUDED.email
+      RETURNING id,email,locale,password_enabled`, [crypto.randomUUID(),email,crypto.randomBytes(32).toString('hex'),record.locale,now]);
+    const user = result.rows[0];
+    await query('UPDATE subscriptions SET user_id=$1, status=CASE WHEN status=$3 THEN $4 ELSE status END, verified_at=COALESCE(verified_at,$5) WHERE email=$2 AND user_id IS NULL', [user.id,email,'pending','active',now]);
+    await createSession(req, res, user.id);
+    res.json({ ok: true, user: publicUser(user) });
+  });
   app.get('/api/auth/me', async (req, res) => {
     const user = await authUser(req);
     res.json({ user: publicUser(user) });
@@ -181,7 +211,6 @@ export function registerAuthRoutes(app) {
     );
     if (!result.rows.length) return respondError(res, 409, 'Account already exists. Sign in.');
     await query('UPDATE subscriptions SET user_id = $1, status = CASE WHEN status = $3 THEN $4 ELSE status END, verified_at = COALESCE(verified_at, $5) WHERE email = $2 AND user_id IS NULL', [id, email, 'pending', 'active', now]);
-    await query('DELETE FROM auth_codes WHERE email = $1 AND purpose = $2', [email, 'register']);
     await createSession(req, res, id);
     res.json({ ok: true, user: publicUser({ id, email, locale: record.locale }) });
   });
@@ -220,7 +249,6 @@ export function registerAuthRoutes(app) {
     if (!user) return respondError(res, 400, 'Code expired or incorrect');
     await query('UPDATE users SET password_hash = $1, password_enabled=TRUE WHERE id = $2', [await hashPassword(password), user.id]);
     await query('DELETE FROM auth_sessions WHERE user_id = $1', [user.id]);
-    await query('DELETE FROM auth_codes WHERE email = $1 AND purpose = $2', [email, 'reset']);
     res.json({ ok: true });
   });
 }
