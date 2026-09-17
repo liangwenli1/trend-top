@@ -34,6 +34,27 @@
 
 页面检查在功能代码提交推送后进行，使用隔离本地 Demo 数据。生产商户审核结果、邮件投递、真实支付与客服邮箱收信不属于本地验证结论。
 
+## 推送后本地页面检查
+
+检查使用隔离内存 Demo 数据库，未发送真实邮件、发起支付或修改生产商户资料。
+
+- 1440 × 900 桌面：页脚直接显示支持邮箱；价格页交付、续订、退款与政策链接显示正常。
+- 390 × 844 手机：账户入口自动变为单列；邮箱、支持卡片与购买说明没有页面横向溢出。
+- 使用已有的、仍保留旧密码记录的测试账户完成邮箱验证码登录，确认账户概览没有密码输入框，账单快捷入口可进入正确页面。
+- 退出登录后，从公开页脚进入中文条款和隐私页，确认可以阅读服务、取消、退款与服务商说明。
+- 修复法律页标题和段落样式覆盖支持卡片的问题，并再次构建、推送、复查。
+- 本轮账户/价格页浏览器记录中没有前端错误。中文价格未配置时如实显示暂未开放；英文金额是本地测试配置，不能据此认定生产定价已配置。
+
+截图：
+
+- [桌面账户概览](qa/creem-review/account-overview-desktop.png)
+- [手机账户概览](qa/creem-review/account-overview-mobile.png)
+- [手机账户支持](qa/creem-review/account-support-mobile.png)
+- [公开页脚](qa/creem-review/public-footer-desktop.png)
+- [桌面购买说明](qa/creem-review/pricing-policies-desktop.png)
+- [手机购买说明](qa/creem-review/pricing-policies-mobile.png)
+- [手机公开条款与支持](qa/creem-review/terms-support-mobile.png)
+
 ## 你需要完成的商户步骤
 
 1. 部署最新代码，并检查公开页脚、价格页和账户里的邮箱是否是你实际使用的客服邮箱。
