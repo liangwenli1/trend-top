@@ -26,3 +26,24 @@
 新增隔离数据库测试覆盖：验证前不创建账户、会话 Cookie、老账户与 Pro 权益复用、已停止推送保持停止、验证码错误 / 过期 / 耗尽 / 重放、并发发送与消费、重发、用途隔离、Origin / JSON 校验及 IP 限频。
 
 页面检查在代码提交推送后进行，使用本地 Demo 数据，避免修改生产账户或发送真实邮件。记录桌面和手机登录步骤、展开列表、详情复制和账户设置。第三方 Google 的真实授权与生产邮件投递须在已配置的运行环境中验证；本地回归测试使用模拟供应商交换。
+
+### 已完成检查
+
+- `npm run build` 通过；完整 `npm test` 共 99 项通过。补充相关资源路径后，邮箱登录与资源定向回归共 12 项通过。
+- 桌面 1440 × 900、手机 390 × 844 检查通过，登录和 Skill 使用区域没有横向溢出；中文手机登录文案和布局正常。
+- 六位验证码整段粘贴、输入后的焦点移动、重发倒计时和实际重发通过；“使用其他邮箱”正常返回邮箱步骤。
+- 普通登录进入账户页；从每日摘要入口登录进入 Pricing。测试复用了预置账户，没有创建真实账户。
+- 账户设置已无 Connected accounts 区块；原账户邮箱验证状态正常。
+- 同名 Skill 的两个文件路径显示在同一组中，不同 Skill 分组展示，各路径可独立访问。
+- 详情复制按钮位于说明框内，点击后的 Copied 状态正常，剪贴板内容与原始使用说明完全一致。
+
+### 截图记录
+
+| 界面 | 桌面 | 手机 |
+| --- | --- | --- |
+| 登录 | [英文登录](qa/auth-skill/login-desktop.png) | [中文登录](qa/auth-skill/login-mobile.png) |
+| 邮件验证码 | [验证码步骤](qa/auth-skill/code-desktop.png) | [验证码步骤](qa/auth-skill/code-mobile.png) |
+| Skill 分组展开 | [分组和文件路径](qa/auth-skill/skill-expanded-desktop.png) | [分组和文件路径](qa/auth-skill/skill-expanded-mobile.png) |
+| Skill 详情 | [框内复制](qa/auth-skill/skill-detail-desktop.png) | [框内复制](qa/auth-skill/skill-detail-mobile.png) |
+
+[账户设置截图](qa/auth-skill/account-desktop.png)。截图使用隔离的本地 Demo 数据，数量和榜单指标不代表线上数据。
