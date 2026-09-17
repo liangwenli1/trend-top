@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
+import { EnvelopeSimple } from '@phosphor-icons/react';
 import { DesignSelect, TopicMultiSelect } from './components.jsx';
 import { TYPES, typeLabel, itemPath } from './catalog.js';
 import { BillingCard } from './billing-ui.jsx';
@@ -181,7 +182,7 @@ export function AuthForm({ l, onAuthenticated, initialMode = 'email', googleEnab
   const disabled = busy || googleBusy, needsCode = mode === 'email-code' || mode === 'reset';
   const label = mode === 'email' ? (zh ? '使用邮箱继续' : 'Continue with email') : mode === 'email-code' ? (zh ? '验证并继续' : 'Verify and continue') : mode === 'reset-request' ? (zh ? '发送重设验证码' : 'Send reset code') : (zh ? '重设密码' : 'Reset password');
   return <div className="account-auth">
-    {mode === 'email-code' && <div className="auth-code-heading"><span className="auth-code-mark" aria-hidden="true">@</span><h2>{zh ? '查看你的邮箱' : 'Check your email'}</h2><p>{zh ? '输入发送到以下邮箱的六位验证码' : 'Enter the six-digit code sent to'}<strong>{email.trim()}</strong></p><small>{zh ? '验证码 10 分钟内有效。' : 'Your code expires in 10 minutes.'}</small></div>}
+    {mode === 'email-code' && <div className="auth-code-heading"><span className="auth-code-mark" aria-hidden="true"><EnvelopeSimple size={26} weight="regular" /></span><h2>{zh ? '查看你的邮箱' : 'Check your email'}</h2><p>{zh ? '输入发送到以下邮箱的六位验证码' : 'Enter the six-digit code sent to'}<strong>{email.trim()}</strong></p><small>{zh ? '验证码 10 分钟内有效。' : 'Your code expires in 10 minutes.'}</small></div>}
     <form onSubmit={submit} className="subscribe-form">
       {mode !== 'email-code' && <div className="field"><label htmlFor="account-email">{zh ? '邮箱' : 'Email'}</label><input id="account-email" type="email" autoComplete="email" required maxLength={254} disabled={disabled} value={email} onChange={event => setEmail(event.target.value)} placeholder={zh ? '你的邮箱地址' : 'Your email address'}/></div>}
       {mode === 'reset' && <div className="field"><label htmlFor="account-password">{zh ? '新密码' : 'New password'}</label><input id="account-password" type="password" autoComplete="new-password" required minLength={10} maxLength={128} disabled={disabled} value={password} onChange={event => setPassword(event.target.value)}/></div>}

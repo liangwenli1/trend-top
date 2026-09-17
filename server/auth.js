@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { one, query } from './db.js';
 import { sendMail } from './mail.js';
+import { buildAuthEmail } from './auth-email.js';
 
 const scrypt = promisify(crypto.scrypt);
 const COOKIE = 'trend_top_session';
@@ -116,11 +117,7 @@ async function sendCode(email, locale, purpose, passwordHash) {
     [email, purpose, codeHash(email, purpose, code), passwordHash, locale, new Date(now.getTime() + CODE_MINUTES * 60000).toISOString(), now.toISOString(), new Date(now.getTime() - 60000).toISOString()]
   );
   if (!sent.rows.length) return false;
-  const zh = locale === 'zh';
-  const action = purpose === 'login' ? (zh ? '登录' : 'sign-in') : purpose === 'register' ? (zh ? '注册' : 'registration') : (zh ? '重设密码' : 'password reset');
-  const subject = zh ? `Trend Top ${action}验证码` : `Trend Top ${action} code`;
-  const text = zh ? `你的${action}验证码：${code}\n10 分钟内有效。若非本人操作，请忽略。` : `Your ${action} code: ${code}\nIt expires in 10 minutes. Ignore this message if you did not request it.`;
-  const html = `<div style="font:16px/1.6 Arial,sans-serif;max-width:520px;margin:auto;padding:28px;color:#171717"><h1>Trend Top</h1><p>${zh ? `你的${action}验证码：` : `Your ${action} code:`}</p><p style="font-size:32px;font-weight:700;letter-spacing:8px">${code}</p><p>${zh ? '10 分钟内有效。若非本人操作，请忽略。' : 'Expires in 10 minutes. Ignore if you did not request it.'}</p></div>`;
+  const { subject, text, html } = buildAuthEmail({ code, locale, purpose, minutes: CODE_MINUTES });
   try { await sendMail(email, subject, text, html); }
   catch (error) {
     await query('DELETE FROM auth_codes WHERE email = $1 AND purpose = $2 AND code_hash = $3', [email, purpose, codeHash(email, purpose, code)]);
