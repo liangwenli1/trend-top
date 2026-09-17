@@ -1,3 +1,4 @@
+import {elapsedDays} from '../shared/chart-view.js';
 import { asDay, asIso, asJson, asNumber, dataSource, DAYS, many, one, query, utcDay } from './db.js';
 import { aiEvidence, getChart as getRepoChart, getFilters as getRepoFilters, getRankings as getRepoRankings, getStarSeries } from './rankings.js';
 import { groupProductResources } from '../shared/product-resources.js';
@@ -103,7 +104,7 @@ function hotScore(item, cohort, forkReady) {
   const starPct = percentile(gains, Math.log(1 + Math.max(0, item.gain)));
   const ratePct = percentile(rates, Math.max(0, item.gain) / (Math.max(0, (item.stars || 0) - (item.gain || 0)) + 100));
   const forkPct = percentile(forks, Math.log(1 + Math.max(0, item.forkGain || 0)));
-  const recency = Math.max(0, 100 - (item.pushDays || 0) * 8);
+  const recency = item.pushDays == null ? 0 : Math.max(0, 100 - item.pushDays * 8);
   const raw = 0.45 * starPct + 0.20 * ratePct + (forkReady ? 0.15 * forkPct : 0) + 0.20 * recency;
   return Math.round(raw / (forkReady ? 1 : 0.85));
 }
@@ -198,8 +199,8 @@ function mapAsset(row, extras = {}) {
     forkGain: extras.forkGain ?? null,
     anomaly: Boolean(extras.anomaly),
     score: extras.score ?? null,
-    ageDays: extras.ageDays ?? 0,
-    pushDays: extras.pushDays ?? 0,
+    ageDays: extras.ageDays == null ? null : Math.round(extras.ageDays),
+    pushDays: extras.pushDays == null ? null : Math.round(extras.pushDays),
     rank: extras.rank,
     sampledAt: extras.sampledAt || null
   };
@@ -466,13 +467,13 @@ export async function getCatalogRankings(type, query = {}, options = {}) {
     const independentWebsite = type === 'website' && String(row.source_query || '').startsWith('website-source:');
     const stats = statsById.get(String(row.id));
     const resolved = stats || { gain: null, prevGain: null, growthCoverage: { knownDays: 0, expectedDays: DAYS[period] || 7 }, anomaly: false };
-    const ageDays = Math.max(0, (now - new Date(row.created_at).getTime()) / 86400000);
-    const pushDays = Math.max(0, (now - new Date(row.pushed_at).getTime()) / 86400000);
-    if (board === 'new' && (ageDays > 90 || (asNumber(row.stars) || 0) < 5)) continue;
+    const ageDays = elapsedDays(row.created_at, now);
+    const pushDays = elapsedDays(row.pushed_at, now);
+    if (board === 'new' && (ageDays == null || ageDays > 90 || (asNumber(row.stars) || 0) < 5)) continue;
     scored.push(mapAsset(row, {
       ...resolved,
-      ageDays: Math.round(ageDays),
-      pushDays: Math.round(pushDays),
+      ageDays: ageDays == null ? null : Math.round(ageDays),
+      pushDays: pushDays == null ? null : Math.round(pushDays),
       topicFrequency,
       similarCount: similars.get(row.cluster_id) || 0,
       sampledAt: endpoint.toISOString()
@@ -621,8 +622,8 @@ export async function getCatalogItem(type, id) {
         gain: item?.gain ?? null,
         prevGain: item?.prevGain ?? null,
         score: item?.score ?? null,
-        ageDays: item?.ageDays ?? 0,
-        pushDays: item?.pushDays ?? 0,
+        ageDays: item?.ageDays ?? null,
+        pushDays: item?.pushDays ?? null,
         aiEvidence: aiEvidence(repo),
         url: `https://github.com/${repo.full_name}`,
         provenance: resourceProvenance({ type: 'github-repo', url: `https://github.com/${repo.full_name}`, last_fetched_at: asIso(repo.updated_at) }, {}, dataSource() === 'demo')
@@ -643,8 +644,8 @@ export async function getCatalogItem(type, id) {
     relatedRows(row),
     many('SELECT day, star_created, stars FROM asset_daily WHERE asset_id = $1 ORDER BY day', [row.id])
   ]);
-  const ageDays = Math.round(Math.max(0, (endpoint - new Date(row.created_at)) / 86400000));
-  const pushDays = Math.round(Math.max(0, (endpoint - new Date(row.pushed_at)) / 86400000));
+  const ageDays = elapsedDays(row.created_at, endpoint);
+  const pushDays = elapsedDays(row.pushed_at, endpoint);
   return {
     ...mapAsset(row, {
       ...week,

@@ -218,3 +218,18 @@ test('discovery search text does not contaminate purpose or substring-match unre
   assert.equal(classify({ full_name: 'qa/server', description: 'A database client' }).useCase, 'database');
   assert.ok(!expandSearch('builds').types.includes('components'));
 });
+
+
+test('resources without source dates keep unknown age and cannot enter Newcomers', async () => {
+ const row=await one("SELECT id,slug,created_at,pushed_at FROM assets WHERE type='components' AND active=TRUE ORDER BY id LIMIT 1");
+ try {
+  await query('UPDATE assets SET created_at=NULL,pushed_at=NULL WHERE id=$1',[row.id]);
+  const ranking=await getCatalogRankings('components',{board:'stars',limit:200});
+  const resource=ranking.items.find(item=>item.id===String(row.id));
+  assert.ok(resource);assert.equal(resource.ageDays,null);assert.equal(resource.pushDays,null);
+  const detail=await getCatalogItem('components',row.slug);
+  assert.equal(detail.ageDays,null);assert.equal(detail.pushDays,null);
+  const fresh=await getCatalogRankings('components',{board:'new',limit:200});
+  assert.equal(fresh.items.some(item=>item.id===String(row.id)),false);
+ } finally {await query('UPDATE assets SET created_at=$2,pushed_at=$3 WHERE id=$1',[row.id,row.created_at,row.pushed_at]);}
+});
