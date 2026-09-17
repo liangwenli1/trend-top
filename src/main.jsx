@@ -353,16 +353,16 @@ function SubscribeCallout({l,t,data,board,type='github-repo'}){
   const zh=l==='zh';
   const viewer=React.useContext(AuthContext);
   const proActive=useProStatus(viewer);
-  const steps=zh?['选择六类开源内容','选择榜单、语言与主题','设定发送时间']:['Choose from six content types','Pick boards, languages, and topics','Set your delivery time'];
+  const steps=zh?['每日开源热点摘要','关注项目变化','保存筛选提醒']:['Daily open-source digest','Watchlist changes','Saved-search alerts'];
   return <section className="subscribe-cta" id="subscribe" aria-labelledby="subscribe-title">
     <div className="subscribe-cta-inner">
       <div className="subscribe-cta-copy">
         <p className="subscribe-cta-kicker">04 / {zh?'每日摘要':'THE DAILY DIGEST'}</p>
         <h2 id="subscribe-title">{zh?'关掉网页，也能跟上变化。':'Keep up, without keeping a tab open.'}</h2>
-        <p className="subscribe-cta-description">{zh?'选择你关注的开源内容，每天在方便的时间收到带图表的摘要。':'Follow the open-source content you care about in one concise, chart-rich daily email.'}</p>
+        <p className="subscribe-cta-description">{zh?'用简洁的摘要与提醒，持续关注重要的开源变化。':'Keep up with the open-source changes that matter through concise digests and alerts.'}</p>
       </div>
       <div className="subscribe-cta-panel">
-        <p className="subscribe-cta-panel-label">{zh?'由你决定收到什么':'MAKE IT YOURS'}</p>
+        <p className="subscribe-cta-panel-label">{zh?'PRO 带来的价值':'INCLUDED WITH PRO'}</p>
         <ol className="subscribe-cta-steps">{steps.map((step,index)=><li key={step}><span>{String(index+1).padStart(2,'0')}</span>{step}</li>)}</ol>
         <a className="primary subscribe-cta-button" href={digestEntryPath(l,type,board)} onClick={event=>{if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();updatePath(digestEntryPath(l,type,board));}}>{proActive?(zh?'管理邮件推送':'Manage email delivery'):(zh?'开始使用':'Get started')}<span aria-hidden="true">↗</span></a>
         <p className="subscribe-cta-fineprint">{zh?'Pro 功能；每天最多一封，随时可以暂停或停止邮件推送。':'Included with Pro. At most one email per day; pause or stop emails anytime.'}</p>
