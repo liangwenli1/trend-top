@@ -20,10 +20,10 @@ export function ResourceGuide({ item, l }) {
     {item.type==='components'&&!previewUrl&&<p>{zh?'效果预览可在作者网站查看。':'See the author’s website for a visual preview.'}</p>}
   </section>;
 }
-export function ComponentGrid({ items, l, href }) {
+export function ComponentGrid({ items, l, href, topicHref }) {
   const zh=l==='zh';
   return <div className="component-grid">{items.map(item=>{
     const preview=item.rankingSignals?.preview, url=preview?.permissionEvidence&&preview.attribution?safeSourceUrl(preview.url):null;
-    return <article className="component-resource-card" key={item.id}>{url?<figure><img src={url} alt={item.full_name} loading="lazy" referrerPolicy="no-referrer"/><figcaption>{preview.attribution}</figcaption></figure>:<div className="component-preview-empty">{zh?'查看作者演示':'View author demo'}</div>}<h3><a href={href(item)}>{item.full_name}</a></h3><p>{item.description}</p><div className="repo-tags">{item.topics?.slice(0,3).map(topic=><span className="source-tag" key={topic}>{topic}</span>)}</div><a className="ghost inline" href={safeSourceUrl(item.websiteUrl || item.url) || href(item)} target="_blank" rel="noopener noreferrer">{zh?'打开作者来源':'Open author source'}</a></article>;
+    return <article className="component-resource-card" key={item.id}>{url?<figure><img src={url} alt={item.full_name} loading="lazy" referrerPolicy="no-referrer"/><figcaption>{preview.attribution}</figcaption></figure>:<div className="component-preview-empty">{zh?'查看作者演示':'View author demo'}</div>}<h3><a href={href(item)}>{item.full_name}</a></h3><p>{item.description}</p><div className="repo-tags">{item.topics?.slice(0,3).map(topic=><a className="source-tag" key={topic} href={topicHref(topic)}>{topic}</a>)}</div><a className="ghost inline" href={safeSourceUrl(item.websiteUrl || item.url) || href(item)} target="_blank" rel="noopener noreferrer">{zh?'打开作者来源':'Open author source'}</a></article>;
   })}</div>;
 }
