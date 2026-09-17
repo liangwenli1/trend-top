@@ -1056,3 +1056,12 @@ button.tag-btn{font:inherit;font-size:13px;font-weight:650;line-height:1.2;appea
 .skill-result-list li small{display:block;color:var(--muted,#666);overflow-wrap:anywhere}
 
 .filters.filters-primary .design-select-trigger{gap:8px;padding-inline:12px;font-size:15px}
+
+/* Keep the saved-filter action with the heading, outside the filter grid. */
+.ranking-heading-actions{display:flex;align-items:center;justify-content:flex-end;gap:16px;flex-wrap:wrap;flex-shrink:0}
+.ranking-heading-actions .section-count{white-space:nowrap}
+.save-search-control{position:relative}
+.save-search-control>.primary{min-height:44px;padding:10px 18px;font-size:14px;background:#111;border-color:#111;color:#fff}
+.save-search-control>.saved-search-form{position:absolute;inset-inline-end:0;inset-block-start:100%;z-index:12;width:min(480px,calc(100vw - 32px));max-height:70vh;overflow:auto;background:var(--surface,#fff);text-align:start;box-shadow:0 12px 32px rgba(0,0,0,.12)}
+.save-search-control>[role="status"]{position:absolute;inset-inline-end:0;inset-block-start:100%;z-index:12;width:min(360px,calc(100vw - 32px));padding:16px;border:1px solid var(--line,#ddd);background:var(--surface,#fff);text-align:start}
+@media(max-width:700px){.ranking-page .section-heading{align-items:flex-start;flex-wrap:wrap;gap:16px}.ranking-heading-actions{width:100%;justify-content:space-between}.ranking-heading-actions .section-count{display:inline}.save-search-control{margin-inline-start:auto}}
