@@ -1,4 +1,4 @@
-import { SiteSettingsProvider, useSiteSettings, SupportEmail, SupportContact } from './site-contact.jsx';
+import { SiteSettingsProvider, useSiteSettings, SupportContact } from './site-contact.jsx';
 import React,{useEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {SearchInput,DesignSelect,TopicMultiSelect,TopicDialog} from './components.jsx';
@@ -143,7 +143,6 @@ function AccountMenu({viewer,l,page,navigate}){
     <button ref={triggerRef} type="button" className="account-menu-trigger" aria-haspopup="menu" aria-expanded={open} aria-label={`${zh?'账户菜单':'Account menu'}: ${viewer.email}`} onClick={()=>setOpen(value=>!value)}><span aria-hidden="true">{viewer.email.slice(0,1).toUpperCase()}</span></button>
     {open&&<div className="account-menu-panel" role="menu" ref={panelRef} onKeyDown={moveFocus}>
       <div className="account-menu-identity"><span>{zh?'已登录':'Signed in'}</span><strong title={viewer.email}>{viewer.email}</strong></div>
-      <a role="menuitem" href={`/${l}/account`} onClick={event=>go(event,`/${l}/account`)}>{zh?'账户概览':'Account overview'}</a>
       <a role="menuitem" href={`/${l}/account/watch`} onClick={event=>go(event,`/${l}/account/watch`)}>{zh?'关注列表':'Watchlist'}</a>
       <a role="menuitem" href={`/${l}/account/subscription`} onClick={event=>go(event,`/${l}/account/subscription`)}>{zh?'套餐与账单':'Plan & billing'}</a>
       <a role="menuitem" href={`/${l}/account/delivery`} onClick={event=>go(event,`/${l}/account/delivery`)}>{zh?'邮件推送设置':'Email delivery settings'}</a>
@@ -268,11 +267,12 @@ function SiteFooter({l,t,onLanguageSwitch}){
     updatePath(path,query);
   };
   const contactLinks=[];
+  if(siteSettings?.contact?.email)contactLinks.push({name:'email',href:`mailto:${siteSettings.contact.email}`,title:`${SOCIAL_ICONS.email[l]}: ${siteSettings.contact.email}`});
 
   for(const [name,url] of Object.entries(siteSettings?.social||{})){if(url&&SOCIAL_ICONS[name])contactLinks.push({name,href:url,title:SOCIAL_ICONS[name][l],external:true})}
   const languages=[['en','English'],['zh','简体中文']];
   return <footer className="footer site-footer">
-    <div className="footer-main"><div className="footer-identity"><strong className="footer-wordmark">Trend Top</strong><p className="footer-tagline">{l==='zh'?'发现开源世界的新动向。':'Find what is moving in open source.'}</p><p className="footer-support"><span>{l==='zh'?'客户支持':'Customer support'}</span><SupportEmail/></p>{contactLinks.length>0&&<ul className="footer-social" aria-label={l==='zh'?'联系方式':'Contact'}>{contactLinks.map(link=><li key={link.name}><a href={link.href} title={link.title} aria-label={link.title} {...(link.external?{target:'_blank',rel:'noreferrer'}:{})}><SocialIcon name={link.name}/></a></li>)}</ul>}</div><FooterNetwork l={l} navigate={navigate}/></div>
+    <div className="footer-main"><div className="footer-identity"><strong className="footer-wordmark">Trend Top</strong><p className="footer-tagline">{l==='zh'?'发现开源世界的新动向。':'Find what is moving in open source.'}</p>{contactLinks.length>0&&<ul className="footer-social" aria-label={l==='zh'?'联系方式':'Contact'}>{contactLinks.map(link=><li key={link.name}><a href={link.href} title={link.title} aria-label={link.title} {...(link.external?{target:'_blank',rel:'noreferrer'}:{})}><SocialIcon name={link.name}/></a></li>)}</ul>}</div><FooterNetwork l={l} navigate={navigate}/></div>
     <div className="footer-bottom"><div className="footer-bottom-copy"><p>{t.foot}</p><nav className="footer-legal" aria-label={l==='zh'?'法律信息':'Legal'}><a href={`/${l}/privacy`} onClick={e=>navigate(e,`/${l}/privacy`)}>{l==='zh'?'隐私':'Privacy'}</a><a href={`/${l}/terms`} onClick={e=>navigate(e,`/${l}/terms`)}>{l==='zh'?'条款':'Terms'}</a><a href={`/${l}/privacy#cookies`}>{l==='zh'?'Cookie 说明':'Cookies'}</a></nav></div><LanguageMenu l={l} languages={languages} onSwitch={onLanguageSwitch}/></div>
   </footer>;
 }
