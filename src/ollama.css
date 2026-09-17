@@ -1022,6 +1022,8 @@ button.tag-btn{font:inherit;font-size:13px;font-weight:650;line-height:1.2;appea
 .component-resource-card h3 a { color:inherit; text-decoration:none; }
 .component-resource-card h3 a:hover { text-decoration:underline; }
 .component-resource-card .repo-tags { display:flex; flex-wrap:wrap; gap:6px; margin:0; }
+.component-resource-card .source-tag { display:inline-flex; align-items:center; min-height:27px; padding:5px 9px; border:1px solid #d8d8d8; background:#fff; color:#333; font-size:12px; font-weight:560; line-height:1.2; text-decoration:none; overflow-wrap:anywhere; }
+.component-resource-card .source-tag:hover { border-color:#315fd9; color:#315fd9; }
 .component-resource-card>.ghost { display:inline-flex; align-items:center; align-self:flex-start; min-height:44px; margin-block-start:auto; padding:10px 14px; white-space:normal; text-decoration:none; }
 .component-resource-card p { margin:0; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
 .component-resource-card figure { margin:0; }
