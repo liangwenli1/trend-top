@@ -57,25 +57,33 @@ const emptyCode = () => Array(6).fill('');
 
 function EmailCodeInput({ digits, onChange, zh, disabled = false }) {
   const inputs = useRef([]);
-  useEffect(() => { if (!disabled) inputs.current[0]?.focus(); }, [disabled]);
+  const nextFocus = useRef(0);
+  useEffect(() => {
+    if (!disabled && nextFocus.current != null) {
+      inputs.current[nextFocus.current]?.focus();
+      nextFocus.current = null;
+    }
+  }, [disabled, digits]);
   const updateDigits = (start, text) => {
     const values = String(text).replace(/\D/g, '');
     if (!values) return;
     const first = values.length >= 6 ? 0 : start;
+    nextFocus.current = Math.min(first + values.length, 5);
     onChange(previous => {
       const next = [...previous];
       for (let offset = 0; offset < values.length && first + offset < 6; offset++) next[first + offset] = values[offset];
       return next;
     });
-    inputs.current[Math.min(first + values.length, 5)]?.focus();
   };
-  const clearDigit = index => onChange(previous => previous.map((value, position) => position === index ? '' : value));
+  const clearDigit = index => {
+    nextFocus.current = index;
+    onChange(previous => previous.map((value, position) => position === index ? '' : value));
+  };
   const keyDown = (event, index) => {
     if (event.key === 'Backspace') {
       event.preventDefault();
       const target = digits[index] ? index : Math.max(0, index - 1);
       clearDigit(target);
-      inputs.current[target]?.focus();
     } else if (event.key === 'Delete') {
       event.preventDefault();
       clearDigit(index);

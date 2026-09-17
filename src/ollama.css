@@ -1097,3 +1097,5 @@ button.tag-btn{font:inherit;font-size:13px;font-weight:650;line-height:1.2;appea
 .resource-family-link:hover{border-color:var(--accent,#315fd9)}
 @media(max-width:620px){.resource-family-list{grid-template-columns:1fr}.resource-command-box{padding:12px;gap:10px}}
 @media(prefers-reduced-motion:reduce){.resource-copy{transition:none}}
+
+.resource-command-box .resource-instruction code{font:inherit}
