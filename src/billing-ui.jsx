@@ -17,53 +17,79 @@ const money = (amount, currency, locale) => amount ? new Intl.NumberFormat(local
 
 export function PricingPage({ l, user, navigate }) {
   const zh = l === 'zh';
-  const [data, setData] = useState(() => pricingCache.get(l)), [message, setMessage] = useState(''), [busy, setBusy] = useState('');
-  const [retry, setRetry] = useState(0);
+  const [data, setData] = useState(() => pricingCache.get(l)), [message, setMessage] = useState(''), [busy, setBusy] = useState(false);
+  const [retry, setRetry] = useState(0), [accessRetry, setAccessRetry] = useState(0);
   const [cycle, setCycle] = useState(new URLSearchParams(location.search).get('cycle') === 'year' ? 'year' : 'month');
-  const [accepted, setAccepted] = useState(false);
+  const [review, setReview] = useState(false), [accepted, setAccepted] = useState(false);
+  const [accessState, setAccessState] = useState({ userId: null, active: null, error: '' });
   useEffect(() => {
     let live = true;
     setData(pricingCache.get(l)); setMessage('');
     pricingCache.load(l).then(value => { if (live) setData(value); }).catch(error => { if (live) setMessage(error.message); });
     return () => { live = false; };
   }, [l, retry]);
-  const checkout = async plan => {
-    if (!user) { navigate(loginUrl(l, location.pathname+location.search)); return; }
-    setBusy(plan.key); setMessage('');
-    try { const result = await post('/api/billing/checkout', { planKey: plan.key, type:new URLSearchParams(location.search).get('type'),board:new URLSearchParams(location.search).get('board') }); location.assign(result.checkoutUrl); }
-    catch (error) { setMessage(error.message); setBusy(''); }
+  useEffect(() => {
+    if (!user) return;
+    let live = true;
+    setAccessState({ userId: user.id, active: null, error: '' });
+    api('/api/billing/access').then(value => { if (live) setAccessState({ userId: user.id, active: value.active === true, error: '' }); }).catch(error => { if (live) setAccessState({ userId: user.id, active: null, error: error.message }); });
+    return () => { live = false; };
+  }, [user?.id, accessRetry]);
+  const access = user && accessState.userId === user.id ? accessState : { active: null, error: '' };
+  const pro = Boolean(user && access.active === true);
+  const checking = user === undefined || Boolean(user && access.active === null && !access.error);
+  const selected = data?.plans.find(plan => plan.interval === cycle);
+  const price = selected && money(selected.price, selected.currency, l);
+  const available = Boolean(selected?.available && price);
+  const billingPath = '/' + l + '/account/subscription';
+  const returnPath = () => {
+    const query = new URLSearchParams(location.search); query.set('cycle', cycle);
+    return location.pathname + '?' + query;
   };
-  const selected = data?.plans.find(plan => plan.interval === cycle) || data?.plans[0];
-  const benefits = zh ? [
-    ['每日摘要', '把值得关注的开源变化送到邮箱。'],
-    ['项目追踪', '持续关注你在意的项目变化。'],
-    ['筛选提醒', '为保存的筛选接收新条目与增长提醒。']
-  ] : [
-    ['Daily digest', 'Open-source highlights delivered to your inbox.'],
-    ['Project tracking', 'Keep up with changes in the projects you follow.'],
-    ['Saved-search alerts', 'New entries and growth alerts for your saved filters.']
+  const begin = () => {
+    if (!user) { navigate(loginUrl(l, returnPath())); return; }
+    if (pro) { navigate(billingPath); return; }
+    setMessage(''); setAccepted(false); setReview(true);
+  };
+  const checkout = async () => {
+    if (!available || !accepted || !user || access.active !== false || busy) return;
+    setBusy(true); setMessage('');
+    const context = new URLSearchParams(location.search);
+    try { const result = await post('/api/billing/checkout', { planKey: selected.key, type: context.get('type'), board: context.get('board') }); location.assign(result.checkoutUrl); }
+    catch (error) { setMessage(error.message); setBusy(false); }
+  };
+  const freeFeatures = zh ? ['浏览趋势与排行', '探索项目与来源', '查看公开数据与对比'] : ['Browse trends and rankings', 'Explore projects and sources', 'View public data and comparisons'];
+  const faqs = [
+    { title: zh ? '什么时候开始收到邮件？' : 'When will I receive emails?', body: zh ? 'Creem 确认付款后，Pro 权益在账户中启用。在设置中的邮件偏好开启摘要，每天最多一封；没有匹配更新时不发送。' : 'Pro starts after Creem confirms payment. Enable your digest in Settings → Email preferences. At most one email per day; no matching updates means no email.' },
+    { title: zh ? '如何取消续订？' : 'How do I cancel renewal?', body: zh ? '在订阅与账单中取消付费续订，确认后不再续费，Pro 保留至当前周期结束。在设置中暂停或停止邮件只影响推送，不会取消付费续订。' : 'Cancel paid renewal in Subscribe & billing. Once confirmed, renewal stops and Pro remains until the current period ends. Pausing or stopping emails in Settings does not cancel paid renewal.', href: '/' + l + '/terms#cancellation', link: zh ? '取消续订说明' : 'Cancellation policy' },
+    { title: zh ? '如何申请退款？' : 'How do I request a refund?', body: zh ? '首次扣款后 7 天内，如服务未按描述提供，可在 订阅与账单的付款记录中申请退款，或联系支持邮箱。我们在 3 个工作日内答复；批准后由 Creem 原路退款。退款与取消续订分别处理。' : 'Within 7 days of your first charge, request a refund if the service was not provided as described, from Payment history in Subscribe & billing or by contacting support. We reply within 3 business days. Approved refunds return through Creem; renewal cancellation is separate.', href: '/' + l + '/terms#refunds', link: zh ? '完整退款规则' : 'Full refund policy' }
   ];
-  return <main className="billing-page pricing-page"><header className="billing-hero"><p>01 / PRO</p><h1>Trend Top Pro</h1><p>{zh ? '每日摘要邮件是 Pro 功能。按月或按年订阅，自动续费，随时可在账户中取消。' : 'The daily digest email is a Pro feature. Subscribe monthly or yearly; plans renew automatically and can be cancelled from your account at any time.'}</p></header>
-    <div className="pricing-layout"><article className="pricing-card pricing-single" aria-busy={!data && !message}>
-      <p className="billing-kicker">PRO / ACCESS</p><h2>Trend Top Pro</h2>
-      <div className="billing-cycle" aria-label={zh ? '计费周期' : 'Billing cycle'}>{['month','year'].map(interval => <button key={interval} type="button" aria-pressed={cycle === interval} onClick={() => setCycle(interval)}>{interval === 'year' ? (zh ? '年付' : 'Yearly') : (zh ? '月付' : 'Monthly')}</button>)}</div>
-      <div className={`billing-price${selected?.price ? '' : ' billing-price-status'}`} role="status">{money(selected?.price, selected?.currency, l) || (!data ? (message ? (zh ? '价格暂不可用' : 'Pricing is temporarily unavailable') : (zh ? '正在加载价格…' : 'Loading price…')) : (zh ? 'Pro 暂未开放' : 'Pro is not available yet'))}<small>{selected?.price ? ` / ${cycle === 'year' ? (zh ? '年' : 'year') : (zh ? '月' : 'month')}` : ''}</small></div>
-      <ul>{(selected?.features?.[l] || PRO_FEATURES[l] || PRO_FEATURES.en).map(feature => <li key={feature}>{feature}</li>)}</ul>
-      {selected?.available && <><label className="billing-consent"><input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)}/><span>{zh ? '我已阅读并同意' : 'I have read and agree to the'} <a href={`/${l}/terms`}>{zh ? '服务条款' : 'Terms of Service'}</a> {zh ? '和' : 'and'} <a href={`/${l}/terms#cancellation`}>{zh ? '取消与退款规则' : 'cancellation and refund policy'}</a>{zh ? '。' : '.'}</span></label>
-      <button type="button" className="primary" disabled={Boolean(busy) || (Boolean(user) && !accepted)} onClick={() => checkout(selected)}>{busy === selected.key ? '…' : user ? (zh ? '使用 Creem 订阅' : 'Subscribe with Creem') : (zh ? '登录后订阅' : 'Sign in to subscribe')}</button></>}
-      {!data && message && <button type="button" className="ghost" onClick={() => setRetry(value => value + 1)}>{zh ? '重新加载价格' : 'Retry loading price'}</button>}
-      {data && !selected?.available && selected?.price && <p className="billing-renewal">{zh ? 'Pro 订阅暂未开放。' : 'Pro subscriptions are not available yet.'}</p>}
-    </article>
-    <section className="pricing-benefits" aria-labelledby="pricing-benefits-title"><h2 id="pricing-benefits-title">{zh ? '订阅 Pro 能获得什么' : 'What Pro gives you'}</h2><dl>{benefits.map(([title, body]) => <div key={title}><dt>{title}</dt><dd>{body}</dd></div>)}</dl></section></div>
-    <p className="billing-renewal">{zh ? '结账前会显示最终金额。取消 Pro 后，摘要会在当前付费周期结束时停止；账户和网站浏览不受影响。' : 'The final amount is shown before checkout. If you cancel Pro, the digest stops at the end of the paid period; your account and site access are unaffected.'}</p>
-    <p className="billing-renewal">{zh ? '付款由 Creem 作为登记商户（merchant of record）处理；收据由 Creem 发送，退款请求见服务条款。' : 'Payments are processed by Creem as the merchant of record. Creem issues the receipt; refund requests are described in the Terms of Service.'}</p>
-    <section className="pricing-service-notes" aria-labelledby="pricing-service-title"><h2 id="pricing-service-title">{zh ? '购买与使用' : 'Purchase and delivery'}</h2><dl>
-      <div><dt>{zh ? '购买后立即启用' : 'Access after payment'}</dt><dd>{zh ? 'Creem 确认付款后，Pro 权益在你的账户中启用。前往邮件推送设置选择内容、时间与时区；摘要每天最多一封，没有匹配更新时不发送。' : 'Pro access starts in your account after Creem confirms payment. Choose content, hour and time zone in Email delivery settings. At most one digest per day; no matching updates means no email.'}</dd></div>
-      <div><dt>{zh ? '自动续费，可随时取消' : 'Automatic renewal, cancel anytime'}</dt><dd>{zh ? '按所选月付或年付周期续费。在订阅与账单中取消付费续订后，Pro 保留至当前周期结束。停止邮件只影响推送，不会取消续订。' : 'Renewal follows your monthly or yearly cycle. Cancel paid renewal in Subscribe & billing; Pro remains until the current period ends. Stopping emails does not cancel renewal.'}</dd></div>
-      <div><dt>{zh ? '退款与客服' : 'Refunds and support'}</dt><dd>{zh ? '首次扣款后 7 天内，如服务未按描述提供，可在订阅与账单申请退款或联系我们。税费（如适用）及最终总额会在 Creem 结账时显示。' : 'Within 7 days of your first charge, request a refund if the service was not provided as described, from Subscribe & billing or by contacting us. Applicable taxes and the final total are shown at Creem checkout.'}</dd></div>
-    </dl><nav className="pricing-policy-links" aria-label={zh ? '购买条款' : 'Purchase policies'}><a href={`/${l}/terms`}>{zh ? '服务条款' : 'Terms of Service'}</a><a href={`/${l}/terms#cancellation`}>{zh ? '取消续订' : 'Cancellation'}</a><a href={`/${l}/terms#refunds`}>{zh ? '退款规则' : 'Refund policy'}</a><a href={`/${l}/privacy`}>{zh ? '隐私政策' : 'Privacy Policy'}</a></nav></section>
-    <SupportContact l={l}/>
-    {message && <p className="form-message" role="status">{message}</p>}
+  return <main className="billing-page pricing-page"><header className="billing-hero"><p>01 / {zh ? '套餐' : 'PLANS'}</p><h1>{zh ? '发现开源新动向。' : 'Stay ahead of open source.'}</h1><p>{zh ? '免费探索，用 Pro 持续关注重要变化。' : 'Explore for free. Follow what matters with Pro.'}</p></header>
+    <div className="pricing-layout pricing-plans">
+      <article className="pricing-card pricing-free"><header className="pricing-plan-heading"><h2>Free</h2>{user && access.active === false && <span className="pricing-current">{zh ? '当前套餐' : 'Current plan'}</span>}</header><p className="pricing-audience">{zh ? '按自己的节奏探索项目。' : 'Explore at your own pace.'}</p>
+        <div className="pricing-price-area"><div className="billing-price">0 <small>{zh ? '/ 免费探索' : '/ free to explore'}</small></div><p className="pricing-price-note">{zh ? '浏览网站无需购买 Pro。' : 'No Pro subscription needed to browse.'}</p></div>
+        <ul>{freeFeatures.map(feature => <li key={feature}>{feature}</li>)}</ul>
+        <div className="pricing-plan-action"><a className="primary pricing-action" href={'/' + l + '/home#types'}>{zh ? '探索项目' : 'Explore projects'}</a><p>{zh ? '公开榜单与项目详情，随时浏览。' : 'Public boards and project details, anytime.'}</p></div>
+      </article>
+      <article className="pricing-card pricing-pro" aria-busy={!data && !message}><header className="pricing-plan-heading"><h2>Pro</h2>{pro && <span className="pricing-current pricing-current-pro">{zh ? '当前套餐' : 'Current plan'}</span>}</header><p className="pricing-audience">{zh ? '持续关注重要的项目变化。' : 'Keep up with what matters.'}</p>
+        <div className="pricing-price-area"><div className="billing-cycle" role="group" aria-label={zh ? '计费周期' : 'Billing cycle'}>{['month','year'].map(interval => <button key={interval} type="button" disabled={busy} aria-pressed={cycle === interval} onClick={() => { setCycle(interval); setAccepted(false); setMessage(''); }}>{interval === 'year' ? (zh ? '年付' : 'Yearly') : (zh ? '月付' : 'Monthly')}</button>)}</div>
+        <div className={'billing-price' + (price ? '' : ' billing-price-status')} role="status">{price || (!data ? (message ? (zh ? '价格暂不可用' : 'Price unavailable') : (zh ? '正在加载价格…' : 'Loading price…')) : (zh ? '此周期暂未开放' : 'This cycle is not available'))}{price && <small>{cycle === 'year' ? (zh ? ' / 年' : ' / year') : (zh ? ' / 月' : ' / month')}</small>}</div>
+        <p className="pricing-price-note">{price ? (cycle === 'year' ? (zh ? '按年扣款，显示全年总额。' : 'Billed yearly. Full annual amount shown.') : (zh ? '按月扣款。' : 'Billed monthly.')) : '\u00a0'}</p></div>
+        <ul>{(PRO_FEATURES[l] || PRO_FEATURES.en).map(feature => <li key={feature}>{feature}</li>)}</ul>
+        <div className="pricing-plan-action">{pro ? <a className="primary pricing-action" href={billingPath}>{zh ? '管理订阅' : 'Manage subscription'}</a> : access.error ? <button className="primary pricing-action" type="button" onClick={() => setAccessRetry(value => value + 1)}>{zh ? '重新确认套餐' : 'Retry plan check'}</button> : !data && message ? <button className="primary pricing-action" type="button" onClick={() => setRetry(value => value + 1)}>{zh ? '重新加载价格' : 'Retry loading price'}</button> : <button type="button" className="primary pricing-action" disabled={checking || !available} onClick={begin}>{checking ? (zh ? '确认套餐中…' : 'Checking plan…') : available ? (zh ? '开始使用' : 'Get started') : (zh ? '暂不可购买' : 'Not available')}</button>}
+        <p>{zh ? '自动续费，可随时取消续订。' : 'Renews automatically. Cancel renewal anytime.'}</p></div>
+      </article>
+    </div>
+    {(message && !review || access.error) && <p className="form-message" role="alert">{access.error || message}</p>}
+    <p className="pricing-payment-note">{zh ? '付款和收据由 Creem 处理。币种、适用税费与最终总额会在付款前显示。' : 'Payments and receipts are handled by Creem. Currency, applicable taxes and the final total are shown before payment.'}</p>
+    <section className="pricing-faq" aria-labelledby="pricing-faq-title"><h2 id="pricing-faq-title">{zh ? '常见问题' : 'A few things to know'}</h2>{faqs.map(faq => <details key={faq.title}><summary>{faq.title}<span aria-hidden="true">+</span></summary><p>{faq.body}{faq.href && <> <a href={faq.href}>{faq.link}</a></>}</p></details>)}</section>
+    <nav className="pricing-policy-links" aria-label={zh ? '购买条款' : 'Purchase policies'}><a href={'/' + l + '/terms'}>{zh ? '服务条款' : 'Terms of Service'}</a><a href={'/' + l + '/terms#cancellation'}>{zh ? '取消续订' : 'Cancellation'}</a><a href={'/' + l + '/terms#refunds'}>{zh ? '退款规则' : 'Refund policy'}</a><a href={'/' + l + '/privacy'}>{zh ? '隐私政策' : 'Privacy Policy'}</a></nav><SupportContact l={l}/>
+    <Dialog.Root open={review} onOpenChange={open => { if (!busy) setReview(open); }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content billing-confirm pricing-review"><Dialog.Title>{zh ? '确认 Pro 订阅' : 'Review your Pro subscription'}</Dialog.Title><Dialog.Description>{zh ? '确认金额与周期后，前往 Creem 完成付款。' : 'Review the price and cycle, then continue to Creem to pay.'}</Dialog.Description>
+      <dl className="pricing-review-facts"><div><dt>{zh ? '套餐' : 'Plan'}</dt><dd>Pro {cycle === 'year' ? (zh ? '年付' : 'Yearly') : (zh ? '月付' : 'Monthly')}</dd></div><div><dt>{zh ? '订阅金额' : 'Subscription price'}</dt><dd>{price} {selected?.currency}<small>{cycle === 'year' ? (zh ? ' / 年' : ' / year') : (zh ? ' / 月' : ' / month')}</small></dd></div></dl>
+      <p className="pricing-review-note">{zh ? '自动续费，可在订阅与账单取消续订。适用税费与最终总额以 Creem 付款页为准。' : 'Renews automatically. Cancel in Subscribe & billing. Applicable taxes and the final total are confirmed at Creem checkout.'}</p>
+      <label className="billing-consent"><input type="checkbox" checked={accepted} disabled={busy} onChange={event => setAccepted(event.target.checked)}/><span>{zh ? '我已阅读并同意' : 'I have read and agree to the'} <a href={'/' + l + '/terms'}>{zh ? '服务条款' : 'Terms of Service'}</a> {zh ? '和' : 'and'} <a href={'/' + l + '/terms#refunds'}>{zh ? '取消与退款规则' : 'cancellation and refund policy'}</a>{zh ? '。' : '.'}</span></label>
+      <div className="billing-actions"><Dialog.Close className="ghost" disabled={busy}>{zh ? '返回' : 'Back'}</Dialog.Close><button type="button" className="primary" disabled={busy || !accepted || !available || access.active !== false} aria-busy={busy} onClick={checkout}>{busy ? (zh ? '正在前往付款…' : 'Opening checkout…') : (zh ? '订阅 Pro' : 'Subscribe to Pro')}</button></div>{message && <p role="alert">{message}</p>}
+    </Dialog.Content></Dialog.Portal></Dialog.Root>
   </main>;
 }
 
