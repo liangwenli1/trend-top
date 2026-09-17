@@ -1,5 +1,5 @@
 import { SupportContact } from './site-contact.jsx';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { loginUrl, safeAccountReturn }  from '../shared/account-paths.js';
 import './billing.css';
@@ -17,6 +17,7 @@ const money = (amount, currency, locale) => amount ? new Intl.NumberFormat(local
 
 export function PricingPage({ l, user, navigate }) {
   const zh = l === 'zh';
+  const startButton = useRef(null);
   const [data, setData] = useState(() => pricingCache.get(l)), [message, setMessage] = useState(''), [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0), [accessRetry, setAccessRetry] = useState(0);
   const [cycle, setCycle] = useState(new URLSearchParams(location.search).get('cycle') === 'year' ? 'year' : 'month');
@@ -76,7 +77,7 @@ export function PricingPage({ l, user, navigate }) {
         <div className={'billing-price' + (price ? '' : ' billing-price-status')} role="status">{price || (!data ? (message ? (zh ? '价格暂不可用' : 'Price unavailable') : (zh ? '正在加载价格…' : 'Loading price…')) : (zh ? '此周期暂未开放' : 'This cycle is not available'))}{price && <small>{cycle === 'year' ? (zh ? ' / 年' : ' / year') : (zh ? ' / 月' : ' / month')}</small>}</div>
         <p className="pricing-price-note">{price ? (cycle === 'year' ? (zh ? '按年扣款，显示全年总额。' : 'Billed yearly. Full annual amount shown.') : (zh ? '按月扣款。' : 'Billed monthly.')) : '\u00a0'}</p></div>
         <ul>{(PRO_FEATURES[l] || PRO_FEATURES.en).map(feature => <li key={feature}>{feature}</li>)}</ul>
-        <div className="pricing-plan-action">{pro ? <a className="primary pricing-action" href={billingPath}>{zh ? '管理订阅' : 'Manage subscription'}</a> : access.error ? <button className="primary pricing-action" type="button" onClick={() => setAccessRetry(value => value + 1)}>{zh ? '重新确认套餐' : 'Retry plan check'}</button> : !data && message ? <button className="primary pricing-action" type="button" onClick={() => setRetry(value => value + 1)}>{zh ? '重新加载价格' : 'Retry loading price'}</button> : <button type="button" className="primary pricing-action" disabled={checking || !available} onClick={begin}>{checking ? (zh ? '确认套餐中…' : 'Checking plan…') : available ? (zh ? '开始使用' : 'Get started') : (zh ? '暂不可购买' : 'Not available')}</button>}
+        <div className="pricing-plan-action">{pro ? <a className="primary pricing-action" href={billingPath}>{zh ? '管理订阅' : 'Manage subscription'}</a> : access.error ? <button className="primary pricing-action" type="button" onClick={() => setAccessRetry(value => value + 1)}>{zh ? '重新确认套餐' : 'Retry plan check'}</button> : !data && message ? <button className="primary pricing-action" type="button" onClick={() => setRetry(value => value + 1)}>{zh ? '重新加载价格' : 'Retry loading price'}</button> : <button ref={startButton} type="button" className="primary pricing-action" disabled={checking || !available} onClick={begin}>{checking ? (zh ? '确认套餐中…' : 'Checking plan…') : available ? (zh ? '开始使用' : 'Get started') : (zh ? '暂不可购买' : 'Not available')}</button>}
         <p>{zh ? '自动续费，可随时取消续订。' : 'Renews automatically. Cancel renewal anytime.'}</p></div>
       </article>
     </div>
@@ -84,7 +85,7 @@ export function PricingPage({ l, user, navigate }) {
     <p className="pricing-payment-note">{zh ? '付款和收据由 Creem 处理。币种、适用税费与最终总额会在付款前显示。' : 'Payments and receipts are handled by Creem. Currency, applicable taxes and the final total are shown before payment.'}</p>
     <section className="pricing-faq" aria-labelledby="pricing-faq-title"><h2 id="pricing-faq-title">{zh ? '常见问题' : 'A few things to know'}</h2>{faqs.map(faq => <details key={faq.title}><summary>{faq.title}<span aria-hidden="true">+</span></summary><p>{faq.body}{faq.href && <> <a href={faq.href}>{faq.link}</a></>}</p></details>)}</section>
     <nav className="pricing-policy-links" aria-label={zh ? '购买条款' : 'Purchase policies'}><a href={'/' + l + '/terms'}>{zh ? '服务条款' : 'Terms of Service'}</a><a href={'/' + l + '/terms#cancellation'}>{zh ? '取消续订' : 'Cancellation'}</a><a href={'/' + l + '/terms#refunds'}>{zh ? '退款规则' : 'Refund policy'}</a><a href={'/' + l + '/privacy'}>{zh ? '隐私政策' : 'Privacy Policy'}</a></nav><SupportContact l={l}/>
-    <Dialog.Root open={review} onOpenChange={open => { if (!busy) setReview(open); }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content billing-confirm pricing-review"><Dialog.Title>{zh ? '确认 Pro 订阅' : 'Review your Pro subscription'}</Dialog.Title><Dialog.Description>{zh ? '确认金额与周期后，前往 Creem 完成付款。' : 'Review the price and cycle, then continue to Creem to pay.'}</Dialog.Description>
+    <Dialog.Root open={review} onOpenChange={open => { if (!busy) setReview(open); }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content billing-confirm pricing-review" onCloseAutoFocus={event => { event.preventDefault(); startButton.current?.focus(); }}><Dialog.Title>{zh ? '确认 Pro 订阅' : 'Review your Pro subscription'}</Dialog.Title><Dialog.Description>{zh ? '确认金额与周期后，前往 Creem 完成付款。' : 'Review the price and cycle, then continue to Creem to pay.'}</Dialog.Description>
       <dl className="pricing-review-facts"><div><dt>{zh ? '套餐' : 'Plan'}</dt><dd>Pro {cycle === 'year' ? (zh ? '年付' : 'Yearly') : (zh ? '月付' : 'Monthly')}</dd></div><div><dt>{zh ? '订阅金额' : 'Subscription price'}</dt><dd>{price} {selected?.currency}<small>{cycle === 'year' ? (zh ? ' / 年' : ' / year') : (zh ? ' / 月' : ' / month')}</small></dd></div></dl>
       <p className="pricing-review-note">{zh ? '自动续费，可在订阅与账单取消续订。适用税费与最终总额以 Creem 付款页为准。' : 'Renews automatically. Cancel in Subscribe & billing. Applicable taxes and the final total are confirmed at Creem checkout.'}</p>
       <label className="billing-consent"><input type="checkbox" checked={accepted} disabled={busy} onChange={event => setAccepted(event.target.checked)}/><span>{zh ? '我已阅读并同意' : 'I have read and agree to the'} <a href={'/' + l + '/terms'}>{zh ? '服务条款' : 'Terms of Service'}</a> {zh ? '和' : 'and'} <a href={'/' + l + '/terms#refunds'}>{zh ? '取消与退款规则' : 'cancellation and refund policy'}</a>{zh ? '。' : '.'}</span></label>
