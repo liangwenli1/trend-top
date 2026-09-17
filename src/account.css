@@ -84,3 +84,5 @@ button.tag-btn:disabled{opacity:.6;cursor:wait}
 .status-badge-active { border-color: #d6e0ff; background: #f2f5ff; color: #315de0; }
 .delivery-upgrade { margin-bottom: 28px; }
 .delivery-upgrade p { margin: 0 0 16px; }
+
+.delivery-upgrade .billing-link { max-inline-size: 100%; margin-inline-end: 0; padding-block: 12px; white-space: normal; overflow-wrap: anywhere; text-align: center; }
