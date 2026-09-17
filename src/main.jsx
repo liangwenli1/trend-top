@@ -145,7 +145,7 @@ function AccountMenu({viewer,l,page,navigate}){
       <a role="menuitem" href={`/${l}/account`} onClick={event=>go(event,`/${l}/account`)}>{zh?'账户设置':'Account settings'}</a>
       <a role="menuitem" href={`/${l}/account/watch`} onClick={event=>go(event,`/${l}/account/watch`)}>{zh?'关注列表':'Watchlist'}</a>
       <a role="menuitem" href={`/${l}/account/subscription`} onClick={event=>go(event,`/${l}/account/subscription`)}>{zh?'套餐与账单':'Plan & billing'}</a>
-      <a role="menuitem" href={digestEntryPath(l)} onClick={event=>go(event,digestEntryPath(l))}>{zh?'邮件推送设置':'Email delivery settings'}</a>
+      <a role="menuitem" href={`/${l}/account/delivery`} onClick={event=>go(event,`/${l}/account/delivery`)}>{zh?'邮件推送设置':'Email delivery settings'}</a>
       {viewer.isAdmin&&<a role="menuitem" href={`/${l}/admin`} onClick={event=>go(event,`/${l}/admin`)}>{zh?'网站管理':'Site administration'}</a>}
       <button type="button" role="menuitem" className="account-menu-signout" onClick={logout}>{zh?'退出登录':'Sign out'}</button>
     </div>}
