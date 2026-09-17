@@ -42,17 +42,19 @@ function pctExpr(orderSql) {
 
 function rankingCte(params, { board, language, languages, topic, topics, q, age, endpoint, useCase, official }) {
   let sql = `
-    WITH filtered AS (
+    WITH base AS (
       SELECT
         r.id, r.full_name, r.description, r.language, r.topics, r.stars, r.forks,
         r.created_at, r.pushed_at, r.updated_at, r.archived, r.deleted, r.source, r.use_case,
         p.gain, p.fork_gain, p.prev_gain, p.anomaly, p.sampled_at,
-        GREATEST(0, COALESCE(EXTRACT(EPOCH FROM ($3::timestamptz - r.created_at)) / 86400, 0)) AS age_days,
-        GREATEST(0, COALESCE(EXTRACT(EPOCH FROM ($3::timestamptz - r.pushed_at)) / 86400, 0)) AS push_days
+        CASE WHEN r.created_at IS NULL THEN NULL ELSE GREATEST(0, EXTRACT(EPOCH FROM ($3::timestamptz - r.created_at)) / 86400) END AS age_days,
+        CASE WHEN r.pushed_at IS NULL THEN NULL ELSE GREATEST(0, EXTRACT(EPOCH FROM ($3::timestamptz - r.pushed_at)) / 86400) END AS push_days
       FROM repos r
       LEFT JOIN period_metrics p
         ON p.repo_id = r.id AND p.period = $2 AND p.source = $1
-      WHERE r.deleted = FALSE AND r.archived = FALSE AND r.active = TRUE AND r.source = $1`;
+      WHERE r.deleted = FALSE AND r.archived = FALSE AND r.active = TRUE AND r.source = $1
+    ), filtered AS (
+      SELECT * FROM base r WHERE TRUE`;
 
   if (useCase) {
     params.push(normalizeUseCase(useCase));
@@ -103,10 +105,10 @@ function rankingCte(params, { board, language, languages, topic, topics, q, age,
   }
   if (age) {
     params.push(Number(age));
-    sql += ` AND GREATEST(0, COALESCE(EXTRACT(EPOCH FROM ($3::timestamptz - r.created_at)) / 86400, 0)) <= $${params.length}`;
+    sql += ` AND r.age_days <= $${params.length}`;
   }
   if (board === 'new') {
-    sql += ` AND GREATEST(0, COALESCE(EXTRACT(EPOCH FROM ($3::timestamptz - r.created_at)) / 86400, 0)) <= 90 AND r.stars >= 20`;
+    sql += ` AND r.age_days <= 90 AND r.stars >= 20`;
   }
   if (board === 'ai') {
     params.push(JSON.stringify(aiTerms));
@@ -126,7 +128,7 @@ function rankingCte(params, { board, language, languages, topic, topics, q, age,
   sql += `
     ),
     valid AS (
-      SELECT * FROM filtered WHERE gain IS NOT NULL AND anomaly IS NOT TRUE
+      SELECT * FROM base WHERE gain IS NOT NULL AND anomaly IS NOT TRUE
     ),
     ranked AS (
       SELECT
@@ -139,7 +141,7 @@ function rankingCte(params, { board, language, languages, topic, topics, q, age,
     meta AS (
       SELECT
         (SELECT COUNT(*)::int FROM filtered) AS candidate_count,
-        (SELECT COUNT(*)::int FROM valid) AS valid_count,
+        (SELECT COUNT(*)::int FROM filtered WHERE gain IS NOT NULL AND anomaly IS NOT TRUE) AS valid_count,
         (SELECT COUNT(*)::int FROM repos WHERE deleted = FALSE AND archived = FALSE AND active = TRUE AND source = $1) AS universe,
         COALESCE((SELECT BOOL_AND(fork_gain IS NOT NULL) FROM valid), FALSE) AS fork_ready
     ),
@@ -153,7 +155,7 @@ function rankingCte(params, { board, language, languages, topic, topics, q, age,
               0.45 * COALESCE(r.star_pct, 0)
               + 0.20 * COALESCE(r.rate_pct, 0)
               + CASE WHEN m.fork_ready THEN 0.15 * COALESCE(r.fork_pct, 0) ELSE 0 END
-              + 0.20 * GREATEST(0, 100 - f.push_days * 8)
+              + 0.20 * CASE WHEN f.push_days IS NULL THEN 0 ELSE GREATEST(0, 100 - f.push_days * 8) END
             ) / CASE WHEN m.fork_ready THEN 1.0 ELSE 0.85 END
           )
         END AS score,
@@ -161,7 +163,7 @@ function rankingCte(params, { board, language, languages, topic, topics, q, age,
         m.candidate_count,
         m.valid_count,
         m.universe
-      FROM filtered f
+      FROM base f
       LEFT JOIN ranked r ON r.id = f.id
       CROSS JOIN meta m
     )`;
@@ -192,8 +194,8 @@ function mapItem(row, rank) {
     forkGain: asNumber(row.fork_gain),
     prevGain: asNumber(row.prev_gain),
     anomaly: Boolean(row.anomaly),
-    ageDays: asNumber(row.age_days) ?? 0,
-    pushDays: asNumber(row.push_days) ?? 0,
+    ageDays: asNumber(row.age_days),
+    pushDays: asNumber(row.push_days),
     score: asNumber(row.score),
     aiEvidence: aiEvidence({ topics, description: row.description }),
     rank,
@@ -294,6 +296,7 @@ export async function getRankings({
     `${cte}
      SELECT s.*, COUNT(*) OVER() AS result_total
      FROM scored s
+     JOIN filtered view_rows ON view_rows.id = s.id
      WHERE ${extra}
      ORDER BY ${orderExpr}
      ${all ? '' : `LIMIT $${params.length - 1} OFFSET $${params.length}`}`,
@@ -330,6 +333,7 @@ export async function getRankings({
     sample: !live,
     growthBasis: live ? 'star_created' : 'snapshot_net',
     forkComponent: forkReady,
+    scoreScope: 'type-period',
     coverage: universe ? Math.round(100 * validCount / universe) : 0
   };
 }

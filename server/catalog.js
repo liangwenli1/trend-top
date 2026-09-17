@@ -456,7 +456,14 @@ export async function getCatalogRankings(type, query = {}, options = {}) {
     params.push(useCase);
     sql += ` AND use_case = $${params.length}`;
   }
-  const rows = await many(sql, params);
+  // Compute scores against the full type; view filters only select scored resources.
+  const rows = await many(`WITH matched AS (${sql})
+    SELECT a.*, EXISTS(SELECT 1 FROM matched m WHERE m.id=a.id) AS matches_view
+    FROM assets a WHERE a.type=$1 AND a.active=TRUE`, params);
+  const matchedIds = new Set(rows.filter(row => row.matches_view
+    && (board !== 'new' || (elapsedDays(row.created_at, endpoint.getTime()) != null
+      && elapsedDays(row.created_at, endpoint.getTime()) <= 90 && (asNumber(row.stars) || 0) >= 5)))
+    .map(row => String(row.id)));
   const similars = await similarCounts();
   const statsById = await periodStatsBatch(rows.map(row => row.id), period, endpoint);
   const topicFrequency = new Map();
@@ -469,7 +476,6 @@ export async function getCatalogRankings(type, query = {}, options = {}) {
     const resolved = stats || { gain: null, prevGain: null, growthCoverage: { knownDays: 0, expectedDays: DAYS[period] || 7 }, anomaly: false };
     const ageDays = elapsedDays(row.created_at, now);
     const pushDays = elapsedDays(row.pushed_at, now);
-    if (board === 'new' && (ageDays == null || ageDays > 90 || (asNumber(row.stars) || 0) < 5)) continue;
     scored.push(mapAsset(row, {
       ...resolved,
       ageDays: ageDays == null ? null : Math.round(ageDays),
@@ -484,7 +490,8 @@ export async function getCatalogRankings(type, query = {}, options = {}) {
   for (const item of scored) item.score = typeScore(type, item, cohort, forkReady, scored);
   for (let index=0;index<scored.length;index++) scored[index]=attachProductFamily(scored[index]);
   const metric = boards[board].metric;
-  const filtered = scored.filter(item => {
+  const candidates = scored.filter(item => matchedIds.has(String(item.id)));
+  const filtered = candidates.filter(item => {
     if (metric === 'score') return item.score != null || board === 'official';
     if (metric === 'gain') return item.gain != null && !item.anomaly;
     return true;
@@ -507,7 +514,7 @@ export async function getCatalogRankings(type, query = {}, options = {}) {
     total,
     page,
     limit,
-    dataInsufficient: scored.length > 0 && total === 0,
+    dataInsufficient: candidates.length > 0 && total === 0,
     updatedAt: endpoint.toISOString(),
     stale: false,
     windowStart: new Date(utcDay(endpoint).getTime() - ((DAYS[period] - 1) * 86400000)).toISOString(),
@@ -516,7 +523,8 @@ export async function getCatalogRankings(type, query = {}, options = {}) {
     sample: dataSource() === 'demo',
     growthBasis: 'star_created',
     forkComponent: forkReady,
-    coverage: scored.length ? Math.round(cohort.length / scored.length * 100) : 0,
+    scoreScope: 'type-period',
+    coverage: candidates.length ? Math.round(candidates.filter(item => item.gain != null && !item.anomaly).length / candidates.length * 100) : 0,
     boards
   };
 }

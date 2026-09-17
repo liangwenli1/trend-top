@@ -233,3 +233,37 @@ test('resources without source dates keep unknown age and cannot enter Newcomers
   assert.equal(fresh.items.some(item=>item.id===String(row.id)),false);
  } finally {await query('UPDATE assets SET created_at=$2,pushed_at=$3 WHERE id=$1',[row.id,row.created_at,row.pushed_at]);}
 });
+
+
+test('Hot scores stay stable across view filters for every resource type', async () => {
+ for (const type of ['github-repo','skill','plugin','agent','components','website']) {
+  const full=await getCatalogRankings(type,{board:'hot',period:'week',limit:50});
+  assert.ok(full.items.length>1,type);
+  const item=full.items.find(x=>x.language && x.topics.length && x.useCase)||full.items[0];
+  const filters=[{q:item.full_name},{language:item.language},{topic:item.topics[0]},{useCase:item.useCase}].filter(x=>Object.values(x)[0]);
+  if(item.official)filters.push({official:'1'});
+  for(const filter of filters) {
+   const refined=await getCatalogRankings(type,{board:'hot',period:'week',limit:50,...filter});
+   const same=refined.items.find(x=>String(x.id)===String(item.id));
+   assert.ok(same,type+JSON.stringify(filter));
+   assert.equal(same.score,item.score,type+JSON.stringify(filter));
+   assert.equal(same.gain,item.gain);assert.equal(refined.scoreScope,'type-period');
+  }
+  const empty=await getCatalogRankings(type,{q:'no-such-resource-stable-score-qa'});
+  assert.equal(empty.total,0);assert.equal(empty.dataInsufficient,false);
+ }
+});
+
+
+test('repository missing dates are unknown and do not earn recency or Newcomers eligibility', async () => {
+ const full=await getCatalogRankings('github-repo',{board:'hot',limit:50});const item=full.items[0];
+ const row=await one('SELECT created_at,pushed_at FROM repos WHERE id=$1',[item.id]);
+ try {
+  await query('UPDATE repos SET created_at=NULL,pushed_at=NULL WHERE id=$1',[item.id]);
+  const result=await getCatalogRankings('github-repo',{board:'hot',q:item.full_name});
+  const same=result.items.find(x=>x.id===item.id);
+  assert.ok(same);assert.equal(same.ageDays,null);assert.equal(same.pushDays,null);assert.ok(same.score<=item.score);
+  const fresh=await getCatalogRankings('github-repo',{board:'new',q:item.full_name});
+  assert.equal(fresh.total,0);assert.equal(fresh.dataInsufficient,false);
+ } finally {await query('UPDATE repos SET created_at=$2,pushed_at=$3 WHERE id=$1',[item.id,row.created_at,row.pushed_at]);}
+});
