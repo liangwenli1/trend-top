@@ -18,14 +18,14 @@ export function TagActions({ l, type, item, navigate, showMeta = false }) {
   const id = String(item.slug || item.id);
   const compareQuery = `ids=${encodeURIComponent(id)}`;
   const go = (href, query) => e => { e.preventDefault(); navigate(e, href, query); };
-  return (
+  const skills=item.skillResources || [];
+  return <>
     <div className="repo-tags">
-      <span className="source-tag" title={item.officialEvidence || undefined}>{item.officialEvidence ? (l === 'zh' ? '官方' : 'Official') : (l === 'zh' ? '社区' : 'Community')}</span>
-      <a className="tag-btn tag-btn-action" href={typePath(l, type, 'compare', compareQuery)} onClick={go(typePath(l, type, 'compare'), compareQuery)}>
-        {l === 'zh' ? '对比同类' : 'Compare'}
-      </a>
+      <span className="source-tag" title={item.officialEvidence ? (l==='zh'?'已识别的发布者；不是安全认证。':'Recognized publisher; not a security certification. ')+item.officialEvidence : undefined}>{item.officialEvidence ? (l === 'zh' ? '官方' : 'Official') : (l === 'zh' ? '社区' : 'Community')}</span>
+      <a className="tag-btn tag-btn-action" href={typePath(l, type, 'compare', compareQuery)} onClick={go(typePath(l, type, 'compare'), compareQuery)}>{l === 'zh' ? '对比同类' : 'Compare'}</a>
     </div>
-  );
+    {skills.length>0&&<details className="skill-result-list"><summary>{l==='zh'?`查看 ${item.skillCount} 个匹配 Skill`:`Explore ${item.skillCount} matching ${item.skillCount===1?'skill':'skills'}`}{skills.length>item.skillCount&&<small>{l==='zh'?` · ${skills.length} 个文件路径`:` · ${skills.length} file paths`}</small>}</summary><ul>{skills.slice(0,6).map(resource=><li key={resource.id}><a href={itemPath(l,'skill',resource.slug || resource.id)} onClick={go(itemPath(l,'skill',resource.slug || resource.id))}>{resource.name}<small>{resource.path}</small></a></li>)}</ul>{skills.length>6&&<a className="hero-ranking-link" href={itemPath(l,type,id)} onClick={go(itemPath(l,type,id))}>{l==='zh'?'查看产品全部资源':'View all product resources'}</a>}</details>}
+  </>;
 }
 
 export function BackBtn({ href, onClick, children }) {
@@ -137,7 +137,7 @@ export function TypeTrending({ l, t, type, navigate }) {
               return (
                 <article className="trending-card" key={item.id}>
                   <span className="rank-num">{String(item.rank).padStart(2, '0')}</span>
-                  <a className="repo-name" href={itemPath(l, type, id)} onClick={e => { e.preventDefault(); navigate(e, itemPath(l, type, id)); }}>{item.full_name} <span>↗</span></a>
+                  <a className="repo-name" href={itemPath(l, type, id)} onClick={e => { e.preventDefault(); navigate(e, itemPath(l, type, id)); }}>{item.skillRepository || item.full_name} <span>↗</span></a>
                   <p>{item.description || '—'}</p>
                   <div className="trending-card-metrics">
                     <div><small>{t.gain}</small><strong className="positive">{item.gain == null ? t.insufficient : `+${fmt(item.gain, l)}`}</strong></div>

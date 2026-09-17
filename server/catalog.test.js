@@ -16,6 +16,38 @@ const {
 const { canonicalTopic, normalizeTopics } = await import('../shared/topics.js');
 await ready;
 
+test('Skill ranks group exact repository signals before pagination without losing matching paths', async () => {
+  const {upsertAsset}=await import('./jobs.js');
+  const {skillResources}=await import('./asset-classification.js');
+  const repo={id:99771,full_name:'qa/rank-skill-pack',description:'QA grouping fixture',stargazers_count:100, forks_count:2,created_at:new Date().toISOString()};
+  const files=skillResources(repo,[{type:'blob',path:'skills/pdf/SKILL.md'},{type:'blob',path:'packs/pdf/SKILL.md'},{type:'blob',path:'skills/browser/SKILL.md'}]);
+  for(const resource of files) await upsertAsset('skill',repo,'manual:skill',undefined,resource);
+  const first=await getCatalogRankings('skill',{board:'stars',q:'qa/rank-skill-pack',limit:1});
+  assert.equal(first.total,1);assert.equal(first.resourceTotal,3);
+  assert.equal(first.items[0].skillCount,2);assert.equal(first.items[0].skillResources.length,3);
+  const pdf=await getCatalogRankings('skill',{board:'stars',q:'pdf',limit:50});
+  const pack=pdf.items.find(item=>item.skillRepository==='qa/rank-skill-pack');
+  assert.equal(pack.skillCount,1);assert.equal(pack.skillResources.length,2);
+  assert.ok(pack.skillResources.every(resource=>resource.name==='pdf'));
+  const next=await getCatalogRankings('skill',{board:'stars',q:'qa/rank-skill-pack',limit:1,page:2});
+  assert.equal(next.items.length,0);assert.equal(next.total,1);
+});
+
+test('Asset project age filters use unrounded days and exclude unknown dates', async () => {
+  const {groupSkillRankings}=await import('../shared/skill-ranking.js');
+  const rows=[{id:'a',type:'skill',name:'pdf',sourceRepoUrl:'https://github.com/qa/one',rankingSignals:{resourcePath:'skills/pdf/SKILL.md'}},
+    {id:'b',type:'skill',name:'pdf',sourceRepoUrl:'https://github.com/qa/two',rankingSignals:{resourcePath:'skills/pdf/SKILL.md'}}];
+  assert.equal(groupSkillRankings(rows).length,2);
+  assert.deepEqual(groupSkillRankings([...rows].reverse()),groupSkillRankings(rows));
+  const full=await getCatalogRankings('skill',{board:'stars',limit:50});
+  const endpoint=new Date(full.updatedAt).getTime();
+  for(const [id,days] of [['age-inside',29.9],['age-outside',30.1],['age-unknown',null]]){
+    await query(`INSERT INTO assets(id,type,slug,name,full_name,description,category,created_at,stars,topics) VALUES($1,'website',$1,$1,$1,'age regression fixture','qa',$2,100,'[]'::jsonb)`,[id,days==null?null:new Date(endpoint-days*86400000).toISOString()]);
+  }
+  const result=await getCatalogRankings('website',{board:'stars',q:'age regression fixture',age:'30'});
+  assert.deepEqual(result.items.map(item=>item.id),['age-inside']);
+});
+
 test('catalog exposes six types and demo assets', async () => {
   const summary = await getTypeSummary();
   assert.equal(summary.types.length, 6);

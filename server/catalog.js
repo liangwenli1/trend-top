@@ -1,3 +1,4 @@
+import { groupSkillRankings } from '../shared/skill-ranking.js';
 import {elapsedDays} from '../shared/chart-view.js';
 import { asDay, asIso, asJson, asNumber, dataSource, DAYS, many, one, query, utcDay } from './db.js';
 import { aiEvidence, getChart as getRepoChart, getFilters as getRepoFilters, getRankings as getRepoRankings, getStarSeries } from './rankings.js';
@@ -460,7 +461,9 @@ export async function getCatalogRankings(type, query = {}, options = {}) {
   const rows = await many(`WITH matched AS (${sql})
     SELECT a.*, EXISTS(SELECT 1 FROM matched m WHERE m.id=a.id) AS matches_view
     FROM assets a WHERE a.type=$1 AND a.active=TRUE`, params);
+  const ageLimit = ['30','90'].includes(String(query.age)) ? Number(query.age) : null;
   const matchedIds = new Set(rows.filter(row => row.matches_view
+    && (ageLimit == null || (elapsedDays(row.created_at, endpoint.getTime()) != null && elapsedDays(row.created_at, endpoint.getTime()) <= ageLimit))
     && (board !== 'new' || (elapsedDays(row.created_at, endpoint.getTime()) != null
       && elapsedDays(row.created_at, endpoint.getTime()) <= 90 && (asNumber(row.stars) || 0) >= 5)))
     .map(row => String(row.id)));
@@ -485,17 +488,19 @@ export async function getCatalogRankings(type, query = {}, options = {}) {
       sampledAt: endpoint.toISOString()
     }));
   }
-  const cohort = scored.filter(x => x.gain != null && !x.anomaly);
+  const valid = scored.filter(x => x.gain != null && !x.anomaly);
+  const cohort = type === 'skill' ? groupSkillRankings(valid) : valid;
   const forkReady = cohort.some(x => (x.forks || 0) > 0);
   for (const item of scored) item.score = typeScore(type, item, cohort, forkReady, scored);
   for (let index=0;index<scored.length;index++) scored[index]=attachProductFamily(scored[index]);
   const metric = boards[board].metric;
   const candidates = scored.filter(item => matchedIds.has(String(item.id)));
-  const filtered = candidates.filter(item => {
+  const eligible = candidates.filter(item => {
     if (metric === 'score') return item.score != null || board === 'official';
     if (metric === 'gain') return item.gain != null && !item.anomaly;
     return true;
   });
+  const filtered = type === 'skill' ? groupSkillRankings(eligible) : eligible;
   const order = {
     score: (a, b) => (b.score || 0) - (a.score || 0) || b.stars - a.stars,
     gain: (a, b) => (b.gain || 0) - (a.gain || 0) || b.stars - a.stars,
@@ -524,6 +529,8 @@ export async function getCatalogRankings(type, query = {}, options = {}) {
     growthBasis: 'star_created',
     forkComponent: forkReady,
     scoreScope: 'type-period',
+    grouping: type === 'skill' ? 'repository' : null,
+    resourceTotal: eligible.length,
     coverage: candidates.length ? Math.round(candidates.filter(item => item.gain != null && !item.anomaly).length / candidates.length * 100) : 0,
     boards
   };
