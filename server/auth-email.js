@@ -4,7 +4,6 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': 
 export function buildAuthEmail({ code, locale = 'en', purpose = 'login', minutes = 10, publicUrl = process.env.PUBLIC_URL || 'http://localhost:5173' }) {
   const zh = locale === 'zh';
   const root = publicUrl.replace(/\/$/, '');
-  const home = `${root}/${zh ? 'zh' : 'en'}/home`;
   const action = purpose === 'login' ? (zh ? '登录' : 'sign-in') : purpose === 'register' ? (zh ? '注册' : 'registration') : (zh ? '重设密码' : 'password reset');
   const title = purpose === 'login' ? (zh ? '登录你的账户' : 'Sign in to your account') : purpose === 'register' ? (zh ? '验证你的邮箱' : 'Verify your email') : (zh ? '重设你的密码' : 'Reset your password');
   const instruction = zh ? '返回刚才的页面，输入以下六位验证码。' : 'Return to the page you opened and enter this six-digit code.';

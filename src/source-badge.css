@@ -1,3 +1,3 @@
-.source-badge{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:5px 9px;border:1px solid #315fd9;border-radius:0;font-size:12px;line-height:1.2;font-weight:650;white-space:nowrap;vertical-align:middle}
-.source-badge-official{background:#315fd9;color:#fff}
-.source-badge-community{background:#fff;color:#274da9;border-color:#9bb0e8;border-inline-start:3px solid #315fd9}
+.source-badge.source-badge{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:5px 9px;border:1px solid #315fd9;border-radius:0;font-size:12px;line-height:1.2;font-weight:650;white-space:nowrap;vertical-align:middle}
+.source-badge.source-badge-official{background:#315fd9;color:#fff}
+.source-badge.source-badge-community{background:#fff;color:#274da9;border-color:#9bb0e8;border-inline-start:3px solid #315fd9}

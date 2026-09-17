@@ -92,7 +92,6 @@
 .subscribe-cta-steps li span { flex: none; color: #315fd9; font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; }
 .subscribe-cta-button {
   position: relative;
-  padding-inline: 52px;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -268,8 +268,8 @@ function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSa
     <p className="account-hint">{zh ? '语言和主题留空即表示全部。邮件按类型展示榜单与增长图表。' : 'Leave language and topic empty for all. Emails include rankings and compact growth charts.'}</p>
     <button ref={saveButton} type="submit" className="primary wide" disabled={busy || !proActive}>{busy ? '…' : status ? (zh ? '保存推送设置' : 'Save delivery settings') : (zh ? '开启每日摘要' : 'Start daily digest')}</button>
     {account && status && <div className="account-status-actions">
-      {status === 'active' ? <button type="button" className="ghost" disabled={busy} onClick={() => changeStatus('paused')}>{zh ? '暂停发送' : 'Pause'}</button> : <button type="button" className="ghost" disabled={busy || !proActive} onClick={() => changeStatus('active')}>{zh ? '恢复发送' : 'Resume'}</button>}
-      {status !== 'cancelled' && <button ref={stopButton} type="button" className="danger" disabled={busy} onClick={() => { setMessage(''); setConfirmStop(true); }}>{zh ? '停止邮件推送' : 'Stop emails'}</button>}
+      {status === 'active' ? <button type="button" className="primary" disabled={busy} onClick={() => changeStatus('paused')}>{zh ? '暂停发送' : 'Pause'}</button> : <button type="button" className="primary" disabled={busy || !proActive} onClick={() => changeStatus('active')}>{zh ? '恢复发送' : 'Resume'}</button>}
+      {status !== 'cancelled' && <button ref={stopButton} type="button" className="primary" disabled={busy} onClick={() => { setMessage(''); setConfirmStop(true); }}>{zh ? '停止邮件推送' : 'Stop emails'}</button>}
     </div>}
     {account && <p className="account-hint">{zh ? '暂停或停止邮件不会取消付费续订。' : 'Pausing or stopping emails does not cancel paid renewal.'} <a href={`/${l}/account/subscription`}>{zh ? '管理订阅与账单' : 'Subscribe & billing'}</a></p>}
     {message && !confirmStop && <p className="form-message" role="status">{message}</p>}
