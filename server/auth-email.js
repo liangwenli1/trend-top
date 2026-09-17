@@ -1,3 +1,4 @@
+import { emailBrandHeader } from './email-brand.js';
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
 export function buildAuthEmail({ code, locale = 'en', purpose = 'login', minutes = 10, publicUrl = process.env.PUBLIC_URL || 'http://localhost:5173' }) {
@@ -18,7 +19,7 @@ export function buildAuthEmail({ code, locale = 'en', purpose = 'login', minutes
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background:#f5f5f3;border-collapse:collapse"><tr><td align="center" style="padding:24px 12px">
 <!--[if mso]><table role="presentation" width="560" cellpadding="0" cellspacing="0"><tr><td><![endif]-->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;border-collapse:collapse;background:#fff;border:1px solid #dedede;border-top:4px solid #315fd9"><tr><td style="padding:24px">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse"><tr><td style="vertical-align:middle;padding-right:12px"><a href="${escape(home)}" style="text-decoration:none"><img src="${escape(root)}/email-logo.png" width="40" height="40" alt="" style="display:block;width:40px;height:40px;border:0"></a></td><td style="vertical-align:middle"><a href="${escape(home)}" style="font-size:24px;line-height:30px;font-weight:700;letter-spacing:-1px;color:#111;text-decoration:none">Trend Top</a></td></tr></table>
+${emailBrandHeader(root, locale)}
 <p style="margin:24px 0 12px;border-top:1px solid #dedede;padding-top:24px;color:#315fd9;font-size:11px;line-height:18px;letter-spacing:1.5px;font-weight:700">${zh ? '账户 / 邮箱验证' : 'ACCOUNT / EMAIL VERIFICATION'}</p>
 <h1 style="margin:0 0 12px;color:#111;font-size:26px;line-height:34px;letter-spacing:-.5px">${escape(title)}</h1>
 <p style="margin:0 0 24px;color:#666;font-size:15px;line-height:24px">${escape(instruction)}</p>

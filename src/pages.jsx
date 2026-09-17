@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { SourceBadge } from './source-badge.jsx';
 import { TYPES, TYPE_META, typeLabel, typePath, itemPath, trendingCopy } from './catalog.js';
 import { loginUrl } from '../shared/account-paths.js';
 import { SourceProvenance } from './source-provenance.jsx';
@@ -17,20 +19,22 @@ function preservedView(page) {
 export function TagActions({ l, type, item, navigate, showMeta = false }) {
   const id = String(item.slug || item.id);
   const compareQuery = `ids=${encodeURIComponent(id)}`;
-  const go = (href, query) => e => { e.preventDefault(); navigate(e, href, query); };
+  const [skillsOpen, setSkillsOpen] = useState(false), [skillQuery, setSkillQuery] = useState('');
+  const go = (href, query) => e => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); setSkillsOpen(false); navigate(e, href, query); };
   const skills=item.skillResources || [];
   const skillGroups = [];
-  for (const resource of skills.slice(0, 6)) {
+  for (const resource of skills) {
     let group = skillGroups.find(entry => entry.name.toLowerCase() === resource.name.toLowerCase());
     if (!group) { group = { name: resource.name, resources: [] }; skillGroups.push(group); }
     group.resources.push(resource);
   }
   return <>
     <div className="repo-tags">
-      <span className="source-tag" title={item.officialEvidence ? (l==='zh'?'已识别的发布者；不是安全认证。':'Recognized publisher; not a security certification. ')+item.officialEvidence : undefined}>{item.officialEvidence ? (l === 'zh' ? '官方' : 'Official') : (l === 'zh' ? '社区' : 'Community')}</span>
+      <SourceBadge l={l} official={Boolean(item.officialEvidence)} evidence={item.officialEvidence}/>
       <a className="tag-btn tag-btn-action" href={typePath(l, type, 'compare', compareQuery)} onClick={go(typePath(l, type, 'compare'), compareQuery)}>{l === 'zh' ? '对比同类' : 'Compare'}</a>
     </div>
-    {skills.length>0&&<details className="skill-result-list"><summary>{l==='zh'?`查看 ${item.skillCount} 个匹配 Skill`:`Explore ${item.skillCount} matching ${item.skillCount===1?'skill':'skills'}`}{skills.length>item.skillCount&&<small>{l==='zh'?` · ${skills.length} 个文件路径`:` · ${skills.length} file paths`}</small>}</summary><ul>{skillGroups.map(group => <li className="skill-resource-group" key={group.name}><div className="skill-resource-heading"><strong>{group.name}</strong>{group.resources.length > 1 && <span>{l === 'zh' ? group.resources.length + ' 个路径' : group.resources.length + ' locations'}</span>}</div>{group.resources.map(resource => <a key={resource.id} href={itemPath(l,'skill',resource.slug || resource.id)} onClick={go(itemPath(l,'skill',resource.slug || resource.id))}><code>{resource.path}</code><span aria-hidden="true">→</span></a>)}</li>)}</ul>{skills.length>6&&<a className="hero-ranking-link" href={itemPath(l,type,id)} onClick={go(itemPath(l,type,id))}>{l==='zh'?'查看产品全部资源':'View all product resources'}</a>}</details>}
+    {skills.length > 0 && <Dialog.Root open={skillsOpen} onOpenChange={open => { setSkillsOpen(open); if (!open) setSkillQuery(''); }}><Dialog.Trigger asChild><button type="button" className="primary skill-explore-button">{l === 'zh' ? '查看 ' + item.skillCount + ' 个匹配 Skill' : 'Explore ' + item.skillCount + ' matching ' + (item.skillCount === 1 ? 'skill' : 'skills')}<span aria-hidden="true">↗</span></button></Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content skill-explore-dialog"><Dialog.Close className="dialog-close" aria-label={l === 'zh' ? '关闭' : 'Close'}>×</Dialog.Close><Dialog.Title>{l === 'zh' ? '仓库中的 Skill' : 'Skills in this repository'}</Dialog.Title><Dialog.Description>{item.full_name} · {l === 'zh' ? item.skillCount + ' 个匹配 Skill' : item.skillCount + ' matching ' + (item.skillCount === 1 ? 'skill' : 'skills')}</Dialog.Description><label className="skill-explore-search">{l === 'zh' ? '搜索名称或文件路径' : 'Search names or file paths'}<input type="search" value={skillQuery} onChange={e => setSkillQuery(e.target.value)} placeholder={l === 'zh' ? '搜索 Skill' : 'Search skills'}/></label><div className="skill-explore-results"><ul>{skillGroups.filter(group => (group.name + ' ' + group.resources.map(resource => resource.path).join(' ')).toLowerCase().includes(skillQuery.trim().toLowerCase())).map(group => <li className="skill-resource-group" key={group.name}><div className="skill-resource-heading"><strong>{group.name}</strong>{group.resources.length > 1 && <span>{l === 'zh' ? group.resources.length + ' 个路径' : group.resources.length + ' locations'}</span>}</div>{group.resources.map(resource => <a key={resource.id} href={itemPath(l, 'skill', resource.slug || resource.id)} onClick={go(itemPath(l, 'skill', resource.slug || resource.id))}><code>{resource.path}</code><span aria-hidden="true">→</span></a>)}</li>)}</ul>{skillQuery && !skillGroups.some(group => (group.name + ' ' + group.resources.map(resource => resource.path).join(' ')).toLowerCase().includes(skillQuery.trim().toLowerCase())) && <p role="status">{l === 'zh' ? '没有匹配的 Skill。' : 'No matching skills.'}</p>}</div><a className="primary skill-explore-all" href={itemPath(l, type, id)} onClick={go(itemPath(l, type, id))}>{l === 'zh' ? '查看产品全部资源' : 'View all product resources'}<span aria-hidden="true">↗</span></a></Dialog.Content></Dialog.Portal></Dialog.Root>}
+
   </>;
 }
 
@@ -358,7 +362,7 @@ export function CategoryPage({ l, t, type, category, navigate }) {
       {recommended.length > 0 && <section className="category-featured" aria-labelledby="category-featured-title">
         <div className="catalog-section-heading"><div><span className="catalog-section-index">01 / {l === 'zh' ? '精选' : 'Selected'}</span><h2 id="category-featured-title">{l === 'zh' ? '先看这些' : 'A good place to start'}</h2></div><p>{l === 'zh' ? '同类中的不同选择' : 'Distinct options within this category'}</p></div>
         <div className="category-featured-grid">{recommended.map((item, index) => <article className="category-feature-card" key={item.id}>
-          <div className="category-card-top"><span className="category-card-number">{String(index + 1).padStart(2, '0')}</span>{item.official && <span className="category-official">{l === 'zh' ? '官方' : 'Official'}</span>}</div>
+          <div className="category-card-top"><span className="category-card-number">{String(index + 1).padStart(2, '0')}</span>{item.official && <SourceBadge l={l} official evidence={item.officialEvidence}/>}</div>
           <h3><a href={detailHref(item)} onClick={e => navigate(e, detailHref(item))}>{item.full_name} <span aria-hidden="true">↗</span></a></h3>
           <p className="category-card-description">{item.description}</p>
           {(item.recommendNote?.[l] || item.recommendNote?.en) && <p className="category-card-note">{item.recommendNote?.[l] || item.recommendNote?.en}</p>}
@@ -370,7 +374,7 @@ export function CategoryPage({ l, t, type, category, navigate }) {
         <div className="catalog-section-heading"><div><span className="catalog-section-index">{recommended.length ? '02' : '01'} / {l === 'zh' ? '排行' : 'Ranking'}</span><h2 id="category-ranking-title">{l === 'zh' ? '完整排行' : 'Full ranking'}</h2></div><p>{l === 'zh' ? `${ranking.length} 个项目` : `${ranking.length} projects`}</p></div>
         <div className="category-ranking-list">{ranking.map((item, index) => <article className="category-rank-row" key={item.id}>
           <span className="category-rank-number">{String(item.rank || index + 1).padStart(2, '0')}</span>
-          <div className="category-rank-identity"><h3><a href={detailHref(item)} onClick={e => navigate(e, detailHref(item))}>{item.full_name} <span aria-hidden="true">↗</span></a></h3><p>{item.description}</p><div className="category-rank-tags">{item.official && <span>{l === 'zh' ? '官方' : 'Official'}</span>}{item.language && <span>{item.language}</span>}{(item.topics || []).slice(0, 2).map(topic => <span key={topic}>{topic}</span>)}</div></div>
+          <div className="category-rank-identity"><h3><a href={detailHref(item)} onClick={e => navigate(e, detailHref(item))}>{item.full_name} <span aria-hidden="true">↗</span></a></h3><p>{item.description}</p><div className="category-rank-tags"><SourceBadge l={l} official={item.official} evidence={item.officialEvidence}/>{item.language && <span>{item.language}</span>}{(item.topics || []).slice(0, 2).map(topic => <span key={topic}>{topic}</span>)}</div></div>
           <div className="category-rank-stat"><small>{t.stars}</small><strong>{fmt(item.stars, l)}</strong></div>
           <div className="category-rank-stat"><small>{t.gain}</small><strong>{item.gain == null ? t.insufficient : `+${fmt(item.gain, l)}`}</strong></div>
           <a className="category-rank-action" href={compareHref(item)} onClick={e => navigate(e, typePath(l, type, 'compare'), compareQuery(item))}>{l === 'zh' ? '对比' : 'Compare'} <span aria-hidden="true">↗</span></a>
@@ -402,7 +406,7 @@ export function ComparePage({ l, t, type, ids, navigate }) {
         <section className="compare-results" aria-labelledby="compare-results-title">
           <div className="catalog-section-heading"><div><span className="catalog-section-index">01 / {l === 'zh' ? '对比' : 'Comparison'}</span><h2 id="compare-results-title">{l === 'zh' ? '关键差异' : 'At a glance'}</h2></div><p>{l === 'zh' ? '数据不足时不推测增长' : 'Missing growth history is shown as unavailable'}</p></div>
           <div className="compare-card-grid">{items.map((item, index) => <article className="compare-option-card" key={item.id}>
-            <div className="compare-option-top"><span>{l === 'zh' ? '选项' : 'Option'} {String(index + 1).padStart(2, '0')}</span><span className={item.official ? 'compare-source-badge is-official' : 'compare-source-badge'}>{item.official ? (l === 'zh' ? '官方' : 'Official') : (l === 'zh' ? '社区' : 'Community')}</span></div>
+            <div className="compare-option-top"><span>{l === 'zh' ? '选项' : 'Option'} {String(index + 1).padStart(2, '0')}</span><SourceBadge l={l} official={item.official} evidence={item.officialEvidence}/></div>
             <h3><a href={detailHref(item)} onClick={e => navigate(e, detailHref(item))}>{item.full_name} <span aria-hidden="true">↗</span></a></h3>
             <p className="compare-option-description">{item.description}</p>
             <dl className="compare-metrics">
@@ -535,7 +539,7 @@ export function ItemDetail({ l, t, type, id, navigate, viewer }) {
       <h1>{item.full_name}</h1>
       <p className="detail-description">{item.description}</p>
       <div className="repo-tags">
-        {item.officialEvidence && <span className="source-tag" title={item.officialEvidence}>{l === 'zh' ? '官方' : 'Official'}</span>}
+        {item.officialEvidence && <SourceBadge l={l} official evidence={item.officialEvidence}/>}
         {item.useCase && item.useCase !== 'other' && <a className="tag-btn" href={typePath(l, type, 'ranking', `useCase=${encodeURIComponent(item.useCase)}`)} onClick={e => { e.preventDefault(); navigate(e, typePath(l, type, 'ranking'), `useCase=${encodeURIComponent(item.useCase)}`); }}>{item.useCaseLabel?.[l === 'zh' ? 'zh' : 'en'] || item.useCase}</a>}
         {topicValues.filter(value => !['uncategorized', 'other'].includes(value.toLowerCase())).slice(0, 5).map(value => <a className="tag-btn detail-topic-tag" key={value} href={topicHref(value)} onClick={e => { e.preventDefault(); navigate(e, topicHref(value)); }}>{value}</a>)}
       </div>

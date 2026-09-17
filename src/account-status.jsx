@@ -5,7 +5,7 @@ export function StatusBadge({ children, tone = 'muted', title }) {
 }
 
 export function PlanBadge({ active, l }) {
-  return <StatusBadge tone={active ? 'pro' : 'muted'}>{active == null ? (l === 'zh' ? '确认套餐中' : 'Checking plan') : active ? 'Pro' : 'Free'}</StatusBadge>;
+  return <StatusBadge tone={active == null ? 'muted' : active ? 'pro' : 'free'}>{active == null ? (l === 'zh' ? '确认套餐中' : 'Checking plan') : active ? 'Pro' : 'Free'}</StatusBadge>;
 }
 
 export function DeliveryBadge({ status, proActive, l }) {

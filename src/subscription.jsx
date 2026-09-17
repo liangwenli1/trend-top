@@ -197,6 +197,8 @@ export function AuthForm({ l, onAuthenticated, initialMode = 'email', googleEnab
   </div>;
 }
 
+const AdminSettings = React.lazy(() => import('./admin-page.jsx').then(module => ({ default: module.AdminPage })));
+
 function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSaved, account = false, proActive = true }) {
   const zh = l === 'zh';
   const [types, setTypes] = useState(subscription?.types?.length ? subscription.types : [currentType || 'github-repo']);
@@ -216,7 +218,7 @@ function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSa
       .then(response => response.json()).then(setFilters).catch(() => {});
     return () => controller.abort();
   }, [types.join(',')]);
-  const [confirmStop, setConfirmStop] = useState(false);
+  const [confirmStop, setConfirmStop] = useState(account && new URLSearchParams(location.search).get('intent') === 'stop' && Boolean(subscription?.status) && subscription.status !== 'cancelled');
   const stopButton = useRef(null), saveButton = useRef(null);
   const boardChoices = [...commonBoards, ...(types.includes('github-repo') ? repoBoards : [])];
   const toggleType = type => {
@@ -244,6 +246,7 @@ function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSa
     try {
       await request('/api/subscription/status', 'PATCH', { status: next });
       setStatus(next);
+      onSaved?.({ ...subscription, status: next });
       setConfirmStop(false);
       setMessage(next === 'paused' ? (zh ? '已暂停邮件发送。' : 'Email delivery paused.') : next === 'cancelled' ? (zh ? '已停止邮件推送，付费套餐未变更。' : 'Emails stopped. Your paid plan is unchanged.') : (zh ? '已恢复邮件发送。' : 'Email delivery resumed.'));
     } catch (error) { setMessage(error.message); }
@@ -251,7 +254,7 @@ function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSa
   };
   return <form className="subscribe-form account-settings" onSubmit={submit}>
     {account && <div className="account-status-row" role="status"><PlanBadge active={proActive} l={l}/><DeliveryBadge status={status} proActive={proActive} l={l}/></div>}
-    {account && proActive === false && <div className="delivery-upgrade"><p>{zh ? '每日摘要邮件仅向有效 Pro 用户开放。你的推送偏好会保留。' : 'Daily digest emails require Pro. Your delivery preferences stay saved.'}</p><a className="primary billing-link" href={digestDestination(l,false,location.search)}>{zh ? '成为 Pro，获取每日最新热点' : 'Become Pro. Get the latest daily highlights'}</a></div>}
+    {account && proActive === false && <div className="delivery-upgrade"><p>{zh ? '每日摘要邮件仅向有效 Pro 用户开放。你的推送偏好会保留。' : 'Daily digest emails require Pro. Your delivery preferences stay saved.'}</p><a className="primary billing-link" href={digestDestination(l,false,location.search)}>{zh ? '开始使用' : 'Get started'}</a></div>}
     <fieldset disabled={!proActive}><legend>{zh ? '订阅内容' : 'Content types'}</legend><div className="checks account-type-grid">{TYPES.map(type => <label key={type}><input type="checkbox" checked={types.includes(type)} onChange={() => toggleType(type)}/>{typeLabel(type, l)}</label>)}</div></fieldset>
     <fieldset disabled={!proActive}><legend>{zh ? '关注榜单' : 'Boards to follow'}</legend><div className="checks account-board-grid">{boardChoices.map(board => <label key={board}><input type="checkbox" checked={boards.includes(board)} onChange={() => setBoards(old => old.includes(board) ? old.filter(value => value !== board) : [...old, board])}/>{boardLabels[board][zh ? 0 : 1]}</label>)}</div></fieldset>
     <fieldset disabled={!proActive} className="delivery-fields"><div className="form-grid">
@@ -268,7 +271,7 @@ function SubscriptionSettings({ l, currentType, currentBoard, subscription, onSa
       {status === 'active' ? <button type="button" className="ghost" disabled={busy} onClick={() => changeStatus('paused')}>{zh ? '暂停发送' : 'Pause'}</button> : <button type="button" className="ghost" disabled={busy || !proActive} onClick={() => changeStatus('active')}>{zh ? '恢复发送' : 'Resume'}</button>}
       {status !== 'cancelled' && <button ref={stopButton} type="button" className="danger" disabled={busy} onClick={() => { setMessage(''); setConfirmStop(true); }}>{zh ? '停止邮件推送' : 'Stop emails'}</button>}
     </div>}
-    {account && <p className="account-hint">{zh ? '暂停或停止邮件不会取消付费续订。' : 'Pausing or stopping emails does not cancel paid renewal.'} <a href={`/${l}/account/subscription`}>{zh ? '管理套餐与账单' : 'Manage plan & billing'}</a></p>}
+    {account && <p className="account-hint">{zh ? '暂停或停止邮件不会取消付费续订。' : 'Pausing or stopping emails does not cancel paid renewal.'} <a href={`/${l}/account/subscription`}>{zh ? '管理订阅与账单' : 'Subscribe & billing'}</a></p>}
     {message && !confirmStop && <p className="form-message" role="status">{message}</p>}
     <Dialog.Root open={confirmStop} onOpenChange={open => { if (!busy) setConfirmStop(open); }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content billing-confirm" onCloseAutoFocus={event => { event.preventDefault(); (stopButton.current || saveButton.current)?.focus(); }}><Dialog.Title>{zh ? '停止邮件推送？' : 'Stop email delivery?'}</Dialog.Title><Dialog.Description>{zh ? '停止后不再收到每日摘要，可随时恢复。你的 Pro 套餐和付费续订保持不变。' : 'You will stop receiving daily digests and can resume anytime. Your Pro plan and paid renewal remain unchanged.'}</Dialog.Description><div className="billing-actions"><button type="button" className="ghost" disabled={busy} onClick={() => setConfirmStop(false)}>{zh ? '继续接收邮件' : 'Keep receiving emails'}</button><button type="button" className="primary" disabled={busy} onClick={() => changeStatus('cancelled')}>{busy ? '…' : (zh ? '确认停止推送' : 'Confirm stop')}</button></div>{message && <p role="alert">{message}</p>}</Dialog.Content></Dialog.Portal></Dialog.Root>
   </form>;
@@ -357,22 +360,34 @@ function WatchPanel({ l, proActive, navigate }) {
 }
 
 export function AccountPage({ l, section = '', navigate }) {
-  const user = React.useContext(AuthContext);
-  const [subscription, setSubscription] = useState(undefined);
-  const [proActive,setProActive]=useState(null);
-  const [error, setError] = useState('');
-  const selected = section === 'subscription' ? 'subscription' : section === 'delivery' ? 'delivery' : section === 'watch' ? 'watch' : section === 'saved' ? 'saved' : 'subscription';
-  useEffect(() => { if (user === null) navigate(loginUrl(l, location.pathname + location.search), true); }, [user]);
-  useEffect(() => { if (user && !['subscription', 'delivery', 'watch', 'saved'].includes(section)) navigate(`/${l}/account/subscription${location.search}`, true); }, [user?.id, l, section]);
+  const user = React.useContext(AuthContext), zh = l === 'zh';
+  const [subscription, setSubscription] = useState(undefined), [proActive, setProActive] = useState(null), [error, setError] = useState('');
+  const settingsSection = ['settings', 'delivery', 'watch', 'saved', 'admin'].includes(section);
+  const selected = settingsSection ? 'settings' : 'subscription';
+  const current = new URLSearchParams(location.search);
+  const requested = section === 'settings' ? current.get('panel') || 'delivery' : section;
+  const panel = ['delivery', 'watch', 'saved'].includes(requested) ? requested : requested === 'admin' && user?.isAdmin ? 'admin' : 'delivery';
+  useEffect(() => {
+    if (user === null) navigate(loginUrl(l, location.pathname + location.search), true);
+    else if (user && !['settings', 'subscription'].includes(section)) {
+      const query = new URLSearchParams(location.search);
+      if (settingsSection) query.set('panel', panel);
+      navigate('/' + l + '/account/' + selected + (query.size ? '?' + query : ''), true);
+    }
+  }, [user, l, section, selected, panel]);
   useEffect(() => {
     if (!user) return;
-    request('/api/billing/access').then(result => setProActive(result.active)).catch(() => setProActive(false));
-    if (selected !== 'delivery') return;
-    request('/api/subscription').then(result => {setSubscription(result.subscription);setProActive(result.access.active)}).catch(e => setError(e.message));
+    let live = true;
+    request('/api/subscription').then(result => { if (live) { setSubscription(result.subscription); setProActive(result.access.active); setError(''); } }).catch(e => { if (live) setError(e.message); });
+    return () => { live = false; };
   }, [user?.id, selected]);
-  const zh = l === 'zh';
-  const titles = { watch: zh ? '关注列表' : 'Watchlist', saved: zh ? '保存筛选' : 'Saved searches', subscription: zh ? '套餐与账单' : 'Plan & billing', delivery: zh ? '邮件推送设置' : 'Email delivery settings' };
-  const hints = { saved: zh ? '保存筛选与每日变化规则。' : 'Saved filters and daily change rules.', watch: zh ? '关注后，这里显示距上次查看关注列表的名次和 Star 变化。' : 'After you watch a project, this page shows rank and star changes since your last watchlist view.', subscription: zh ? '查看付费套餐、续费日期、付款记录与退款申请。' : 'Review your paid plan, renewal date, payments, and refund requests.', delivery: zh ? '选择收到的内容和发送时间。推送偏好与付费续订独立管理。' : 'Choose what arrives and when. Delivery preferences are managed separately from paid renewal.' };
-  const current = new URLSearchParams(location.search);
-  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{titles[selected]}</h1><p>{hints[selected]}</p>{user && proActive!==null && selected !== 'delivery' && <div className="account-status-row"><PlanBadge active={proActive} l={l}/></div>}</div><nav className="account-navigation" aria-label={zh ? '账户导航' : 'Account navigation'}>{Object.entries(titles).map(([key, title]) => <a key={key} aria-current={selected === key ? 'page' : undefined} href={`/${l}/account${key ? '/' + key : ''}`} onClick={event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(`/${l}/account${key ? '/' + key : ''}`); }}>{title}</a>)}</nav><div className="account-page-card">{!user ? <p>{zh ? '加载中…' : 'Loading…'}</p> : selected === 'subscription' ? <BillingCard l={l}/> : selected === 'saved' ? proActive===null?<p>{zh?'加载中…':'Loading…'}</p>:<SavedSearchPanel l={l} proActive={proActive} navigate={navigate}/> : selected === 'watch' ? proActive===null?<p>{zh?'加载中…':'Loading…'}</p>:<WatchPanel l={l} proActive={proActive} navigate={navigate}/> : selected === 'delivery' ? subscription === undefined ? <p>{error || (zh ? '加载推送设置…' : 'Loading delivery settings…')}</p> : <><SubscriptionSettings proActive={proActive} key={user.id} l={l} subscription={subscription} currentType={current.get('type')} currentBoard={current.get('board')} account onSaved={setSubscription}/><DeliveryHistory l={l}/></> : null}</div><SupportContact l={l}/>{error && <p role="alert">{error}</p>}</main>;
+  const titles = { subscription: zh ? '订阅与账单' : 'Subscribe & billing', settings: zh ? '设置' : 'Settings' };
+  const panels = { delivery: zh ? '邮件偏好' : 'Email preferences', watch: zh ? '关注列表' : 'Watchlist', saved: zh ? '保存筛选' : 'Saved searches', ...(user?.isAdmin ? { admin: zh ? '网站管理' : 'Site administration' } : {}) };
+  const go = target => event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(target); };
+  const delivery = () => subscription === undefined ? <p role={error ? 'alert' : undefined}>{error || (zh ? '加载中…' : 'Loading…')}</p> : <SubscriptionSettings key={user.id + selected} l={l} subscription={subscription} proActive={proActive} account currentType={current.get('type')} currentBoard={current.get('board')} onSaved={setSubscription}/>;
+  return <main className="simple-page account-page"><div className="account-page-head"><p className="account-kicker">Trend Top / {zh ? '账户' : 'Account'}</p><h1>{titles[selected]}</h1><p>{selected === 'subscription' ? (zh ? '管理你的套餐、续订与付款。' : 'Manage your plan, renewal and payments.') : (zh ? '管理你的邮件偏好与关注内容。' : 'Manage your email preferences and followed content.')}</p>{user && proActive !== null && <div className="account-status-row"><PlanBadge active={proActive} l={l}/></div>}</div>
+    <nav className="account-navigation" aria-label={zh ? '账户导航' : 'Account navigation'}>{Object.entries(titles).map(([key, title]) => <a key={key} aria-current={selected === key ? 'page' : undefined} href={'/' + l + '/account/' + key} onClick={go('/' + l + '/account/' + key)}>{title}</a>)}</nav>
+    {selected === 'settings' && <nav className="account-settings-navigation" aria-label={zh ? '设置分类' : 'Settings categories'}>{Object.entries(panels).map(([key, title]) => <a key={key} aria-current={panel === key ? 'page' : undefined} href={'/' + l + '/account/settings?panel=' + key} onClick={go('/' + l + '/account/settings?panel=' + key)}>{title}</a>)}</nav>}
+    <div className="account-page-card">{!user ? <p>{zh ? '加载中…' : 'Loading…'}</p> : selected === 'subscription' ? <BillingCard l={l}/> : panel === 'admin' && user.isAdmin ? <React.Suspense fallback={<p>{zh ? '加载中…' : 'Loading…'}</p>}><AdminSettings l={l} embedded/></React.Suspense> : panel === 'watch' ? proActive === null ? <p>{zh ? '加载中…' : 'Loading…'}</p> : <WatchPanel l={l} proActive={proActive} navigate={navigate}/> : panel === 'saved' ? proActive === null ? <p>{zh ? '加载中…' : 'Loading…'}</p> : <SavedSearchPanel l={l} proActive={proActive} navigate={navigate}/> : <>{delivery()}<DeliveryHistory l={l}/></>}</div><SupportContact l={l}/>
+  </main>;
 }

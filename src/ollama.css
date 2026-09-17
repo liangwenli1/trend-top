@@ -1099,3 +1099,20 @@ button.tag-btn{font:inherit;font-size:13px;font-weight:650;line-height:1.2;appea
 @media(prefers-reduced-motion:reduce){.resource-copy{transition:none}}
 
 .resource-command-box .resource-instruction code{font:inherit}
+
+/* Skills stay behind a compact action; the list scrolls inside its modal. */
+button.skill-explore-button{display:inline-flex;align-items:center;justify-content:center;gap:14px;min-height:40px;margin-top:14px;padding:9px 14px;border:1px solid #111;border-radius:0;background:#111;color:#fff;font-family:inherit;font-size:13px;font-weight:650;line-height:1.4;cursor:pointer}
+button.skill-explore-button:focus-visible{outline:2px solid #315fd9;outline-offset:3px}
+.dialog-content.skill-explore-dialog{display:flex;flex-direction:column;gap:0;width:min(92vw,720px);max-height:85dvh;padding:28px;border:1px solid #111;border-radius:0;overflow:hidden}
+.skill-explore-dialog h2{margin:0 40px 12px 0;font-size:28px;letter-spacing:-.04em;line-height:1.15}
+.skill-explore-dialog>p{margin:0 0 22px;font-size:14px;color:#666;overflow-wrap:anywhere}
+.skill-explore-dialog .dialog-close{min-width:36px;min-height:36px;border-radius:0;background:#111;color:#fff;font-size:22px}
+.skill-explore-search{display:block;font-size:12px;font-weight:650;margin-bottom:16px}
+.skill-explore-search input{display:block;width:100%;min-height:44px;margin-top:8px;padding:10px 12px;border:1px solid #bbb;border-radius:0;background:#fff;color:#111;font:inherit;font-size:14px}
+.skill-explore-results{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}
+.skill-explore-results ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;list-style:none;margin:0;padding:0}
+.skill-explore-results .skill-resource-group{min-width:0}
+.skill-explore-results .skill-resource-group a{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:44px;padding:12px;border-top:1px solid #dedede;color:#555;text-decoration:none;font-size:12px;line-height:1.6}
+.skill-explore-results .skill-resource-group a:hover{background:#f2f5ff;color:#274da9}
+.skill-explore-all{display:flex;align-items:center;justify-content:center;gap:16px;min-height:44px;margin-top:20px;padding:10px 16px;background:#111;color:#fff;text-decoration:none;font-size:14px}
+@media(max-width:640px){.dialog-content.skill-explore-dialog{padding:22px 18px;max-height:88dvh}.skill-explore-results ul{grid-template-columns:1fr}.skill-explore-dialog h2{font-size:24px}}
