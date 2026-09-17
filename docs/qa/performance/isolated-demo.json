@@ -1,0 +1,998 @@
+{
+  "generatedAt": "2026-09-17T01:49:42.704Z",
+  "base": "http://127.0.0.1:62760",
+  "phase": "isolated-demo",
+  "repeat": 3,
+  "notes": "Public API only. MISS/HIT are server-cache states, not proof of a cold database. Phase is an operator label; this does not prove a collection task was running. Small samples are diagnostic, not a production SLO.",
+  "groups": [
+    {
+      "path": "/api/types",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 9.9,
+      "p95Ms": 9.9,
+      "maxBytes": 624,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/types",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 3.7,
+      "p95Ms": 9.6,
+      "maxBytes": 624,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/search?q=fire",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 24.9,
+      "p95Ms": 24.9,
+      "maxBytes": 123,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/search?q=fire",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 6.5,
+      "p95Ms": 14.8,
+      "maxBytes": 123,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/billing/plans?locale=en",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 20.6,
+      "p95Ms": 20.6,
+      "maxBytes": 1571,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/billing/plans?locale=en",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 2.4,
+      "p95Ms": 10.9,
+      "maxBytes": 1571,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/skill/rankings?period=week&limit=10",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 21.6,
+      "p95Ms": 21.6,
+      "maxBytes": 15813,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/skill/rankings?period=week&limit=10",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 7,
+      "p95Ms": 16.5,
+      "maxBytes": 15813,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/skill/filters",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 24.6,
+      "p95Ms": 24.6,
+      "maxBytes": 577,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/skill/filters",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 6.7,
+      "p95Ms": 15.7,
+      "maxBytes": 577,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/skill/charts?period=week",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 28.3,
+      "p95Ms": 28.3,
+      "maxBytes": 1038,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/skill/charts?period=week",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 4.2,
+      "p95Ms": 16.1,
+      "maxBytes": 1038,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/plugin/rankings?period=week&limit=10",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 22.9,
+      "p95Ms": 22.9,
+      "maxBytes": 16194,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/plugin/rankings?period=week&limit=10",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 10.2,
+      "p95Ms": 14.2,
+      "maxBytes": 16194,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/plugin/filters",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 8.9,
+      "p95Ms": 8.9,
+      "maxBytes": 690,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/plugin/filters",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 1.6,
+      "p95Ms": 3.7,
+      "maxBytes": 690,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/plugin/charts?period=week",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 24.6,
+      "p95Ms": 24.6,
+      "maxBytes": 1025,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/plugin/charts?period=week",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 6.4,
+      "p95Ms": 16.1,
+      "maxBytes": 1025,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/agent/rankings?period=week&limit=10",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 25.1,
+      "p95Ms": 25.1,
+      "maxBytes": 11302,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/agent/rankings?period=week&limit=10",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 2.6,
+      "p95Ms": 3.5,
+      "maxBytes": 11302,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/agent/filters",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 20.9,
+      "p95Ms": 20.9,
+      "maxBytes": 498,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/agent/filters",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 10.5,
+      "p95Ms": 15.5,
+      "maxBytes": 498,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/agent/charts?period=week",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 22.4,
+      "p95Ms": 22.4,
+      "maxBytes": 986,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/agent/charts?period=week",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 8.5,
+      "p95Ms": 15.9,
+      "maxBytes": 986,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/components/rankings?period=week&limit=10",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 21.6,
+      "p95Ms": 21.6,
+      "maxBytes": 13366,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/components/rankings?period=week&limit=10",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 1.3,
+      "p95Ms": 9.7,
+      "maxBytes": 13366,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/components/filters",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 20.1,
+      "p95Ms": 20.1,
+      "maxBytes": 510,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/components/filters",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 9.9,
+      "p95Ms": 15.6,
+      "maxBytes": 510,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/components/charts?period=week",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 22.6,
+      "p95Ms": 22.6,
+      "maxBytes": 962,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/components/charts?period=week",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 8.5,
+      "p95Ms": 15.5,
+      "maxBytes": 962,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/website/rankings?period=week&limit=10",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 22.2,
+      "p95Ms": 22.2,
+      "maxBytes": 10265,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/website/rankings?period=week&limit=10",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 9.3,
+      "p95Ms": 15.9,
+      "maxBytes": 10265,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/website/filters",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 21,
+      "p95Ms": 21,
+      "maxBytes": 470,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/website/filters",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 1.8,
+      "p95Ms": 9.3,
+      "maxBytes": 470,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/website/charts?period=week",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 8.5,
+      "p95Ms": 8.5,
+      "maxBytes": 967,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/website/charts?period=week",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 7.1,
+      "p95Ms": 16,
+      "maxBytes": 967,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/github-repo/rankings?period=week&limit=10",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 24,
+      "p95Ms": 24,
+      "maxBytes": 13293,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/github-repo/rankings?period=week&limit=10",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 10.8,
+      "p95Ms": 15.2,
+      "maxBytes": 13293,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/github-repo/filters",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 14.1,
+      "p95Ms": 14.1,
+      "maxBytes": 680,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/github-repo/filters",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 14.2,
+      "p95Ms": 15.6,
+      "maxBytes": 680,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/github-repo/charts?period=week",
+      "cache": "MISS",
+      "requests": 1,
+      "p50Ms": 26,
+      "p95Ms": 26,
+      "maxBytes": 987,
+      "errors": 0,
+      "previousP95Ms": null
+    },
+    {
+      "path": "/api/github-repo/charts?period=week",
+      "cache": "HIT",
+      "requests": 2,
+      "p50Ms": 4.9,
+      "p95Ms": 15.1,
+      "maxBytes": 987,
+      "errors": 0,
+      "previousP95Ms": null
+    }
+  ],
+  "samples": [
+    {
+      "path": "/api/types",
+      "attempt": 1,
+      "status": 200,
+      "ms": 9.9,
+      "bytes": 624,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/types",
+      "attempt": 2,
+      "status": 200,
+      "ms": 3.7,
+      "bytes": 624,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/types",
+      "attempt": 3,
+      "status": 200,
+      "ms": 9.6,
+      "bytes": 624,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/search?q=fire",
+      "attempt": 1,
+      "status": 200,
+      "ms": 24.9,
+      "bytes": 123,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/search?q=fire",
+      "attempt": 2,
+      "status": 200,
+      "ms": 6.5,
+      "bytes": 123,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/search?q=fire",
+      "attempt": 3,
+      "status": 200,
+      "ms": 14.8,
+      "bytes": 123,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/billing/plans?locale=en",
+      "attempt": 1,
+      "status": 200,
+      "ms": 20.6,
+      "bytes": 1571,
+      "cache": "MISS",
+      "revision": null
+    },
+    {
+      "path": "/api/billing/plans?locale=en",
+      "attempt": 2,
+      "status": 200,
+      "ms": 10.9,
+      "bytes": 1571,
+      "cache": "HIT",
+      "revision": null
+    },
+    {
+      "path": "/api/billing/plans?locale=en",
+      "attempt": 3,
+      "status": 200,
+      "ms": 2.4,
+      "bytes": 1571,
+      "cache": "HIT",
+      "revision": null
+    },
+    {
+      "path": "/api/skill/rankings?period=week&limit=10",
+      "attempt": 1,
+      "status": 200,
+      "ms": 21.6,
+      "bytes": 15813,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/skill/rankings?period=week&limit=10",
+      "attempt": 2,
+      "status": 200,
+      "ms": 7,
+      "bytes": 15813,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/skill/rankings?period=week&limit=10",
+      "attempt": 3,
+      "status": 200,
+      "ms": 16.5,
+      "bytes": 15813,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/skill/filters",
+      "attempt": 1,
+      "status": 200,
+      "ms": 24.6,
+      "bytes": 577,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/skill/filters",
+      "attempt": 2,
+      "status": 200,
+      "ms": 6.7,
+      "bytes": 577,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/skill/filters",
+      "attempt": 3,
+      "status": 200,
+      "ms": 15.7,
+      "bytes": 577,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/skill/charts?period=week",
+      "attempt": 1,
+      "status": 200,
+      "ms": 28.3,
+      "bytes": 1038,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/skill/charts?period=week",
+      "attempt": 2,
+      "status": 200,
+      "ms": 4.2,
+      "bytes": 1038,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/skill/charts?period=week",
+      "attempt": 3,
+      "status": 200,
+      "ms": 16.1,
+      "bytes": 1038,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/plugin/rankings?period=week&limit=10",
+      "attempt": 1,
+      "status": 200,
+      "ms": 22.9,
+      "bytes": 16194,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/plugin/rankings?period=week&limit=10",
+      "attempt": 2,
+      "status": 200,
+      "ms": 10.2,
+      "bytes": 16194,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/plugin/rankings?period=week&limit=10",
+      "attempt": 3,
+      "status": 200,
+      "ms": 14.2,
+      "bytes": 16194,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/plugin/filters",
+      "attempt": 1,
+      "status": 200,
+      "ms": 8.9,
+      "bytes": 690,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/plugin/filters",
+      "attempt": 2,
+      "status": 200,
+      "ms": 1.6,
+      "bytes": 690,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/plugin/filters",
+      "attempt": 3,
+      "status": 200,
+      "ms": 3.7,
+      "bytes": 690,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/plugin/charts?period=week",
+      "attempt": 1,
+      "status": 200,
+      "ms": 24.6,
+      "bytes": 1025,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/plugin/charts?period=week",
+      "attempt": 2,
+      "status": 200,
+      "ms": 6.4,
+      "bytes": 1025,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/plugin/charts?period=week",
+      "attempt": 3,
+      "status": 200,
+      "ms": 16.1,
+      "bytes": 1025,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/agent/rankings?period=week&limit=10",
+      "attempt": 1,
+      "status": 200,
+      "ms": 25.1,
+      "bytes": 11302,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/agent/rankings?period=week&limit=10",
+      "attempt": 2,
+      "status": 200,
+      "ms": 3.5,
+      "bytes": 11302,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/agent/rankings?period=week&limit=10",
+      "attempt": 3,
+      "status": 200,
+      "ms": 2.6,
+      "bytes": 11302,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/agent/filters",
+      "attempt": 1,
+      "status": 200,
+      "ms": 20.9,
+      "bytes": 498,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/agent/filters",
+      "attempt": 2,
+      "status": 200,
+      "ms": 10.5,
+      "bytes": 498,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/agent/filters",
+      "attempt": 3,
+      "status": 200,
+      "ms": 15.5,
+      "bytes": 498,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/agent/charts?period=week",
+      "attempt": 1,
+      "status": 200,
+      "ms": 22.4,
+      "bytes": 986,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/agent/charts?period=week",
+      "attempt": 2,
+      "status": 200,
+      "ms": 8.5,
+      "bytes": 986,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/agent/charts?period=week",
+      "attempt": 3,
+      "status": 200,
+      "ms": 15.9,
+      "bytes": 986,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/components/rankings?period=week&limit=10",
+      "attempt": 1,
+      "status": 200,
+      "ms": 21.6,
+      "bytes": 13366,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/components/rankings?period=week&limit=10",
+      "attempt": 2,
+      "status": 200,
+      "ms": 9.7,
+      "bytes": 13366,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/components/rankings?period=week&limit=10",
+      "attempt": 3,
+      "status": 200,
+      "ms": 1.3,
+      "bytes": 13366,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/components/filters",
+      "attempt": 1,
+      "status": 200,
+      "ms": 20.1,
+      "bytes": 510,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/components/filters",
+      "attempt": 2,
+      "status": 200,
+      "ms": 9.9,
+      "bytes": 510,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/components/filters",
+      "attempt": 3,
+      "status": 200,
+      "ms": 15.6,
+      "bytes": 510,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/components/charts?period=week",
+      "attempt": 1,
+      "status": 200,
+      "ms": 22.6,
+      "bytes": 962,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/components/charts?period=week",
+      "attempt": 2,
+      "status": 200,
+      "ms": 8.5,
+      "bytes": 962,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/components/charts?period=week",
+      "attempt": 3,
+      "status": 200,
+      "ms": 15.5,
+      "bytes": 962,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/website/rankings?period=week&limit=10",
+      "attempt": 1,
+      "status": 200,
+      "ms": 22.2,
+      "bytes": 10265,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/website/rankings?period=week&limit=10",
+      "attempt": 2,
+      "status": 200,
+      "ms": 9.3,
+      "bytes": 10265,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/website/rankings?period=week&limit=10",
+      "attempt": 3,
+      "status": 200,
+      "ms": 15.9,
+      "bytes": 10265,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/website/filters",
+      "attempt": 1,
+      "status": 200,
+      "ms": 21,
+      "bytes": 470,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/website/filters",
+      "attempt": 2,
+      "status": 200,
+      "ms": 1.8,
+      "bytes": 470,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/website/filters",
+      "attempt": 3,
+      "status": 200,
+      "ms": 9.3,
+      "bytes": 470,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/website/charts?period=week",
+      "attempt": 1,
+      "status": 200,
+      "ms": 8.5,
+      "bytes": 967,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/website/charts?period=week",
+      "attempt": 2,
+      "status": 200,
+      "ms": 7.1,
+      "bytes": 967,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/website/charts?period=week",
+      "attempt": 3,
+      "status": 200,
+      "ms": 16,
+      "bytes": 967,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/github-repo/rankings?period=week&limit=10",
+      "attempt": 1,
+      "status": 200,
+      "ms": 24,
+      "bytes": 13293,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/github-repo/rankings?period=week&limit=10",
+      "attempt": 2,
+      "status": 200,
+      "ms": 10.8,
+      "bytes": 13293,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/github-repo/rankings?period=week&limit=10",
+      "attempt": 3,
+      "status": 200,
+      "ms": 15.2,
+      "bytes": 13293,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/github-repo/filters",
+      "attempt": 1,
+      "status": 200,
+      "ms": 14.1,
+      "bytes": 680,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/github-repo/filters",
+      "attempt": 2,
+      "status": 200,
+      "ms": 14.2,
+      "bytes": 680,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/github-repo/filters",
+      "attempt": 3,
+      "status": 200,
+      "ms": 15.6,
+      "bytes": 680,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/github-repo/charts?period=week",
+      "attempt": 1,
+      "status": 200,
+      "ms": 26,
+      "bytes": 987,
+      "cache": "MISS",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/github-repo/charts?period=week",
+      "attempt": 2,
+      "status": 200,
+      "ms": 4.9,
+      "bytes": 987,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    },
+    {
+      "path": "/api/github-repo/charts?period=week",
+      "attempt": 3,
+      "status": 200,
+      "ms": 15.1,
+      "bytes": 987,
+      "cache": "HIT",
+      "revision": "6:2026-09-17T01:49:40.785Z"
+    }
+  ]
+}

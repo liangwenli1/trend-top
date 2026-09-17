@@ -2,12 +2,15 @@ import 'dotenv/config';
 import { proAccess, proUsers } from './pro-access.js';
 import { acceptsRepoType, skillResources, auditCopiedAssets } from './asset-classification.js';
 import crypto from 'node:crypto';
-import { asJson, asNumber, many, one, query, ready, rebuildDerivedMetrics } from './db.js';
+import { asJson, asNumber, many, one, query, ready, rebuildDerivedMetrics, stageCatalogWrites, commitCatalogWrites, transaction } from './db.js';
 import { sendMail } from './mail.js';
 import { buildDigest } from './digest.js';
 import { collectWebsiteSources, collectDirectorySignals } from './website-sources.js';
 import { CLASSIFICATION_VERSION, classify, officialEvidenceFor, isOfficial } from '../shared/taxonomy.js';
 import { getSettings } from './settings.js';
+import { runQueuedTask } from './task-queue.js';
+import { withTaskLease, recordTraces, publishCatalog } from './operations.js';
+import { collectionAllowed, pruneDiagnostics } from './source-policy.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const token = () => crypto.randomBytes(24).toString('hex');
@@ -231,7 +234,7 @@ export async function upsertAsset(type, repo, sourceQuery = null, at = new Date(
        official_evidence = EXCLUDED.official_evidence,
        cluster_id = EXCLUDED.cluster_id,
        url = EXCLUDED.url,
-       install = EXCLUDED.install,
+       install = CASE WHEN assets.ranking_signals ? 'instructions' THEN assets.install ELSE EXCLUDED.install END,
        language = EXCLUDED.language,
        topics = EXCLUDED.topics,
        stars = EXCLUDED.stars,
@@ -244,7 +247,7 @@ export async function upsertAsset(type, repo, sourceQuery = null, at = new Date(
        source_query = COALESCE(EXCLUDED.source_query,assets.source_query),
        entity_key = EXCLUDED.entity_key,
        ranking_signals = assets.ranking_signals || EXCLUDED.ranking_signals,
-       active = TRUE,
+       active = CASE WHEN assets.ranking_signals->>'reviewDisposition'='retired' THEN FALSE ELSE TRUE END,
        missed_runs = 0`,
     [
       id, type, slug, resource?.name || String(repo.full_name).split('/')[1] || repo.full_name, resource?`${repo.full_name} / ${resource.name}`:repo.full_name,
@@ -258,7 +261,7 @@ export async function upsertAsset(type, repo, sourceQuery = null, at = new Date(
       at,
       sourceQuery,
       type === 'website' ? websiteEntityKey(repo) : `repo:${String(repo.full_name || '').toLowerCase()}`,
-      JSON.stringify({ associatedRepoStars: repo.stargazers_count || 0, associatedRepoForks: repo.forks_count || 0, contentUpdatedAt: repo.pushed_at || repo.updated_at || null, confidence: 'github-associated', typeVerified: true, resourcePath: resource?.path || null, classificationEvidence: resource?'SKILL.md file':sourceQuery?.startsWith('manual:')?'administrator-approved':type==='website'?'repository-homepage':'primary-purpose-description' })
+      JSON.stringify({ associatedRepoStars: repo.stargazers_count || 0, associatedRepoForks: repo.forks_count || 0, contentUpdatedAt: repo.pushed_at || repo.updated_at || null, confidence: 'github-associated', typeVerified: true, resourcePath: resource?.path || null, license: repo.license ? {spdx:repo.license.spdx_id,url:repo.license.url} : null, classificationEvidence: resource?'SKILL.md file':sourceQuery?.startsWith('manual:')?'administrator-approved':type==='website'?'repository-homepage':'primary-purpose-description' })
     ]
   );
   await query('UPDATE assets SET taxonomy_version=$1 WHERE id=$2', [CLASSIFICATION_VERSION, id]);
@@ -273,7 +276,7 @@ async function recordQueryStat(runId, collectionType, spec, stat, error = null) 
   );
 }
 
-export async function collectTypedAssets(knownRepos, runId, at, manualAssets = new Map(), fetchGithub = github, wait = sleep) {
+export async function collectTypedAssets(knownRepos, runId, at, manualAssets = new Map(), fetchGithub = github, wait = sleep, assertLease=async()=>{}) {
   const counts = {}, extra = new Map(), executedQueries = [], trees = new Map(), hydrated = new Map();
   let metadataFailures = 0, verificationFailures = 0;
   const skillTree = async repo => {
@@ -311,8 +314,11 @@ export async function collectTypedAssets(knownRepos, runId, at, manualAssets = n
   };
   for(const type of ASSET_TYPES) {
     const found = new Map();
+    const traces = [];
+    const trace = (repo, source, stage, outcome, reason, path = null) => traces.push({ identity: repo.full_name, query: source, stage, outcome, reason, path });
     const accept = async (repo,source,manual=false,hintPath=null) => {
       if(!repo?.id)return 0;
+      const original = repo;
       if (!hydrated.has(repo.id)) {
         try { hydrated.set(repo.id, await hydrateRepo(repo, fetchGithub)); }
         catch (error) {
@@ -322,15 +328,17 @@ export async function collectTypedAssets(knownRepos, runId, at, manualAssets = n
         }
       }
       repo = hydrated.get(repo.id);
-      if (!repo) return 0;
-      if(type!=='skill' && !manual && !acceptsRepoType(type,repo))return 0;
+      if (!repo) { trace(original,source,'metadata','failed','repository-metadata-unavailable'); return 0; }
+      if(type!=='skill' && !manual && !acceptsRepoType(type,repo)){trace(repo,source,'classification','rejected','primary-type-does-not-match');return 0;}
       const resources=type==='skill'?await skills(repo,hintPath):[null];
+      if (!resources.length) trace(repo,source,'verification','unverified','no-verified-skill-path-or-tree-unavailable');
       let added=0;
       for(const resource of resources){
         const key=repo.id+':'+(resource?.path || '');
-        if(found.has(key))continue;
-        if(found.size>=MAX_ASSETS_PER_TYPE)break;
+        if(found.has(key)){trace(repo,source,'budget','duplicate','resource-already-selected',resource?.path);continue;}
+        if(found.size>=MAX_ASSETS_PER_TYPE){trace(repo,source,'budget','deferred','type-budget-exhausted',resource?.path);continue;}
         found.set(key,{repo,resource,source});added++;
+        trace(repo,source,'verification','accepted',manual?'administrator-reviewed':'type-evidence-verified',resource?.path);
       }
       return added;
     };
@@ -354,9 +362,10 @@ export async function collectTypedAssets(knownRepos, runId, at, manualAssets = n
             const repo=spec.kind==='code'?(hit.repository || hit):hit;
             if(!repo?.full_name)continue;
             stat.unique++;
+            if(found.size>=MAX_ASSETS_PER_TYPE || added>=queryBudget){trace(repo,spec.q,'budget','deferred','type-or-query-budget-exhausted',hit.path);continue;}
             const n=await accept(repo,'asset:'+type+':'+spec.q,false,spec.kind==='code'?hit.path:null);added+=n;stat.accepted+=n;
-            if(found.size>=MAX_ASSETS_PER_TYPE || added>=queryBudget)break;
           }
+          await recordTraces(runId,type,traces.splice(0));
           await wait(spec.kind==='code'?2500:1200);
         }
         executedQueries.push('asset:'+type+':'+spec.q);
@@ -375,10 +384,13 @@ export async function collectTypedAssets(knownRepos, runId, at, manualAssets = n
       await accept(repo,'inferred:'+type);
     }
     for(const {repo,resource,source} of found.values()){
-      await upsertAsset(type,repo,source,at,resource);
+      await assertLease();
+        await upsertAsset(type,repo,source,at,resource);
+      trace(repo,source,'storage','stored','verified-resource-upserted',resource?.path);
       if(!knownRepos.some(item=>item.id===repo.id))extra.set(repo.id,repo);
     }
     counts[type]=found.size;
+    for (let offset=0;offset<traces.length;offset+=200) await recordTraces(runId,type,traces.slice(offset,offset+200));
   }
   return {counts,extra:[...extra.values()],executedQueries,metadataFailures,verificationFailures};
 }
@@ -424,7 +436,8 @@ export async function copyRepoMetricsToAssets() {
          ELSE a.full_name
        END
      )
-     JOIN daily_metrics d ON d.repo_id = r.id
+     JOIN daily_metrics d ON d.repo_id = r.id AND d.source=r.source
+     WHERE a.source_query NOT LIKE 'website-source:%' OR a.source_query IS NULL
      ON CONFLICT (asset_id, day) DO UPDATE SET
        star_created = EXCLUDED.star_created,
        stars = EXCLUDED.stars`
@@ -477,7 +490,7 @@ async function github(url, version = '2022-11-28') {
   throw lastError;
 }
 
-export async function syncStarHistory(repositories) {
+export async function syncStarHistory(repositories, assertLease=async()=>{}) {
   if ((process.env.DATA_MODE || 'demo') !== 'live') throw new Error('Set DATA_MODE=live to collect GitHub history');
   const repos = repositories || await many(
     `SELECT id, full_name FROM repos
@@ -487,10 +500,13 @@ export async function syncStarHistory(repositories) {
   let sampled = 0, failed = 0, consecutiveFailures = 0;
   const at = new Date().toISOString();
   for (const repo of repos) {
+    await assertLease();
     try {
       const weeks = await github(`https://api.github.com/repos/${repo.full_name}/stargazers/history?per_page=12`, '2026-03-10');
       if (!Array.isArray(weeks) || !weeks.length) throw new Error('Empty star history');
+      await assertLease();
       for (const week of weeks) {
+        await assertLease();
         if (!Number.isInteger(week.week) || !Array.isArray(week.days) || week.days.length !== 7) continue;
         await query(
           `INSERT INTO star_history (repo_id, week_start, total, days_json, sampled_at)
@@ -513,6 +529,10 @@ export async function syncStarHistory(repositories) {
 }
 
 export async function collect() {
+  return withTaskLease('collect',assertLease=>stageCatalogWrites(()=>collectUnlocked(assertLease)));
+}
+async function collectUnlocked(assertLease) {
+  if (!(await collectionAllowed('github'))) return { skipped: true, reason: 'github-source-disabled' };
   if ((process.env.DATA_MODE || 'demo') !== 'live') throw new Error('Set DATA_MODE=live to collect GitHub data');
   const started = new Date().toISOString();
   const run = await query(
@@ -539,12 +559,14 @@ export async function collect() {
       try {
         const fresh = await github(`https://api.github.com/repos/${repo.full_name}`);
         unique.set(fresh.id, fresh);
+        await recordTraces(runId,'github-repo',[{identity:repo.full_name,query:'known-repository-refresh',stage:'metadata',outcome:'accepted'}]);
       } catch (e) {
         if (String(e).includes('GitHub 404')) {
           await query('UPDATE repos SET deleted = TRUE WHERE id = $1', [repo.id]);
         } else {
           console.error('[collect] skip known repo', repo.full_name, e);
         }
+        await recordTraces(runId,'github-repo',[{identity:repo.full_name,query:'known-repository-refresh',stage:'metadata',outcome:'failed',reason:String(e).slice(0,300)}]);
       }
       await sleep(150);
     }
@@ -552,6 +574,7 @@ export async function collect() {
     const plan = discoveryPlan();
     const executedRepoQueries = [];
     for (const spec of plan.queries) {
+      await assertLease();
       let added = 0;
       const stat = { requested: 0, returned: 0, unique: 0, accepted: 0 };
       try {
@@ -561,15 +584,22 @@ export async function collect() {
           stat.requested++;
           const body = await github(url);
           stat.returned += (body.items || []).length;
+          const traces=[];
           for (const repo of body.items || []) {
-            if (!repo?.id || unique.has(repo.id)) continue;
+            if (!repo?.id) continue;
+            const trace={identity:repo.full_name,query:spec.q,stage:'discovery',outcome:'matched'};traces.push(trace);
+            if (unique.has(repo.id)) {trace.outcome='duplicate';trace.reason='repository-already-selected';continue;}
             stat.unique++;
+            if(unique.size>=MAX_REPOS || added>=spec.quota){trace.stage='budget';trace.outcome='deferred';trace.reason='repository-or-query-budget-exhausted';continue;}
             if (keepCandidate(unique, repo)) {
               repo._trendTopSourceQuery = spec.q;
               stat.accepted++;added++;
+              trace.outcome='accepted';
+            } else {
+              trace.stage='budget';trace.outcome='deferred';trace.reason='mega-repository-cap';
             }
-            if (unique.size >= MAX_REPOS || added >= spec.quota) break;
           }
+          await recordTraces(runId,'github-repo',traces);
           await sleep(1200);
         }
         executedRepoQueries.push(spec.q);
@@ -583,21 +613,23 @@ export async function collect() {
     found = unique.size;
     const at = new Date().toISOString();
     for (const repo of unique.values()) {
+      await assertLease();
       await upsertGithubRepo(repo, at, repo._trendTopSourceQuery || null);
+      await recordTraces(runId,'github-repo',[{identity:repo.full_name,query:repo._trendTopSourceQuery,stage:'storage',outcome:'stored'}]);
       sampled++;
     }
 
-    const assets = await collectTypedAssets([...unique.values()], runId, at, manual.assets);
+    const assets = await collectTypedAssets([...unique.values()], runId, at, manual.assets, async(...args)=>{await assertLease();const result=await github(...args);await assertLease();return result;},sleep,assertLease);
     for (const repo of assets.extra) {
       await upsertGithubRepo(repo, at, repo._trendTopAssetSourceQuery || null);
       unique.set(repo.id, repo);
     }
 
-    const websites = await collectWebsiteSources();
+    const websites = await collectWebsiteSources({runId,assertLease});
     let directories = { applied: 0, created: 0 };
     try {
       directories = await collectDirectorySignals({ fetchGithub: github, upsertAsset,
-        upsertRepo: (repo, source) => upsertGithubRepo(repo, at, source), wait: sleep });
+        upsertRepo: async(repo, source) => {await assertLease();return upsertGithubRepo(repo,at,source);}, wait:sleep,runId,assertLease });
     } catch (error) {
       directories.failed = (directories.failed || 0) + 1;
       console.error('[collect] directory signals', error);
@@ -609,19 +641,25 @@ export async function collect() {
     // Star history is a separate GitHub endpoint; if it breaks, keep the snapshots and still rebuild metrics.
     let history = { sampled: 0, failed: 0 }, historyError = null;
     try {
-      history = await syncStarHistory([...unique.values()].map(r => ({ id: r.id, full_name: r.full_name })));
+      history = await syncStarHistory([...unique.values()].map(r => ({ id: r.id, full_name: r.full_name })),assertLease);
     } catch (e) {
       historyError = `star history aborted: ${String(e)}`;
       console.error('[collect]', historyError);
     }
+    await commitCatalogWrites(async()=>{
+    await assertLease();
     await rebuildDerivedMetrics();
     await copyRepoMetricsToAssets();
+    await assertLease();
     const queryFailures = asNumber((await one('SELECT COUNT(*) AS n FROM sync_query_stats WHERE run_id=$1 AND error IS NOT NULL', [runId]))?.n) || 0;
     const partial = queryFailures + assets.metadataFailures + assets.verificationFailures + (websites.failed || 0) + (directories.failed || 0) + (history.failed || 0) > 0 || Boolean(historyError);
     await query(
       `UPDATE sync_runs SET finished_at = $1, status = $2, found = $3, sampled = $4, error = $5 WHERE id = $6`,
       [new Date().toISOString(), partial ? 'partial' : 'ok', found, sampled, historyError || (partial ? `${queryFailures} query failures; ${assets.metadataFailures} incomplete repositories; ${assets.verificationFailures} Skill trees unavailable; ${websites.failed || 0} website failures; ${directories.failed || 0} directory failures; ${history.failed || 0} star histories unavailable` : null), runId]
     );
+    await publishCatalog(runId,partial?'partial':'ok');
+    });
+    await pruneDiagnostics();
     return { found, sampled, history, historyError, assets: assets.counts, websites, directories, firecrawl: firecrawlReady ? (directories.provider || websites.provider || 'firecrawl') : 'skipped' };
   } catch (e) {
     await query(
@@ -640,8 +678,13 @@ function localParts(time, zone) {
   return { date: `${p.year}-${p.month}-${p.day}`, hour: Number(p.hour) };
 }
 
-export async function digest({ force = false } = {}) {
+export async function digest(options = {}) {
+  return withTaskLease('digest',assertLease=>digestUnlocked({...options,assertLease}));
+}
+async function digestUnlocked({ force = false, assertLease } = {}) {
   const now = new Date();
+  // A provider might have accepted a message before the process crashed. Never silently resend it.
+  await query("UPDATE deliveries SET status=CASE WHEN mail_payload IS NULL AND claimed_at IS NOT NULL THEN 'failed' ELSE 'uncertain' END,last_error='Interrupted send; provider acceptance needs review' WHERE status='sending' AND (claimed_at IS NULL OR claimed_at<NOW()-INTERVAL '30 minutes')");
   const last = await one("SELECT MAX(sampled_at) AS t FROM snapshots WHERE source = 'github'");
   if ((process.env.DATA_MODE || 'demo') === 'live' && (!last?.t || now - new Date(last.t) > 36 * 3600000)) {
     throw new Error('Fresh ranking data unavailable; digest skipped');
@@ -662,44 +705,48 @@ export async function digest({ force = false } = {}) {
       'SELECT * FROM deliveries WHERE subscription_id = $1 AND local_date = $2',
       [sub.id, date]
     );
-    if (!delivery || delivery.status === 'sent' || delivery.status === 'skipped' || delivery.status === 'sending' || (delivery.status === 'failed' && asNumber(delivery.attempts) >= 3)) continue;
+    if (!delivery || ['sent','skipped','sending','uncertain'].includes(delivery.status) || (delivery.status === 'failed' && asNumber(delivery.attempts) >= 3)) continue;
     const claim = await query(
-      `UPDATE deliveries SET status = 'sending', attempts = attempts + 1
+      `UPDATE deliveries SET status = 'sending', attempts = attempts + 1,claimed_at=NOW()
        WHERE id = $1 AND status IN ('pending', 'failed')
        RETURNING id`,
       [delivery.id]
     );
     if (!claim.rows.length) continue;
+    let providerAttempted=false;
     try {
       const raw = decryptManageToken(sub.manage_hash);
       const previous = await one(
-        `SELECT snapshot FROM deliveries WHERE subscription_id = $1 AND status = 'sent' AND snapshot IS NOT NULL
-         ORDER BY sent_at DESC LIMIT 1`,
-        [sub.id]
+        `SELECT snapshot FROM deliveries WHERE subscription_id = $1 AND status IN ('sent','skipped') AND snapshot IS NOT NULL AND id<>$2
+         ORDER BY local_date DESC,id DESC LIMIT 1`,
+        [sub.id,delivery.id]
       );
-      const mail = await buildDigest(sub, raw, { previous: asJson(previous?.snapshot, null) });
+      const mail = asJson(delivery.mail_payload,null) || await buildDigest(sub, raw, { previous: asJson(previous?.snapshot, null) });
       if (!mail.sections.length) {
-        await query('UPDATE deliveries SET status = $1, last_error = NULL WHERE id = $2', ['skipped', delivery.id]);
+        await query('UPDATE deliveries SET status=$1,last_error=NULL,snapshot=$3::jsonb,mail_payload=$4::jsonb WHERE id=$2', ['skipped',delivery.id,JSON.stringify(mail.snapshot || {}),JSON.stringify(mail)]);
         continue;
       }
+      await query('UPDATE deliveries SET mail_payload=COALESCE(mail_payload,$1::jsonb) WHERE id=$2',[JSON.stringify(mail),delivery.id]);
       const current = await one('SELECT status FROM subscriptions WHERE id=$1', [sub.id]);
       if (current?.status !== 'active' || !(await proAccess(sub.user_id)).active) {
         await query("UPDATE deliveries SET status='pending' WHERE id=$1", [delivery.id]);
         continue;
       }
+      await assertLease();
+      providerAttempted=true;
       await sendMail(sub.email, mail.subject, mail.text, mail.html, {
         'List-Unsubscribe': `<${mail.oneClick}>`,
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
       }, `digest/${delivery.id}`);
       await query(
-        'UPDATE deliveries SET status = $1, sent_at = $2, last_error = NULL, snapshot = $4::jsonb WHERE id = $3',
-        ['sent', now.toISOString(), delivery.id, JSON.stringify(mail.snapshot || {})]
+        'UPDATE deliveries SET status = $1, sent_at = $2, accepted_at=$2, last_error = NULL, snapshot = $4::jsonb WHERE id = $3',
+        ['sent', new Date().toISOString(), delivery.id, JSON.stringify(mail.snapshot || {})]
       );
       sent++;
     } catch (e) {
       await query(
         'UPDATE deliveries SET status = $1, last_error = $2 WHERE id = $3',
-        ['failed', String(e), delivery.id]
+        [providerAttempted && !e.definitivelyRejected ? 'uncertain':'failed', String(e), delivery.id]
       );
       failed++;
     }
@@ -722,15 +769,23 @@ export function decryptManageToken(saved) {
 }
 export { token, hash };
 
+export async function executeTask(task) {
+  if(task==='collect')return collect();
+  if(task==='digest')return digest();
+  if(task==='history')return withTaskLease('collect',assertLease=>stageCatalogWrites(async()=>{const result=await syncStarHistory(undefined,assertLease);await commitCatalogWrites(async()=>{await assertLease();await rebuildDerivedMetrics();await copyRepoMetricsToAssets();await publishCatalog(null,'history-rebuilt')});return result}));
+  if(task==='backfill')return withTaskLease('collect',async assertLease=>transaction(async()=>{await assertLease();await rebuildDerivedMetrics();await copyRepoMetricsToAssets();await assertLease();await publishCatalog(null,'metrics-rebuilt');return {ok:true}}));
+  throw new Error('Unknown task');
+}
 if (process.argv[1]?.endsWith('jobs.js')) {
   const task = process.argv[2];
   ready
     .then(() => {
       if (task === 'catalog-audit') return auditCopiedAssets();
       if (task === 'collect') return collect();
-      if (task === 'history') return syncStarHistory();
+      if (task?.startsWith('queue:'))return runQueuedTask(task.slice(6),executeTask);
+      if (task === 'history') return executeTask('history');
       if (task === 'digest') return digest({ force: process.argv.includes('--force') });
-      if (task === 'backfill') return rebuildDerivedMetrics().then(() => ({ ok: true }));
+      if (task === 'backfill') return executeTask('backfill');
       throw new Error('Use collect, history, digest or backfill');
     })
     .then(x => { if (x !== undefined) console.log(x); })

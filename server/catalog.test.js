@@ -131,7 +131,8 @@ test('official requires evidence and compare exposes protocol fields', async () 
   assert.ok(compared.items.every(row => !String(row.compare?.identity || '').includes('npx')));
 });
 
-test('skill hot score blends usage with star momentum', async () => {
+test('directory installs do not change repository-momentum Hot scores', async () => {
+  const before=await getCatalogRankings('skill',{board:'hot',period:'week',category:'pdf',limit:20});
   const originals = await query("SELECT slug, ranking_signals FROM assets WHERE slug IN ('anthropic-pdf','pdf-extract-pro')");
   try {
     await query("UPDATE assets SET ranking_signals='{\"installs\":1}'::jsonb WHERE slug='anthropic-pdf'");
@@ -140,7 +141,8 @@ test('skill hot score blends usage with star momentum', async () => {
     const community = ranking.items.find(item => item.slug === 'pdf-extract-pro');
     const official = ranking.items.find(item => item.slug === 'anthropic-pdf');
     assert.ok(community?.usage > official?.usage);
-    assert.ok(community.score > official.score);
+    assert.equal(community.score,before.items.find(item=>item.slug===community.slug).score);
+    assert.equal(official.score,before.items.find(item=>item.slug===official.slug).score);
   } finally {
     for (const row of originals.rows) {
       await query('UPDATE assets SET ranking_signals=$1::jsonb WHERE slug=$2', [JSON.stringify(row.ranking_signals || {}), row.slug]);

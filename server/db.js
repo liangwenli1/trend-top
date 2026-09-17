@@ -1,4 +1,7 @@
 import 'dotenv/config';
+import { AsyncLocalStorage } from 'node:async_hooks';
+const transactionContext=new AsyncLocalStorage();
+const catalogWritesContext=new AsyncLocalStorage();
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -70,6 +73,12 @@ async function createAdapter() {
       kind: 'postgres',
       async exec(sql) { await pool.query(sql); },
       async query(text, params = []) { return pool.query(text, params); },
+      async transaction(run) {
+        const client=await pool.connect();
+        try {await client.query('BEGIN');const result=await run(client);await client.query('COMMIT');return result;}
+        catch(error){await client.query('ROLLBACK');throw error;}
+        finally{client.release();}
+      },
       async close() { await pool.end(); }
     };
   }
@@ -85,6 +94,7 @@ async function createAdapter() {
       const result = await lite.query(text, params);
       return { rows: result.rows, rowCount: result.affectedRows ?? result.rows.length };
     },
+    async transaction(run) {return lite.transaction(run);},
     async close() { await lite.close?.(); }
   };
 }
@@ -164,9 +174,40 @@ async function db() {
 }
 
 export async function query(text, params = []) {
-  return trackDatabaseCall(async () => (await db()).query(text, params));
+  const staging=catalogWritesContext.getStore();
+  // Only verified catalog content is staged. Diagnostics, task heartbeats, source retry
+  // state and account writes remain durable while the network collection is running.
+  if(staging && (/^\s*(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:repos|assets|snapshots|star_history)\b/i.test(text) || /^\s*UPDATE\s+website_sources\b/i.test(text) && /\bmetadata\s*=/i.test(text))){
+    if(/\bRETURNING\b/i.test(text))throw new Error('Staged catalog writes cannot return rows');
+    staging.bytes+=Buffer.byteLength(text)+Buffer.byteLength(JSON.stringify(params));
+    if(staging.commands.length>=60000 || staging.bytes>64*1024*1024)throw new Error('Catalog staging budget exceeded');
+    staging.commands.push({text,params:structuredClone(params)});
+    return {rows:[],rowCount:1};
+  }
+  return trackDatabaseCall(async () => (transactionContext.getStore() || await db()).query(text, params));
 }
 
+// Each transaction owns one connection; concurrent request queries stay outside it.
+export async function transaction(run) {
+  if(transactionContext.getStore())return run();
+  return (await db()).transaction(client=>transactionContext.run(client,run));
+}
+
+export const catalogWritesStaged=()=>Boolean(catalogWritesContext.getStore());
+export function stageCatalogWrites(run){
+  return catalogWritesContext.run({commands:[],bytes:0,committed:false},run);
+}
+export async function commitCatalogWrites(after){
+  const staging=catalogWritesContext.getStore();
+  if(staging?.bytes>64*1024*1024 || staging?.commands.length>60000)throw new Error('Catalog staging budget exceeded');
+  if(!staging || staging.committed)throw new Error('No unpublished catalog stage');
+  const result=await catalogWritesContext.run(null,()=>transaction(async()=>{
+    for(const command of staging.commands)await query(command.text,command.params);
+    return after();
+  }));
+  staging.committed=true;staging.commands.length=0;
+  return result;
+}
 export async function one(text, params = []) {
   return (await query(text, params)).rows[0] || null;
 }
@@ -312,6 +353,9 @@ export async function applySnapshotsToDaily() {
 }
 
 export async function rebuildPeriodMetrics() {
+  return transaction(rebuildPeriodMetricsUnlocked);
+}
+async function rebuildPeriodMetricsUnlocked() {
   const source = dataSource();
   const latestRow = await one('SELECT MAX(sampled_at) AS t FROM snapshots WHERE source=$1', [source]);
   const endpoint = latestRow?.t ? new Date(latestRow.t) : new Date();

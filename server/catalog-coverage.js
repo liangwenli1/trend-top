@@ -1,6 +1,7 @@
 import { asIso, asJson, dataSource, many } from './db.js';
 import { BENCHMARK_VERSION, CATALOG_BENCHMARK } from '../shared/catalog-benchmark.js';
 import { DATA_SOURCES, repoIdentity, safeSourceUrl } from '../shared/data-sources.js';
+import { sourcePolicies } from './source-policy.js';
 
 const domainPath = value => {
   const safe = safeSourceUrl(value);
@@ -52,5 +53,7 @@ export async function getCoverageReport() {
     return { type, expected: group.length, covered: group.filter(entry => entry.status === 'covered').length };
   });
   const queryFailures = runs.length ? await many('SELECT collection_type,family,query_text,error,rate_limited FROM sync_query_stats WHERE run_id=$1 AND (error IS NOT NULL OR rate_limited=TRUE) ORDER BY id LIMIT 30', [runs[0].id]) : [];
-  return { benchmarkVersion: BENCHMARK_VERSION, generatedAt: new Date().toISOString(), mode: dataSource() === 'demo' ? 'demo' : 'live', expected: entries.length, covered: entries.filter(entry => entry.status === 'covered').length, byType, entries, latestRun: runs[0] || null, queryFailures, sourcePolicies: DATA_SOURCES.map(policy => ({ ...policy, lastFetchedAt: asIso(sources.find(row => row.id === policy.id)?.last_fetched_at), lastError: sources.find(row => row.id === policy.id)?.last_error || null })) };
+  const traces = runs.length ? await many(`SELECT * FROM collection_traces WHERE run_id=$1 AND (identity=ANY($2::text[]) OR split_part(identity,'/',2)='awesome-design-md') ORDER BY id DESC LIMIT 20000`,[runs[0].id,[...new Set(CATALOG_BENCHMARK.map(entry=>entry.repo?.toLowerCase() || DATA_SOURCES.find(source=>source.url===entry.website)?.id).filter(Boolean))]]) : [];
+  for (const entry of entries) entry.traces=traces.filter(trace=>trace.collection_type===entry.type && (matchesRepo(entry,trace.identity) || entry.website && trace.identity===DATA_SOURCES.find(source=>source.url===entry.website)?.id) && (!entry.resourcePath || !trace.resource_path || trace.resource_path===entry.resourcePath)).slice(0,20);
+  return { benchmarkVersion: BENCHMARK_VERSION, generatedAt: new Date().toISOString(), mode: dataSource() === 'demo' ? 'demo' : 'live', expected: entries.length, covered: entries.filter(entry => entry.status === 'covered').length, byType, entries, latestRun: runs[0] || null, queryFailures, sourcePolicies: (await sourcePolicies()).map(policy => ({ ...policy, lastFetchedAt: asIso(sources.find(row => row.id === policy.id)?.last_fetched_at), lastError: sources.find(row => row.id === policy.id)?.last_error || null })) };
 }

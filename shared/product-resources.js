@@ -1,4 +1,5 @@
 export function productKey(item) {
+  if (/^(?:repo|site|item):/.test(String(item.productFamily || ''))) return item.productFamily;
   const source = item.sourceRepoUrl || item.source_repo_url || (item.type === 'github-repo' ? item.url : '');
   try {
     const url = new URL(source || item.url);
@@ -6,7 +7,7 @@ export function productKey(item) {
       const parts = url.pathname.split('/').filter(Boolean);
       if (parts.length >= 2) return `repo:${parts.slice(0, 2).join('/').replace(/\.git$/, '').toLowerCase()}`;
     }
-    return `site:${url.hostname.toLowerCase().replace(/^www\./, '')}`;
+    return `site:${url.hostname.toLowerCase().replace(/^www\./, '')}${url.pathname.replace(/\/+$/, '')}`;
   } catch { return `item:${item.type}:${item.id}`; }
 }
 

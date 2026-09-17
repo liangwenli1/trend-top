@@ -30,6 +30,7 @@ COPY scripts/apply-config.mjs ./scripts/apply-config.mjs
 COPY scripts/scheduler.mjs ./scripts/scheduler.mjs
 COPY scripts/scheduler-core.mjs ./scripts/scheduler-core.mjs
 COPY scripts/catalog-coverage.mjs ./scripts/catalog-coverage.mjs
+COPY scripts/performance-baseline.mjs ./scripts/performance-baseline.mjs
 COPY config.json ./config.json
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 

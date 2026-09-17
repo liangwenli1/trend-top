@@ -24,11 +24,15 @@ import { normalizeTopics as canonicalTopics } from '../shared/topics.js';
 import { registerCreemWebhookRoute } from './creem-webhook.js';
 import { registerAdminRoutes, requireAdmin } from './admin.js';
 import { publicSettings } from './settings.js';
+import { enqueueTask } from './task-queue.js';
 import { renderGainChart } from './png-chart.js';
 import { lastCompleteDay } from './db.js';
 import { parseChartEnd } from './digest-chart-date.js';
 import { publicResponseCache } from './catalog-cache.js';
 import { performanceMiddleware } from './performance.js';
+import { catalogRevision } from './operations.js';
+import { registerSavedSearchRoutes } from './saved-searches.js';
+import { registerDigestImageRoutes } from './digest-snapshots.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -38,6 +42,7 @@ registerCreemWebhookRoute(app);
 app.use(express.json({ limit: '20kb' }));
 app.use(performanceMiddleware);
 app.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+app.use(catalogRevision);
 const publicCatalogCache = publicResponseCache.middleware;
 const demo = (process.env.DATA_MODE || 'demo') === 'demo';
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -86,6 +91,8 @@ registerGoogleAuthRoutes(app);
 registerSubscriptionRoutes(app);
 registerBillingRoutes(app, { publicCache: publicCatalogCache });
 registerWatchRoutes(app);
+registerSavedSearchRoutes(app);
+registerDigestImageRoutes(app);
 registerRefundRoutes(app);
 registerAdminRoutes(app);
 app.get('/api/site-settings', publicCatalogCache, async (_req, res) => res.json(await publicSettings()));
@@ -304,18 +311,13 @@ app.post('/api/one-click', async (req, res) => {
 if (demo) {
   app.get('/api/demo-outbox', async (_req, res) => res.json(await many('SELECT * FROM outbox ORDER BY id DESC LIMIT 30')));
 }
-app.post('/api/admin/collect', requireAdmin, async (_req, res) => {
-  try { res.json(await collect()); } catch (e) { fail(res, 503, String(e)); }
+app.post('/api/admin/collect', requireAdmin, async (req, res) => {
+  try { res.status(202).json({queued:true,request:await enqueueTask('collect',req.user.email)}); } catch(e){fail(res,503,e.message)}
 });
-app.post('/api/admin/digest', requireAdmin, async (_req, res) => {
-  try { res.json(await digest()); } catch (e) { fail(res, 503, String(e)); }
+app.post('/api/admin/digest', requireAdmin, async (req, res) => {
+  try { res.status(202).json({queued:true,request:await enqueueTask('digest',req.user.email)}); } catch(e){fail(res,503,e.message)}
 });
-app.post('/api/admin/backfill', requireAdmin, async (_req, res) => {
-  try {
-    await rebuildDerivedMetrics();
-    res.json({ ok: true });
-  } catch (e) { fail(res, 503, String(e)); }
-});
+app.post('/api/admin/backfill',requireAdmin,async(req,res)=>{try{res.status(202).json({queued:true,request:await enqueueTask('backfill',req.user.email)})}catch(e){fail(res,503,e.message)}});
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.resolve(here, '../dist');

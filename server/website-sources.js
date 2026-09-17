@@ -3,8 +3,14 @@ import { asJson, many, query } from './db.js';
 import { getSettings } from './settings.js';
 import { CLASSIFICATION_VERSION, classify, officialEvidenceFor, isOfficial } from '../shared/taxonomy.js';
 import { WEBSITE_SOURCES, dataSourceById } from '../shared/data-sources.js';
+import { collectionAllowed, sourcePolicies } from './source-policy.js';
+import { acceptsRepoType } from './asset-classification.js';
+import { repoIdentity } from '../shared/data-sources.js';
+import { recordTraces } from './operations.js';
 
+import { robotsAllows } from '../shared/robots-rules.js';
 const SOURCES = WEBSITE_SOURCES;
+const robotsCache=new Map();
 
 const clean = value => String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const absoluteUrl = (value, base) => { try { return new URL(value, base).href; } catch { return null; } };
@@ -26,14 +32,15 @@ async function fetchWithTimeout(url, options = {}, timeout = 15000) {
 }
 
 async function allowedByRobots(url) {
-  const parsed = new URL(url);
-  try {
-    const response = await fetchWithTimeout(`${parsed.origin}/robots.txt`, { headers: { 'User-Agent': 'TrendTopBot/1.0' } }, 6000);
-    if (!response.ok) return true;
-    const text = await response.text();
-    const group = text.split(/user-agent\s*:/i).slice(1).find(block => block.trim().startsWith('*')) || '';
-    return !/^\s*\*\s*(?:\r?\n)+\s*disallow\s*:\s*\/\s*$/im.test(`*\n${group}`);
-  } catch { return true; }
+  const parsed=new URL(url), cached=robotsCache.get(parsed.origin);
+  if(cached && cached.expires>Date.now())return robotsAllows(cached.text,url);
+  try{
+    const response=await fetchWithTimeout(parsed.origin+'/robots.txt',{headers:{'User-Agent':'TrendTopBot/1.0'}},6000);
+    if([404,410].includes(response.status)){robotsCache.set(parsed.origin,{text:'',expires:Date.now()+3600000});return true}
+    if(!response.ok)return false;
+    const text=(await response.text()).slice(0,500000);
+    robotsCache.set(parsed.origin,{text,expires:Date.now()+3600000});return robotsAllows(text,url);
+  }catch{return false}
 }
 
 async function directMetadata(source) {
@@ -67,6 +74,7 @@ async function firecrawlMetadata(source, settings) {
 }
 
 async function firecrawlScrape(url, settings, extra = {}) {
+  if(!(await allowedByRobots(url)))throw new Error('Robots permission unavailable or denied');
   const base = String(settings.public.collection.firecrawlApiUrl || 'https://api.firecrawl.dev').replace(/\/$/, '');
   const response = await fetchWithTimeout(`${base}/v2/scrape`, {
     method: 'POST',
@@ -116,11 +124,7 @@ const DIRECTORY_LISTINGS = [
 ];
 
 export function githubRepoKey(value) {
-  const text = String(value || '').trim();
-  const fromUrl = text.match(/github\.com\/([^/\s]+)\/([^/\s?#]+)/i);
-  const fromShort = fromUrl || text.match(/^([^/\s]+)\/([^/\s]+)$/);
-  if (!fromShort) return '';
-  return `${fromShort[1]}/${fromShort[2].replace(/\.git$/i, '')}`.toLowerCase();
+  return repoIdentity(String(value || '').trim());
 }
 
 function assetRepoKey(row) {
@@ -190,7 +194,10 @@ export async function applyDirectorySignals(listings = []) {
   }
   let applied = 0;
   const unmatched = [];
+  const policies=await sourcePolicies();
   for (const item of listings) {
+    const policy=policies.find(source=>source.id===item.directory);
+    if(!policy?.enabled || !policy.metricsAllowed || policy.reviewStatus!=='approved')continue;
     let matches = byRepo.get(`${item.type}:${githubRepoKey(item.github)}`) || [];
     if (item.type === 'skill') matches = matchSkillListing(item, matches);
     if (!matches.length) { unmatched.push(item); continue; }
@@ -211,17 +218,26 @@ export function matchSkillListing(item, rows) {
   return rows.length === 1 ? rows : [];
 }
 
-export async function collectDirectorySignals({ fetchGithub, upsertAsset, upsertRepo, wait = (ms) => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+export async function collectDirectorySignals({ fetchGithub, upsertAsset, upsertRepo, wait = (ms) => new Promise(resolve => setTimeout(resolve, ms)),runId,assertLease=async()=>{} } = {}) {
   const settings = await getSettings();
   if (!settings.secret.firecrawlApiKey) return { applied: 0, created: 0, provider: 'skipped' };
   const listings = [];
   let failed = 0;
   for (const spec of DIRECTORY_LISTINGS) {
+    await assertLease();
+    const policy=(await sourcePolicies()).find(source=>source.id===spec.id);
+    if(!policy?.enabled || !policy.metricsAllowed || policy.reviewStatus!=='approved'){
+      await recordTraces(runId,spec.type,[{identity:spec.id,stage:'permission',outcome:'deferred',reason:policy?.notes || 'source-review-required'}]);continue;
+    }
     try {
-      listings.push(...(await extractDirectory(spec, settings)).slice(0, 100));
+      const hits=(await extractDirectory(spec,settings)).slice(0,100);
+      listings.push(...hits);
+      await recordTraces(runId,spec.type,hits.map(item=>({identity:item.github,path:item.skillPath,stage:'directory-discovery',outcome:'matched',query:spec.url})));
+      await assertLease();
     } catch (error) {
       failed++;
       console.error('[directory-signals]', spec.id, error);
+      await recordTraces(runId,spec.type,[{identity:spec.id,stage:'directory-discovery',outcome:'failed',reason:String(error.message).slice(0,500)}]);
     }
     await wait(400);
   }
@@ -230,6 +246,7 @@ export async function collectDirectorySignals({ fetchGithub, upsertAsset, upsert
   if (fetchGithub && upsertAsset) {
     const seen = new Set();
     for (const item of unmatched) {
+      await assertLease();
       const listingKey = `${item.type}:${item.github}:${item.skillPath || item.name || ''}`;
       if (created >= 80 || seen.has(listingKey)) continue;
       seen.add(listingKey);
@@ -252,6 +269,7 @@ export async function collectDirectorySignals({ fetchGithub, upsertAsset, upsert
             created++;
           }
         } else {
+          if (!acceptsRepoType(item.type,repo)) continue;
           const id = await upsertAsset(item.type, repo, `directory:${item.directory}`);
           await stampDirectory({ id, type: item.type, full_name: repo.full_name, ranking_signals: {} }, listingSignals(item, item.directory));
           created++;
@@ -295,27 +313,32 @@ async function saveWebsite(source, metadata, now) {
        category=EXCLUDED.category,category_zh=EXCLUDED.category_zh,category_en=EXCLUDED.category_en,use_case=EXCLUDED.use_case,official=EXCLUDED.official,official_evidence=EXCLUDED.official_evidence,url=EXCLUDED.url,
        website_url=EXCLUDED.website_url,source_repo_url=COALESCE(EXCLUDED.source_repo_url,assets.source_repo_url),favicon_url=EXCLUDED.favicon_url,
        topics=EXCLUDED.topics,pushed_at=EXCLUDED.pushed_at,last_fetched_at=EXCLUDED.last_fetched_at,last_seen_at=EXCLUDED.last_seen_at,
-       source_query=EXCLUDED.source_query,entity_key=EXCLUDED.entity_key,ranking_signals=assets.ranking_signals || EXCLUDED.ranking_signals,active=TRUE,missed_runs=0`,
+       source_query=EXCLUDED.source_query,entity_key=EXCLUDED.entity_key,ranking_signals=assets.ranking_signals || EXCLUDED.ranking_signals,active=CASE WHEN assets.ranking_signals->>'reviewDisposition'='retired' THEN FALSE ELSE TRUE END,missed_runs=0`,
     [id, slug, metadata.title || source.name, source.name, description, classified.category, classified.categoryZh, classified.categoryEn, classified.useCase, isOfficial(evidence), evidence, `website:${classified.category}`, source.url, JSON.stringify(topics), now, source.source_repo_url, metadata.favicon, `website-source:${slug}`, `domain:${new URL(source.url).hostname.toLowerCase().replace(/^www\./, '')}`, JSON.stringify({ trust: source.trust_level || source.trust, contentUpdatedAt: metadata.lastModified, provider: metadata.provider, confidence: metadata.lastModified ? 'partial' : 'metadata-only' })]
   );
   await query('UPDATE assets SET taxonomy_version=$1 WHERE id=$2', [CLASSIFICATION_VERSION, id]);
   await query('UPDATE website_sources SET last_fetched_at=$1,next_retry_at=NULL,failure_count=0,last_error=NULL,metadata=$2::jsonb WHERE id=$3', [now, JSON.stringify(metadata), source.id]);
 }
 
-export async function collectWebsiteSources() {
+export async function collectWebsiteSources({runId,assertLease=async()=>{}}={}) {
   await ensureWebsiteSources();
   const settings = await getSettings();
   if (settings.public.collection.websiteEnrichment === false) return { found: 0, failed: 0, provider: 'disabled' };
   const sources = await many(`SELECT * FROM website_sources WHERE active=TRUE AND (next_retry_at IS NULL OR next_retry_at<=NOW()) AND (last_fetched_at IS NULL OR last_fetched_at < NOW() - (frequency_hours * INTERVAL '1 hour')) ORDER BY last_fetched_at NULLS FIRST`);
   let found = 0, failed = 0;
   for (const source of sources) {
+    await assertLease();
+    if (!(await collectionAllowed(source.id))) {await recordTraces(runId,'website',[{identity:source.id,query:source.url,stage:'permission',outcome:'deferred',reason:'source-disabled'}]);continue;}
     const now = new Date().toISOString();
     try {
       const metadata = settings.secret.firecrawlApiKey ? await firecrawlMetadata(source, settings) : await directMetadata(source);
+      await assertLease();
       await saveWebsite(source, metadata, now);
+      await recordTraces(runId,'website',[{identity:source.id,query:source.url,stage:'storage',outcome:'stored'}]);
       found++;
     } catch (error) {
       failed++;
+      await recordTraces(runId,'website',[{identity:source.id,query:source.url,stage:'metadata',outcome:'failed',reason:String(error.message).slice(0,500)}]);
       const failures = Math.min(8, Number(source.failure_count || 0) + 1);
       const retryAt = new Date(Date.now() + Math.min(24, 2 ** (failures - 1)) * 3600000).toISOString();
       await query('UPDATE website_sources SET last_fetched_at=$1,next_retry_at=$2,failure_count=$3,last_error=$4 WHERE id=$5', [now, retryAt, failures, String(error).slice(0, 500), source.id]);

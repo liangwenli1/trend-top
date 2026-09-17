@@ -60,6 +60,7 @@ test('Watch ranks are available past the public page-size limit', async () => {
       const id='watch-rank-limit-'+i; ids.push(id);
       await query(`INSERT INTO assets(id,type,slug,name,full_name,category,url,stars,forks,ranking_signals)
         VALUES($1,'skill',$1,$1,$1,'pdf','https://example.invalid',10,0,$2::jsonb)`,[id,JSON.stringify({installs:1000-i})]);
+      await query(`INSERT INTO asset_daily(asset_id,day,star_created,stars) SELECT $1,day,1,10 FROM (SELECT DISTINCT day FROM asset_daily WHERE asset_id='skill-anthropic-pdf') d`,[id]);
     }
     const publicPage = await getCatalogRankings('skill',{board:'hot',limit:200});
     assert.equal(publicPage.items.length,50);

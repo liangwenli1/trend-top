@@ -4,6 +4,9 @@ import { groupProductResources } from '../shared/product-resources.js';
 import { rankRelated, broadTopics } from '../shared/related-projects.js';
 import { normalizeTopics, topicFilterValues } from '../shared/topics.js';
 import { resourceProvenance } from '../shared/data-sources.js';
+import { comparableUsage, usagePercentile } from '../shared/usage-metrics.js';
+import { sourcePolicies, visibleSignals } from './source-policy.js';
+import { attachProductFamily, loadProductFamilies, familyResources } from './product-families.js';
 import { classify, compareFields, officialEvidenceFor, isOfficial, useCaseOptions, expandSearch, searchScore, normalizeUseCase } from '../shared/taxonomy.js';
 
 export const TYPES = ['skill', 'plugin', 'agent', 'components', 'website', 'github-repo'];
@@ -105,23 +108,17 @@ function hotScore(item, cohort, forkReady) {
   return Math.round(raw / (forkReady ? 1 : 0.85));
 }
 
-function usageScore(item, peers) {
-  if (!(Number(item.usage) > 0) || !peers.length) return null;
-  if (peers.length === 1) return Math.round(Math.min(100, Math.log10(1 + item.usage) * 20));
-  const values = peers.map(x => Math.log10(1 + Math.max(0, x.usage || 0)));
-  return percentile(values, Math.log10(1 + item.usage));
-}
-
 function typeScore(type, item, cohort, forkReady, all = cohort) {
   const momentum = hotScore(item, cohort, forkReady);
-  const usagePct = usageScore(item, all.filter(x => Number(x.usage) > 0));
+  const usagePct = usagePercentile(item, all);
+  item.scoreBasis = momentum != null ? 'repository-momentum' : 'insufficient';
+  item.usageScore = usagePct;
   if (type === 'website' && item.sourceQuery?.startsWith('website-source:')) {
-    return usagePct != null ? Math.round(usagePct) : null;
+    item.scoreBasis='insufficient';
+    return null;
   }
-  if ((type === 'skill' || type === 'plugin') && usagePct != null && momentum != null) {
-    return Math.round(0.55 * momentum + 0.45 * usagePct);
-  }
-  if ((type === 'skill' || type === 'plugin') && usagePct != null) return Math.round(usagePct);
+  // Directory percentiles and GitHub momentum stay separately labelled; no synthetic mixed axis.
+  // Usage stays on its own source/unit/window axis and never changes the Hot board.
   return momentum;
 }
 
@@ -153,7 +150,8 @@ function rankedTopics(row, frequency = null) {
 }
 
 function mapAsset(row, extras = {}) {
-  const rankingSignals = asJson(row.ranking_signals, {});
+  const rankingSignals = visibleSignals(asJson(row.ranking_signals, {}));
+  const usageMetric = comparableUsage(rankingSignals);
   const usageKind = rankingSignals.installs != null ? 'installs' : rankingSignals.usage != null ? 'usage' : rankingSignals.downloads != null ? 'downloads' : null;
   const classified = classify(row);
   const evidence = row.official_evidence || null;
@@ -182,8 +180,9 @@ function mapAsset(row, extras = {}) {
     entityKey: row.entity_key || null,
     rankingSignals,
     provenance: resourceProvenance(row, rankingSignals, dataSource() === 'demo'),
-    usage: usageKind && Number.isFinite(Number(rankingSignals[usageKind])) ? Number(rankingSignals[usageKind]) : null,
-    usageKind,
+    usage: usageMetric?.value ?? (dataSource() === 'demo' && usageKind && Number.isFinite(Number(rankingSignals[usageKind])) ? Number(rankingSignals[usageKind]) : null),
+    usageKind: usageMetric?.kind || usageKind,
+    usageMetric,
     install: row.install,
     language: row.language,
     topics: rankedTopics(row, extras.topicFrequency),
@@ -393,10 +392,11 @@ export async function getCatalogFilters(type) {
 }
 
 export async function getCatalogRankings(type, query = {}, options = {}) {
+  await Promise.all([sourcePolicies(),loadProductFamilies()]);
   if (!isType(type)) return { items: [], total: 0 };
   if (type === 'github-repo') {
     const ranking = await getRepoRankings({ ...query, ...(query.board === 'official' ? { board: 'hot', official: '1' } : {}) }, options);
-    let items = ranking.items.map(decorateRepo);
+    let items = ranking.items.map(decorateRepo).map(attachProductFamily);
     return {
       ...ranking,
       type,
@@ -481,6 +481,7 @@ export async function getCatalogRankings(type, query = {}, options = {}) {
   const cohort = scored.filter(x => x.gain != null && !x.anomaly);
   const forkReady = cohort.some(x => (x.forks || 0) > 0);
   for (const item of scored) item.score = typeScore(type, item, cohort, forkReady, scored);
+  for (let index=0;index<scored.length;index++) scored[index]=attachProductFamily(scored[index]);
   const metric = boards[board].metric;
   const filtered = scored.filter(item => {
     if (metric === 'score') return item.score != null || board === 'official';
@@ -585,12 +586,13 @@ async function relatedRows(row) {
   if(cached && Date.now()-cached.at<60000)rows=cached.rows;
   else{
     rows=await many('SELECT id,type,slug,full_name,description,category,topics,stars,url,source_repo_url FROM assets WHERE type=$1 AND active=TRUE',[key]);
-    rows=rows.map(value=>({...value,topics:asJson(value.topics,[])}));
+    rows=rows.map(value=>attachProductFamily({...value,topics:asJson(value.topics,[])}));
     relatedCache.set(key,{at:Date.now(),rows});
   }
-  return rankRelated({...row,topics:asJson(row.topics,[])},rows);
+  return rankRelated(attachProductFamily({...row,topics:asJson(row.topics,[])}),rows.map(attachProductFamily));
 }
 export async function getCatalogItem(type, id) {
+  await Promise.all([sourcePolicies(),loadProductFamilies()]);
   if (type === 'github-repo') {
     const repo = await one(
       'SELECT * FROM repos WHERE id = $1 OR full_name = $2',
@@ -627,6 +629,7 @@ export async function getCatalogItem(type, id) {
       }),
       snapshots: snapshots.map(s => ({ sampled_at: asIso(s.sampled_at), stars: asNumber(s.stars), forks: asNumber(s.forks) })),
       similar: [],
+      resources: await familyResources({type:'github-repo',url:`https://github.com/${repo.full_name}`}),
       mode: dataSource() === 'demo' ? 'demo' : 'live'
     };
   }
@@ -652,12 +655,14 @@ export async function getCatalogItem(type, id) {
     }),
     similar: similarRows.slice(0,6).map(item => ({...item, stars:asNumber(item.stars)})),
     relatedCount: similarRows.length,
+    resources: await familyResources({type:row.type,sourceRepoUrl:row.source_repo_url,url:row.url}),
     series: series.map(r => ({ date: asDay(r.day), count: asNumber(r.star_created), stars: asNumber(r.stars) })),
     mode: dataSource() === 'demo' ? 'demo' : 'live'
   };
 }
 
 export async function getSimilar(type, id, options={}) {
+  await loadProductFamilies();
   const page=Math.max(1,Math.min(1000,Math.trunc(Number(options.page)||1))), limit=Math.max(1,Math.min(24,Math.trunc(Number(options.limit)||12)));
   const row=type==='github-repo'?null:await one('SELECT * FROM assets WHERE type=$1 AND (id=$2 OR slug=$2)',[type,id]);
   const rows=row?await relatedRows(row):[];

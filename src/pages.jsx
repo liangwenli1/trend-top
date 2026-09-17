@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { TYPES, TYPE_META, typeLabel, typePath, itemPath, trendingCopy } from './catalog.js';
 import { loginUrl } from '../shared/account-paths.js';
 import { SourceProvenance } from './source-provenance.jsx';
+import { ResourceGuide } from './resource-guide.jsx';
 
 const fmt = (n, l) => n === null || n === undefined ? '—' : new Intl.NumberFormat(l === 'zh' ? 'zh-CN' : 'en-US').format(n);
 const api = (url,options) => fetch(url,options).then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Request failed'); return j; });
@@ -485,7 +486,7 @@ export function SearchPage({ l, t, q, typeFilter = '', navigate }) {
                 <a className="repo-name" href={itemPath(l, item.type, item.slug || item.id)} onClick={e => { e.preventDefault(); navigate(e, itemPath(l, item.type, item.slug || item.id)); }}>{item.full_name}</a>
                 <p>{item.description || '—'}</p>
                 <TagActions l={l} type={item.type} item={item} navigate={navigate} />
-                {!typeFilter&&item.resources?.length>1&&<div className="product-resources">{item.resources.map(resource=><a className="tag-btn" key={resource.type+resource.id} href={itemPath(l,resource.type,resource.slug || resource.id)} onClick={event=>{event.preventDefault();navigate(event,itemPath(l,resource.type,resource.slug || resource.id))}}>{typeLabel(resource.type,l)}{resource.type==='skill'?' · '+resource.full_name.split(' / ').pop():''}</a>)}</div>}
+                {!typeFilter&&item.resources?.length>1&&<div className="product-resources">{item.resources.slice(0,6).map(resource=><a className="tag-btn" key={resource.type+resource.id} href={itemPath(l,resource.type,resource.slug || resource.id)} onClick={event=>{event.preventDefault();navigate(event,itemPath(l,resource.type,resource.slug || resource.id))}}>{typeLabel(resource.type,l)}{resource.type==='skill'?' · '+resource.full_name.split(' / ').pop():''}</a>)}</div>}
               </article>
             ))}
           </div>
@@ -550,6 +551,8 @@ export function ItemDetail({ l, t, type, id, navigate, viewer }) {
         {githubHref && githubHref !== siteHref && <a className={siteHref ? 'ghost inline' : 'primary inline'} href={githubHref} target="_blank" rel="noopener noreferrer">{t.github} ↗</a>}
       </div>
       <SourceProvenance l={l} provenance={item.provenance}/>
+      <ResourceGuide l={l} item={item}/>
+      {item.resources?.length>1&&<section className="resource-family"><h2>{l==='zh'?'同一产品的资源':'Resources in this product'}</h2><details><summary>{l==='zh'?`查看 ${item.resources.length} 个关联资源`:`View ${item.resources.length} related resources`}</summary><div className="repo-tags">{item.resources.map(resource=><a className="tag-btn" key={resource.type+resource.id} href={itemPath(l,resource.type,resource.slug || resource.id)} onClick={event=>{event.preventDefault();navigate(event,itemPath(l,resource.type,resource.slug || resource.id))}}>{typeLabel(resource.type,l)} · {resource.full_name.split(' / ').pop()}</a>)}</div></details></section>}
       {(item.similar || []).length>0&&<section className="related-section"><div className="related-heading"><h2>{l==='zh'?'相关项目':'Related projects'}</h2><span>{item.relatedCount ?? item.similarCount}</span></div><RelatedCards l={l} items={item.similar.slice(0,6)} navigate={navigate}/>{(item.relatedCount ?? item.similarCount)>6&&<a className="ghost inline" href={'/'+l+'/'+type+'/related/'+encodeURIComponent(item.slug || item.id)} onClick={event=>{event.preventDefault();navigate(event,'/'+l+'/'+type+'/related/'+encodeURIComponent(item.slug || item.id))}}>{l==='zh'?'查看全部相关项目':'View all related projects'}</a>}</section>}
     </main>
   );
@@ -598,7 +601,7 @@ function WatchButton({ l, type, item, viewer, navigate }) {
 }
 
 function RelatedCards({l,items,navigate}) {
-  return <div className="related-cards">{items.map(item=><article className="related-card" key={item.type+item.id}><a className="repo-name" href={itemPath(l,item.type,item.slug || item.id)} onClick={event=>{if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();navigate(event,itemPath(l,item.type,item.slug || item.id))}}>{item.full_name}</a><p>{item.description || '—'}</p></article>)}</div>;
+  return <div className="related-cards">{items.map(item=><article className="related-card" key={item.type+item.id}><a className="repo-name" href={itemPath(l,item.type,item.slug || item.id)} onClick={event=>{if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();navigate(event,itemPath(l,item.type,item.slug || item.id))}}>{item.full_name}</a><p>{item.description || '—'}</p>{item.relatedReasons&&<small className="related-reason">{item.relatedReasons.topics.length?(l==='zh'?'共同主题：':'Shared topics: ')+item.relatedReasons.topics.join(','):item.relatedReasons.purpose?(l==='zh'?'相近用途':'Similar purpose'):(l==='zh'?'相同专门分类':'Same specific category')}</small>}</article>)}</div>;
 }
 export function RelatedPage({l,type,id,navigate}) {
   const [data,setData]=useState(null),[page,setPage]=useState(1),[error,setError]=useState(''),[retry,setRetry]=useState(0);

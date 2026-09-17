@@ -119,10 +119,10 @@ test('unknown or incomplete growth stays unavailable; complete zero growth is re
 test('coverage report is read-only, covers six types and keeps licensing reviews explicitly pending', async () => {
   const before = await one('SELECT COUNT(*) AS n FROM assets');
   const report = await getCoverageReport();
-  assert.equal(report.expected, 16);
+  assert.equal(report.expected, 100);
   assert.equal(new Set(report.byType.map(group => group.type)).size, 6);
   assert.equal(report.mode, 'demo');
   assert.equal(report.covered, report.entries.filter(entry => entry.status === 'covered').length);
-  assert.ok(report.sourcePolicies.every(source => source.reviewStatus === 'pending'));
+  assert.ok(report.sourcePolicies.every(source => source.id==='glama' ? source.reviewStatus==='restricted' && !source.enabled && !source.metricsAllowed : source.reviewStatus === 'pending'));
   assert.equal((await one('SELECT COUNT(*) AS n FROM assets')).n, before.n);
 });

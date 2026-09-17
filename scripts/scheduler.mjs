@@ -5,6 +5,12 @@ import { createScheduler } from './scheduler-core.mjs';
 const pool = process.env.DATABASE_URL ? new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1, connectionTimeoutMillis: 5000, query_timeout: 5000 }) : null;
 const children = new Set();
 let stopping = false, wake;
+const queueWorkers=new Map();
+async function pollQueue(){
+  if(!pool)return;
+  const rows=await pool.query("SELECT DISTINCT task FROM task_requests WHERE status='running' OR (status='queued' AND available_at<=NOW())");
+  for(const {task} of rows.rows){if(!['collect','digest','backfill','history'].includes(task)||queueWorkers.has(task))continue;const worker=run('queue:'+task).finally(()=>queueWorkers.delete(task));queueWorkers.set(task,worker)}
+}
 const run = task => new Promise(resolve => {
   if (stopping) { resolve(false); return; }
   console.log(`[scheduler] ${task}`);
@@ -37,6 +43,7 @@ console.log('[scheduler] daily collection after 02:00 UTC; independent hourly de
 try {
   while (!stopping) {
     await scheduler.tick();
+    try{await pollQueue()}catch(error){console.error('[scheduler] queue poll failed:',error.message)}
     if (!stopping) await new Promise(resolve => {
       const timer = setTimeout(() => { wake = undefined; resolve(); }, 30000);
       wake = () => { clearTimeout(timer); wake = undefined; resolve(); };
@@ -44,5 +51,6 @@ try {
   }
 } finally {
   await scheduler.settle();
+  await Promise.all(queueWorkers.values());
   await pool?.end();
 }

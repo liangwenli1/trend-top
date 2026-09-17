@@ -14,9 +14,10 @@
     "history": "node server/jobs.js history",
     "digest": "node server/jobs.js digest",
     "backfill": "node server/jobs.js backfill",
-    "test": "node --test server/coverage.test.js && node --test server/roadmap-core.test.js && node --test server/pulse.test.js && node --test server/mail.test.js && node --test server/api.test.js && node --test server/catalog.test.js && node --test server/billing.test.js && node --test server/google-auth.test.js && node --test server/pricing-cache.test.js && node --test server/pro-access.test.js && node --test server/resources.test.js && node --test server/watches.test.js",
+    "test": "node --test server/coverage.test.js && node --test server/roadmap-core.test.js && node --test server/pulse.test.js && node --test server/mail.test.js && node --test server/api.test.js && node --test server/catalog.test.js && node --test server/billing.test.js && node --test server/google-auth.test.js && node --test server/pricing-cache.test.js && node --test server/pro-access.test.js && node --test server/resources.test.js && node --test server/watches.test.js && node --test server/phases.test.js",
     "catalog-audit": "node server/jobs.js catalog-audit",
-    "catalog-coverage": "node scripts/catalog-coverage.mjs"
+    "catalog-coverage": "node scripts/catalog-coverage.mjs",
+    "performance-baseline": "node scripts/performance-baseline.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

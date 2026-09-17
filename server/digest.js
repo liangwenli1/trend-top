@@ -1,19 +1,19 @@
-import { asDay, asJson, lastCompleteDay } from './db.js';
+import { asJson } from './db.js';
 import { TYPES, TYPE_META, ASSET_BOARDS, getCatalogRankings } from './catalog.js';
-import { boards as REPO_BOARDS, getRankings } from './rankings.js';
+import { boards as REPO_BOARDS } from './rankings.js';
 import { validGrowth, growthLabel, renderGrowthChart } from './digest-growth.js';
+import { savedWatches } from './watches.js';
+import { listSavedSearches } from './saved-searches.js';
+import { productKey } from '../shared/product-resources.js';
+import { freezeTrendImage } from './digest-snapshots.js';
 
 const root = (process.env.PUBLIC_URL || 'http://localhost:5173').replace(/\/$/, '');
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const title = (board, type, locale) => type === 'github-repo'
   ? REPO_BOARDS[board]?.[locale] || board
   : ASSET_BOARDS[board]?.[locale] || board;
-const itemUrl = (item, type, locale) => item.url || `${root}/${locale}/${type}/${encodeURIComponent(item.slug || item.id)}`;
+const itemUrl = (item, type, locale) => `${root}/${locale}/${type}/${encodeURIComponent(item.slug || item.id)}`;
 const itemKey = item => String(item.full_name || item.id);
-const chartUrl = (item, type, sampledAt) => {
-  const end = asDay((process.env.DATA_MODE || 'demo') === 'live' ? lastCompleteDay(new Date(sampledAt)) : sampledAt);
-  return `${root}/api/digest-chart/${encodeURIComponent(type)}/${encodeURIComponent(item.id)}.png?days=30&end=${end}`;
-};
 const logoUrl = `${root}/email-logo.png`;
 
 // Rank movement versus the last sent digest: 'new' entered the list, n>0 moved up, n<0 moved down, 0 unchanged, null = no history.
@@ -50,33 +50,72 @@ export async function buildDigest(sub, manageToken, { previous = null } = {}) {
   const queryBase = { period: 'day', language: languages.join(','), languages, topic: topics.join(','), topics, limit: 10 };
   const sections = [];
   const snapshot = {};
-  for (const type of types.length ? types : ['github-repo']) {
-    let first = true;
+  const seenProducts = new Set();
+  let remaining = 12;
+  const lookup = new Map();
+  const rankingFor = (type,filters) => {
+    const key=JSON.stringify([type,filters]);
+    if(!lookup.has(key)) lookup.set(key,getCatalogRankings(type,filters));
+    return lookup.get(key);
+  };
+  const uniqueItems = (items,max) => items.filter(item=>{
+    const key=productKey(item);
+    if(!remaining || seenProducts.has(key) || max<=0)return false;
+    seenProducts.add(key);remaining--;max--;return true;
+  });
+  const addSection = async (type,board,ranking,items,name,reason,chart=false,filters=queryBase) => {
+    if(!items.length)return;
+    const leader=chart?items.find(validGrowth):null;
+    const image=leader?await freezeTrendImage(leader,type,ranking.updatedAt,root):null;
+    sections.push({type,board,chart,updatedAt:ranking.updatedAt,typeName:TYPE_META[type]?.[locale] || type,name,reason,filters,
+      items:items.map(item=>({...item,url:itemUrl(item,type,locale)})),
+      trend:image?{name:leader.full_name,url:itemUrl(leader,type,locale),image}:null});
+  };
+  if(sub.user_id){
+    const watches=(await savedWatches(sub.user_id)).items;
+    for(const type of [...new Set(watches.map(item=>item.type))]){
+      const ranking=await getCatalogRankings(type,{board:'stars',period:'day'}, {all:true});
+      const ids=new Set(watches.filter(item=>item.type===type).map(item=>String(item.id)));
+      const watched=uniqueItems(ranking.items.filter(item=>ids.has(String(item.slug || item.id))),5);
+      await addSection(type,'stars',ranking,watched,zh?'你关注的项目':'Your watched projects',zh?'因为你关注了这些项目。':'Because you watch these projects.');
+    }
+    for(const search of (await listSavedSearches(sub.user_id)).filter(item=>item.notify)){
+      const {type,...filters}=search.filters, ranking=await rankingFor(type,{...filters,limit:50}),key=`saved:${search.id}`;
+      const fingerprint=JSON.stringify([filters,search.rule,search.threshold]), filterKey=key+':filters';
+      const current=ranking.items.map(itemKey),before=previous?.[filterKey]===fingerprint?previous?.[key]:null;
+      snapshot[key]=current;snapshot[filterKey]=fingerprint;
+      const growthKey=key+':growth', oldGrowth=previous?.[growthKey] || {};
+      snapshot[growthKey]=Object.fromEntries(ranking.items.filter(validGrowth).map(item=>[itemKey(item),item.gain]));
+      // First delivery establishes a baseline, without pretending existing results are new.
+      const matched=Array.isArray(before)?ranking.items.filter(item=>search.rule==='growth-threshold'?validGrowth(item)&&item.gain>=search.threshold&&(!(itemKey(item) in oldGrowth)||oldGrowth[itemKey(item)]<search.threshold):!before.includes(itemKey(item))):[];
+      const items=uniqueItems(matched,3);
+      await addSection(type,filters.board,ranking,items,search.name,
+        search.rule==='growth-threshold'?(zh?`保存的筛选：${filters.period} 窗口新增 Star ≥ ${search.threshold}`:`Saved filter: new stars ≥ ${search.threshold} in the ${filters.period} window`):(zh?'自上次摘要检查后首次出现在这组筛选结果中。':'Entered these saved search results since your last digest check.'),false,filters);
+    }
+  }
+  const selectedTypes=types.length?types:['github-repo'];
+  const quota=Math.max(1,Math.floor(remaining/selectedTypes.length));
+  for (const type of selectedTypes) {
+    let first = true,typeRemaining=quota;
     for (const board of boards) {
       if (type === 'github-repo' ? !REPO_BOARDS[board] : !ASSET_BOARDS[board]) continue;
-      const ranking = type === 'github-repo'
-        ? await getRankings({ ...queryBase, board })
-        : await getCatalogRankings(type, { ...queryBase, board });
+      const ranking = await rankingFor(type,{ ...queryBase, board });
       if (!ranking.updatedAt || !ranking.items?.length) continue;
       const key = `${type}:${board}`;
       const previousKeys = previous && Array.isArray(previous[key]) ? previous[key] : null;
       snapshot[key] = ranking.items.map(itemKey);
-      const items = ranking.items.slice(0, first ? 5 : 2).map(item => ({ ...item, url: itemUrl(item, type, locale), change: rankChange(item, previousKeys) }));
-      const leader = first ? items.find(validGrowth) : null;
-      sections.push({
-        type, board, chart: first, updatedAt: ranking.updatedAt,
-        typeName: TYPE_META[type]?.[locale] || type,
-        name: title(board, type, locale),
-        items,
-        trend: leader ? { name: leader.full_name, url: leader.url, image: chartUrl(leader, type, ranking.updatedAt) } : null
-      });
+      const sorted=[...ranking.items].sort((a,b)=>Number(rankChange(b,previousKeys)==='new')-Number(rankChange(a,previousKeys)==='new')||a.rank-b.rank);
+      const items = uniqueItems(sorted,Math.min(typeRemaining,first?5:2)).map(item => ({ ...item, change: rankChange(item, previousKeys) }));
+      await addSection(type,board,ranking,items,title(board,type,locale),
+        (zh?'匹配你选择的类型与榜单':'Matches your selected collection and board')+(languages.length?` · ${languages.join(', ')}`:'')+(topics.length?` · ${topics.join(', ')}`:''),first);
+      typeRemaining-=items.length;
       first = false;
     }
   }
   const account = `${root}/${locale}/account/delivery`;
   const unsubscribe = `${account}?intent=stop`;
   const oneClick = `${root}/api/one-click?token=${encodeURIComponent(manageToken)}`;
-  const boardLink = section => `${root}/${locale}/${section.type}/ranking?${new URLSearchParams({ board: section.board, period: 'day', language: languages.join(','), topic: topics.join(',') })}`;
+  const boardLink = section => `${root}/${locale}/${section.type}/ranking?${new URLSearchParams({...Object.fromEntries(Object.entries(section.filters || queryBase).filter(([key,value])=>!['languages','topics','limit'].includes(key)&&value!=null).map(([key,value])=>[key,String(value)])),board:section.board})}`;
   const localTime = at => new Intl.DateTimeFormat(zh ? 'zh-CN' : 'en-US', { timeZone: sub.timezone, dateStyle: 'medium' }).format(new Date(at));
   const subject = zh ? 'Trend Top 每日摘要' : 'Trend Top daily digest';
   const intro = zh ? '你关注的开源项目，每日一封。' : 'The open-source projects you follow, once a day.';
@@ -84,6 +123,7 @@ export async function buildDigest(sub, manageToken, { previous = null } = {}) {
     intro, '',
     ...sections.flatMap(section => [
       section.typeName + ' · ' + section.name + ' · ' + localTime(section.updatedAt),
+      section.reason,
       ...section.items.map(item => '#' + item.rank + ' ' + item.full_name + ' · ' + growthLabel(item, num, zh) + changeText(item.change, zh) + ' · ' + item.url),
       boardLink(section), ''
     ]),
@@ -95,11 +135,12 @@ export async function buildDigest(sub, manageToken, { previous = null } = {}) {
     const trend = section.trend
       ? `<p style="margin:14px 0 4px;color:#666;font-size:12px">${zh ? '近 30 天累计新增 Star（UTC，缺失日期不计）· ' : 'Cumulative new stars over 30 days (UTC; missing days excluded) · '}<a href="${escape(section.trend.url)}" style="color:#171717;font-weight:700">${escape(section.trend.name)}</a></p><a href="${escape(section.trend.url)}" style="display:block"><img src="${escape(section.trend.image)}" width="544" height="163" alt="${escape(section.trend.name)} ${zh ? '30 天累计新增 Star 走势' : '30-day cumulative new star trend'}" style="display:block;width:100%;max-width:544px;height:auto;border:1px solid #e5e5e5"></a>`
       : '';
-    const metricTitle = section.type === 'github-repo' ? (zh ? '每日新增 Star' : 'Daily new stars') : (zh ? '关联仓库每日新增 Star' : 'Daily new stars in the associated repository');
+    const periodName=({day:zh?'每日':'Daily',week:zh?'本周':'Weekly',month:zh?'本月':'Monthly'})[section.filters?.period || 'day'];
+    const metricTitle = section.type === 'github-repo' ? (zh ? periodName+'新增 Star' : periodName+' new stars') : (zh ? '关联仓库'+periodName+'新增 Star' : periodName+' new stars in the associated repository');
     const hasGrowth = section.items.some(validGrowth);
     const growth = section.chart && hasGrowth ? `<p style="margin:12px 0 0;color:#666;font-size:12px">${metricTitle}</p>${renderGrowthChart(section.items, num, zh, changeHtml)}` : rows;
-    return `<section style="border-top:1px solid #dedede;padding:22px 0"><p style="margin:0 0 5px;color:#315fd9;font-size:12px;font-weight:700;letter-spacing:1px">${escape(section.typeName)}</p><h2 style="margin:0;font-size:20px">${escape(section.name)}</h2><p style="margin:5px 0 12px;color:#666;font-size:12px">${escape(localTime(section.updatedAt))} · ${escape(sub.timezone)}${(process.env.DATA_MODE || 'demo') === 'demo' ? ' · DEMO DATA' : ''}</p>${growth}${trend}<a href="${escape(boardLink(section))}" style="display:inline-block;margin-top:8px;color:#315fd9;font-weight:700">${zh ? '查看完整榜单' : 'View full ranking'} →</a></section>`;
+    return `<section style="border-top:1px solid #dedede;padding:22px 0"><p style="margin:0 0 5px;color:#315fd9;font-size:12px;font-weight:700;letter-spacing:1px">${escape(section.typeName)}</p><h2 style="margin:0;font-size:20px">${escape(section.name)}</h2><p style="margin:5px 0 12px;color:#666;font-size:12px">${escape(localTime(section.updatedAt))} · ${escape(sub.timezone)}${(process.env.DATA_MODE || 'demo') === 'demo' ? ' · DEMO DATA' : ''}</p><p style="font-size:12px;color:#666">${escape(section.reason)}</p>${growth}${trend}<a href="${escape(boardLink(section))}" style="display:inline-block;margin-top:8px;color:#315fd9;font-weight:700">${zh ? '查看完整榜单' : 'View full ranking'} →</a></section>`;
   }).join('');
   const html = `<div style="background:#f5f5f3;padding:16px"><main style="max-width:600px;margin:auto;padding:28px;background:#fff;color:#171717;font:15px/1.6 Arial,sans-serif"><table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><td style="padding:0 12px 0 0;vertical-align:middle"><a href="${escape(root)}/${locale}/home" style="display:block"><img src="${escape(logoUrl)}" width="40" height="40" alt="" style="display:block;width:40px;height:40px"></a></td><td style="vertical-align:middle"><h1 style="margin:0;font-size:28px;line-height:1.1"><a href="${escape(root)}/${locale}/home" style="color:#171717;text-decoration:none">Trend Top</a></h1></td></tr></table><p>${escape(intro)}</p>${htmlSections}<footer style="border-top:1px solid #dedede;padding-top:20px;font-size:13px"><a href="${escape(account)}">${zh ? '管理邮件推送' : 'Manage email delivery'}</a> · <a href="${escape(unsubscribe)}">${zh ? '停止邮件推送' : 'Stop emails'}</a></footer></main></div>`;
-  return { subject, text, html, sections, snapshot, unsubscribe, oneClick };
+  return { schemaVersion:1, templateVersion:'2026-09-17.1', generatedAt:new Date().toISOString(), preferences:{types,boards,languages,topics,timezone:sub.timezone}, subject, text, html, sections, snapshot, unsubscribe, oneClick };
 }

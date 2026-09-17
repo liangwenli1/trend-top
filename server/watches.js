@@ -2,6 +2,7 @@ import { asJson, asNumber, many, one, query } from './db.js';
 import { TYPES, getCatalogRankings, isType } from './catalog.js';
 import { requireUser } from './auth.js';
 import { requirePro } from './pro-access.js';
+import { sourcePolicies, visibleSignals } from './source-policy.js';
 
 const MAX_WATCHES = 100;
 const canonicalId = (type, item) => String(type === 'github-repo' ? item.id : (item.slug || item.id));
@@ -14,7 +15,8 @@ async function loadItem(type, id) {
     ? await one('SELECT * FROM repos WHERE id=$1 OR full_name=$2', [Number(key) || -1, key])
     : await one('SELECT * FROM assets WHERE type=$1 AND (id=$2 OR slug=$2)', [type, key]);
   if (!row) return null;
-  const signals = asJson(row.ranking_signals, {});
+  await sourcePolicies();
+  const signals = visibleSignals(asJson(row.ranking_signals, {}));
   return { ...row, id: type === 'github-repo' ? asNumber(row.id) : row.id,
     usage: asNumber(signals.installs ?? signals.usage ?? signals.downloads), gain: null };
 }

@@ -416,3 +416,63 @@ CREATE TABLE IF NOT EXISTS watches (
 );
 CREATE INDEX IF NOT EXISTS watches_user_idx ON watches (user_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS task_leases (
+  task TEXT PRIMARY KEY, owner TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL, finished_at TIMESTAMPTZ, status TEXT NOT NULL,
+  last_error TEXT
+);
+CREATE TABLE IF NOT EXISTS catalog_publications (
+  id SERIAL PRIMARY KEY, run_id INTEGER, published_at TIMESTAMPTZ NOT NULL,
+  status TEXT NOT NULL, counts JSONB NOT NULL
+);
+CREATE TABLE IF NOT EXISTS collection_traces (
+  id SERIAL PRIMARY KEY, run_id INTEGER NOT NULL, collection_type TEXT NOT NULL,
+  identity TEXT NOT NULL, resource_path TEXT, query_text TEXT,
+  stage TEXT NOT NULL, outcome TEXT NOT NULL, reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS collection_trace_identity_idx ON collection_traces (identity, run_id DESC);
+CREATE TABLE IF NOT EXISTS source_policies (
+  source_id TEXT PRIMARY KEY, enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  metrics_allowed BOOLEAN NOT NULL DEFAULT FALSE, review_status TEXT NOT NULL DEFAULT 'pending',
+  policy_url TEXT, attribution TEXT, notes TEXT, reviewed_by TEXT, updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE TABLE IF NOT EXISTS catalog_reviews (
+  id SERIAL PRIMARY KEY, item_type TEXT NOT NULL, item_id TEXT NOT NULL,
+  action TEXT NOT NULL, evidence TEXT NOT NULL, reviewed_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS digest_images (
+  hash TEXT PRIMARY KEY, png_base64 TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS mail_payload JSONB;
+ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
+ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS saved_searches (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), name TEXT NOT NULL,
+  filters JSONB NOT NULL, notify BOOLEAN NOT NULL DEFAULT FALSE,
+  rule TEXT NOT NULL DEFAULT 'new-entry', threshold INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS saved_search_user_idx ON saved_searches (user_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS user_feedback (
+  id SERIAL PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
+  delivery_id INTEGER REFERENCES deliveries(id), rating TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS product_relationships (
+  repository TEXT PRIMARY KEY, family_repository TEXT NOT NULL,
+  evidence TEXT NOT NULL, reviewed_by TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+
+CREATE TABLE IF NOT EXISTS task_requests (id TEXT PRIMARY KEY,task TEXT NOT NULL,requested_by TEXT,status TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),available_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),started_at TIMESTAMPTZ,finished_at TIMESTAMPTZ,last_error TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS task_requests_active ON task_requests(task) WHERE status IN ('queued','running');
+CREATE TABLE IF NOT EXISTS delivery_reviews (id SERIAL PRIMARY KEY,delivery_id INTEGER NOT NULL REFERENCES deliveries(id),action TEXT NOT NULL,evidence TEXT NOT NULL,reviewed_by TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+
+ALTER TABLE digest_images ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+CREATE INDEX IF NOT EXISTS digest_images_last_used_idx ON digest_images(last_used_at);
+CREATE INDEX IF NOT EXISTS collection_traces_created_idx ON collection_traces(created_at);
+CREATE INDEX IF NOT EXISTS feedback_user_created_idx ON user_feedback(user_id,created_at);
+
+ALTER TABLE task_requests ADD COLUMN IF NOT EXISTS worker_owner TEXT;

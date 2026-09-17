@@ -117,6 +117,8 @@ test('Directory listings attach install counts to matching GitHub skills', async
   const repo = { id: 8802, full_name: 'qa/installed-skill', description: 'Skill with installs', topics: ['skills'], created_at: '2026-01-01T00:00:00.000Z', pushed_at: '2026-09-01T00:00:00.000Z', stargazers_count: 10, forks_count: 1 };
   const resource = skillResources(repo, [{ type: 'blob', path: 'SKILL.md' }])[0];
   const id = await upsertAsset('skill', repo, 'asset:skill:test-installs', undefined, resource);
+  const {saveSourcePolicy}=await import('./source-policy.js');
+  await saveSourcePolicy('skills-sh',{enabled:true,metricsAllowed:true,reviewStatus:'approved',policyUrl:'https://www.skills.sh/terms',notes:'Synthetic permission in an isolated regression fixture'},'test-reviewer');
   const result = await applyDirectorySignals([{ type: 'skill', github: 'qa/installed-skill', installs: 12345, directory: 'skills-sh' }]);
   assert.equal(result.applied, 1);
   assert.equal(result.unmatched.length, 0);

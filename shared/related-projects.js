@@ -11,10 +11,11 @@ export function rankRelated(item, candidates) {
   const category = String(item.category || '').toLowerCase();
   const seen = new Set([productKey(item)]);
   const scored = candidates.filter(other => other.type === item.type && String(other.id) !== String(item.id)).map(other => {
-    const shared = narrowTopics(other).filter(topic => topics.has(topic)).length;
+    const sharedTopics = narrowTopics(other).filter(topic => topics.has(topic));
+    const shared = sharedTopics.length;
     const purpose = purposes(other).filter(use => uses.has(use)).length;
     const sameCategory = category && !broadTopics.has(category) && category !== item.type && category !== 'uncategorized' && category !== 'other' && category === String(other.category || '').toLowerCase();
-    return { item: other, score: shared * 4 + purpose * 5 + (sameCategory ? 6 : 0) };
+    return { item: {...other,relatedReasons:{topics:sharedTopics,purpose:purpose>0,category:sameCategory?category:null}}, score: shared * 4 + purpose * 5 + (sameCategory ? 6 : 0) };
   }).filter(entry => entry.score >= 4).sort((a,b) => b.score-a.score || Number(b.item.stars || 0)-Number(a.item.stars || 0) || String(a.item.id).localeCompare(String(b.item.id)));
   return scored.filter(entry => { const key=productKey(entry.item); if(seen.has(key))return false;seen.add(key);return true; }).map(entry => entry.item);
 }

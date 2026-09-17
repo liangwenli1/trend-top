@@ -8,6 +8,7 @@ const tr = process.env.SMTP_HOST
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
     secure: Number(process.env.SMTP_PORT || 587) === 465,
+    connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 60000,
     auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined
   })
   : null;
@@ -32,17 +33,23 @@ export async function sendMail(to, subject, text, html, headers, idempotencyKey)
         'User-Agent': 'TrendTop/0.2.0',
         ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {})
       },
+      signal: AbortSignal.timeout(30000),
       body: JSON.stringify({ from: process.env.RESEND_FROM, to: [to], subject, text, html, headers })
     });
     const result = await response.json().catch(() => null);
-    if (!response.ok || !result?.id) throw new Error(`Resend delivery failed (${response.status}): ${result?.message || 'No email ID returned'}`);
+    if (!response.ok || !result?.id) {
+      const error=new Error(`Resend delivery failed (${response.status}): ${result?.message || 'No email ID returned'}`);
+      error.definitivelyRejected=response.status>=400 && response.status<500 && ![408,409].includes(response.status);
+      throw error;
+    }
     return;
   }
   if (tr && process.env.SMTP_FROM) {
-    await tr.sendMail({ from: process.env.SMTP_FROM, to, subject, text, html, headers });
+    const receipt=await tr.sendMail({ from: process.env.SMTP_FROM, to, subject, text, html, headers });
+    if(!receipt.accepted?.length)throw Object.assign(new Error('SMTP recipient rejected'),{definitivelyRejected:true});
     return;
   }
-  throw new Error('Email provider is not configured');
+  throw Object.assign(new Error('Email provider is not configured'), {definitivelyRejected:true});
 }
 
 export async function sendVerification(sub, token) {

@@ -55,7 +55,7 @@ test('admin configures one Pro tier, checkout and signed webhook activate it ide
     const coverage = await call('/api/admin/catalog-coverage', 'GET', undefined, adminCookie);
     assert.equal(coverage.status, 200);
     assert.equal(coverage.response.headers.get('cache-control'), 'no-store');
-    assert.equal(coverage.data.expected, 16);
+    assert.equal(coverage.data.expected, 100);
     const configured = await call('/api/admin/settings', 'PUT', {
       billing: { enabled: true, mode: 'test', prices: { en: { currency: 'USD', monthly: '9.99', yearly: 79 }, zh: { currency: 'CNY', monthly: 68, yearly: 560 } }, monthlyProductId: 'prod_month', yearlyProductId: 'prod_year', apiBaseUrl: 'https://test-api.creem.io', graceDays: 3 },
       contact: { email: 'support@example.com' }, social: { x: 'https://x.com/trendtop', facebook: '', telegram: '' },
