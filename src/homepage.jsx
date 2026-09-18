@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { EnvelopeSimple } from '@phosphor-icons/react';
 import { TYPES, TYPE_META, typePath, typeLabel, itemPath } from './catalog.js';
@@ -44,6 +44,7 @@ export function DiscoveryHome({ l, navigate }) {
   const zh = l === 'zh';
   const [data, setData] = useState(null), [introData, setIntroData] = useState(null), [loading, setLoading] = useState(true), [error, setError] = useState(false);
   const [type, setType] = useState(''), [useCase, setUseCase] = useState(''), [retry, setRetry] = useState(0);
+  const initialAnchorHandled = useRef(false);
   const [chart, setChart] = useState(null), [chartError, setChartError] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
@@ -62,6 +63,14 @@ export function DiscoveryHome({ l, navigate }) {
     read('/api/github-repo/charts?board=hot&period=week', controller.signal).then(value => { if (!controller.signal.aborted) setChart(value); }).catch(err => { if (err.name !== 'AbortError') setChartError(true); });
     return () => controller.abort();
   }, []);
+  useEffect(() => {
+    if (initialAnchorHandled.current || (!introData && !error)) return;
+    initialAnchorHandled.current = true;
+    const id = window.location.hash.slice(1);
+    if (!['types', 'recent'].includes(id)) return;
+    const frame = requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'instant' }));
+    return () => cancelAnimationFrame(frame);
+  }, [introData, error]);
   const go = href => event => navigate(event, href);
   const types = introData?.types || TYPES.map(id => ({ id, ...TYPE_META[id], count: null }));
   const spotlight = introData?.items?.[0];
