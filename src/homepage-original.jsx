@@ -37,6 +37,8 @@ function HomeMovement({ l, navigate }) {
   const current = payload?.byType?.[selected];
   const leader = current?.leader;
   const peers = current?.peers || [];
+  const newcomers = current?.newcomers || [];
+  const movers = current?.movers || [];
   const maxGain = Math.max(1, ...peers.map(item => item.gain || 0));
   const useCase = leader?.useCaseLabel?.[zh ? 'zh' : 'en'];
   const loading = !payload && !error;
@@ -70,25 +72,23 @@ function HomeMovement({ l, navigate }) {
     <div className="home-daily-grid">
       <div className="home-daily-card">
         <div className="home-proof-card-title"><span>{zh ? '新进热榜（本周第一次进 Top）' : 'New on Hot this week'}</span><a className="home-proof-link" href={typePath(l, selected, 'ranking')} onClick={go(typePath(l, selected, 'ranking'))}>{zh ? '更多新进项目' : 'More new projects'} <span aria-hidden="true">↗</span></a></div>
-        {payload?.newcomers?.length ? <ol className="home-board-list home-board-list-new">{payload.newcomers.map((item, index) => <li key={item.type + item.id}>
+        {newcomers.length ? <ol className="home-board-list home-board-list-new">{newcomers.map((item, index) => <li key={item.id}>
           <span className="home-rank-index">{String(index + 1).padStart(2, '0')}</span>
           <a href={itemPath(l, item.type, item.slug)} onClick={go(itemPath(l, item.type, item.slug))}>{item.full_name}</a>
-          <em className="discovery-type-label">{typeLabel(item.type, l)}</em>
           <p>{item.description || '—'}</p>
         </li>)}</ol> : <div className="home-chart-state" role="status">{loading ? (zh ? '正在读取新项目…' : 'Loading new projects…') : (zh ? '暂时没有新进项目。' : 'No new projects yet.')}</div>}
       </div>
       <div className="home-daily-card">
         <div className="home-proof-card-title"><span>{zh ? '涨幅最大' : 'Biggest movers'}</span><a className="home-proof-link" href={typePath(l, selected, 'ranking')} onClick={go(typePath(l, selected, 'ranking'))}>{zh ? '查看完整排行' : 'Open full ranking'} <span aria-hidden="true">↗</span></a></div>
-        {payload?.movers?.length ? <ol className="home-board-list">{payload.movers.map((item, index) => <li key={item.type + item.id}>
+        {movers.length ? <ol className="home-board-list">{movers.map((item, index) => <li key={item.id}>
           <span className="home-rank-index">{String(index + 1).padStart(2, '0')}</span>
           <a href={itemPath(l, item.type, item.slug)} onClick={go(itemPath(l, item.type, item.slug))}>{item.full_name}</a>
-          <em className="discovery-type-label">{typeLabel(item.type, l)}</em>
           <p>{item.description || '—'}</p>
           <strong>{item.gain > 0 ? '+' : ''}{fmt(item.gain, l)}</strong>
         </li>)}</ol> : <div className="home-chart-state" role="status">{loading ? (zh ? '正在读取涨幅…' : 'Loading movers…') : (zh ? '还没有可比较的增量。' : 'No comparable gains yet.')}</div>}
       </div>
     </div>
-    <p className="home-proof-footnote">{zh ? '领先项目和同类对比跟随你选择的类型。新进热榜和涨幅最大来自全部六类近 7 天 Hot 榜。' : 'The leader and same-purpose list follow the type you pick. New on Hot and biggest movers come from all six 7-day Hot boards.'}</p>
+    <p className="home-proof-footnote">{zh ? '这一屏都跟随你选择的类型；新进热榜和涨幅最大也只看该类型近 7 天的变化。' : 'Everything on this board follows the type you pick, including new on Hot and the biggest movers.'}</p>
   </section>;
 }
 

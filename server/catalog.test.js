@@ -112,8 +112,8 @@ test('home movement returns every type so the homepage can switch without a seco
   assert.equal(data.types.length, 6);
   assert.ok(data.byType.plugin);
   assert.ok(data.byType[data.defaultType]);
-  assert.ok(Array.isArray(data.movers));
-  assert.ok(Array.isArray(data.newcomers));
+  assert.ok(Array.isArray(data.byType[data.defaultType].movers));
+  assert.ok(Array.isArray(data.byType[data.defaultType].newcomers));
 });
 
 test('topic aliases agree in JavaScript and SQL without merging related concepts', async () => {
