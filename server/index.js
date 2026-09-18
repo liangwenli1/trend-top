@@ -33,6 +33,9 @@ import { performanceMiddleware } from './performance.js';
 import { catalogRevision } from './operations.js';
 import { registerSavedSearchRoutes } from './saved-searches.js';
 import { registerDigestImageRoutes } from './digest-snapshots.js';
+import { getHomeDiscovery } from './homepage.js';
+import { renderPublicDigestPreview } from './digest-preview.js';
+import { USE_CASES } from '../shared/taxonomy.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -100,6 +103,17 @@ app.get('/api/filters', publicCatalogCache, async (_req, res) => res.json(await 
 app.get('/api/rankings', publicCatalogCache, async (req, res) => res.json({ ...await getRankings(req.query), mailReady: demo || mailReady() }));
 app.get('/api/chart', publicCatalogCache, async (req, res) => res.json(await getChart(req.query)));
 app.get('/api/types', publicCatalogCache, async (_req, res) => res.json(await getTypeSummary()));
+app.get('/api/home', publicCatalogCache, async (req, res) => {
+  const type = req.query.type || '', useCase = req.query.useCase || '';
+  if (typeof type !== 'string' || (type && !isType(type))) return fail(res, 400, 'Unknown type');
+  if (typeof useCase !== 'string' || (useCase && !Object.hasOwn(USE_CASES, useCase))) return fail(res, 400, 'Unknown use case');
+  res.json(await getHomeDiscovery({ type, useCase }));
+});
+app.get('/api/home/digest-preview', publicCatalogCache, async (req, res) => {
+  const locale = req.query.locale === 'zh' ? 'zh' : 'en';
+  const discovery = await getHomeDiscovery();
+  res.json({ html: renderPublicDigestPreview(discovery, locale), sample: true, source: discovery.source });
+});
 app.get('/api/search', publicCatalogCache, async (req, res) => res.json(await searchCatalog(req.query.q, req.query.type)));
 app.get('/api/:type/filters', publicCatalogCache, async (req, res) => {
   if (!isType(req.params.type)) return fail(res, 404, 'Unknown type');
