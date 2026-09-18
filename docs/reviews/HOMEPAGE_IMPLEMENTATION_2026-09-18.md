@@ -1,5 +1,21 @@
 # 首页方案实施记录 · 2026-09-18
 
+## 当前交付：按用户反馈恢复首页
+
+以下调整优先于后文的首版方案：
+
+- 保留 Worth a closer look 及类型、任务筛选；恢复改版前的首屏、收录分布、流程说明和六类大卡片。
+- 恢复累计增长曲线与同榜项目对比条形图，增加每日变化图。累计与每日分别展示趋势和波动，对比图仍按 Hot 榜顺序排列。
+- 预览入口改为 Preview what you get，放在 Get started 下方并居中。预览中的品牌图标保持居中。
+- 公开邮件预览加入 30 天累计新增 Star PNG，复用正式邮件的图表渲染器，仅完整且有效的历史生成曲线。PNG 与公开目录一起发布并持久化；普通首页响应不携带图片。公开预览不写入正式邮件图片表，不排队发送邮件。
+- Contact us 与支持邮箱放在 Privacy、Terms 右侧；原有邮箱图标保留。手机允许换行。
+
+本次相关测试 38 项通过，生产构建通过。隔离 Demo 桌面及中英手机检查确认图表实际加载、筛选恢复、Esc 关闭及焦点返回、完整图表入口正常；320px 和 390px 无页面水平溢出。修复了每日图表默认 figure 边距及窄屏项目名溢出。尚未验证生产数据收集完整率或线上部署。
+
+当前截图：[恢复首屏](../qa/homepage-adjustments-2026-09-18/01-restored-hero.png)、[邮件预览图表](../qa/homepage-adjustments-2026-09-18/03-preview-with-charts.png)、[页脚位置](../qa/homepage-adjustments-2026-09-18/04-footer-contact.png)、[首页三种图表](../qa/homepage-adjustments-2026-09-18/07-home-charts.png)、[中文手机完整曲线](../qa/homepage-adjustments-2026-09-18/08-mobile-preview-chart-zh.png)。
+
+## 首版方案记录（布局已按上述反馈调整）
+
 依据：[首页产品方案](HOMEPAGE_PRODUCT_PLAN_2026-09-18.md)。发现体验与持久化发布已落地，后续实验仍需真实使用证据。
 
 ## 用户补充
