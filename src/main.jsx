@@ -63,7 +63,7 @@ function legacyRedirect(){
 }
 function updatePath(path,query) {
   const next=path+(query?`?${query}`:'');
-  if(next===location.pathname+location.search) return;
+  if(next===location.pathname+location.search+location.hash) return;
   history.pushState({},'',next);
   window.dispatchEvent(new PopStateEvent('popstate'));
   window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
