@@ -185,6 +185,9 @@
 
 .type-home #types,.type-home #recent{scroll-margin-top:90px}
 .home-daily-card{margin-top:18px;padding:clamp(22px,2.5vw,38px);border:1px solid #e5e5e5}
+.home-daily-figure{margin:24px 0 0}
+.home-daily-card .home-proof-card-title{flex-wrap:wrap}
+.home-daily-card .home-proof-card-title span{min-width:0;overflow-wrap:anywhere}
 .home-daily-bars{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:12px;align-items:end;height:170px;margin:28px 0 0;padding:0;list-style:none}
 .home-daily-bars li{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:0;height:100%;gap:7px;font-size:12px;color:#666}
 .home-daily-bars i{display:block;width:70%;background:#315fd9;min-height:1px}
