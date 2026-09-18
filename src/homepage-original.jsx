@@ -84,7 +84,7 @@ export function RestoredHome({ l, t, navigate }) {
     <WorthCloserLook l={l} navigate={navigate}/>
 
     <section className="home-proof home-reveal" aria-labelledby="home-proof-title">
-      <div className="home-section-heading"><p className="home-kicker">01 / {zh ? '看见变化' : 'See the movement'}</p><h2 id="home-proof-title">{zh ? '不只看总量，更看最近谁在增长。' : 'Look beyond totals. See what is moving now.'}</h2><p>{zh ? '以仓库榜为例，增长曲线和同榜项目的增量放在一起，快速看出趋势与差异。' : 'A sample from the repository board pairs a growth curve with the projects beside it, so the direction and the differences are easy to read.'}</p></div>
+      <div className="home-section-heading"><p className="home-kicker">02 / {zh ? '看见变化' : 'See the movement'}</p><h2 id="home-proof-title">{zh ? '不只看总量，更看最近谁在增长。' : 'Look beyond totals. See what is moving now.'}</h2><p>{zh ? '以仓库榜为例，增长曲线和同榜项目的增量放在一起，快速看出趋势与差异。' : 'A sample from the repository board pairs a growth curve with the projects beside it, so the direction and the differences are easy to read.'}</p></div>
       <div className="home-proof-grid">
         <div className="home-proof-chart">
           <div className="home-proof-card-title"><span>{zh ? '仓库增长' : 'Repository growth'}</span><span>{zh ? '近 7 天' : 'Last 7 days'}</span></div>
@@ -108,7 +108,7 @@ export function RestoredHome({ l, t, navigate }) {
     </section>
 
     <section className="home-process home-reveal" aria-labelledby="home-process-title">
-      <div className="home-section-heading"><p className="home-kicker">02 / {zh ? '更好地选择' : 'Make a better choice'}</p><h2 id="home-process-title">{zh ? '从发现到决定，少走几步。' : 'From discovery to decision, with less noise.'}</h2></div>
+      <div className="home-section-heading"><p className="home-kicker">03 / {zh ? '更好地选择' : 'Make a better choice'}</p><h2 id="home-process-title">{zh ? '从发现到决定，少走几步。' : 'From discovery to decision, with less noise.'}</h2></div>
       <div className="home-process-grid">
         {[
           { n: '01', title: zh ? '找正在增长的' : 'Find what is rising', body: zh ? '按类型查看 Trending、排行和增长图表，先了解最近的变化。' : 'Browse Trending, rankings, and growth charts within the type you care about.' },
@@ -119,7 +119,7 @@ export function RestoredHome({ l, t, navigate }) {
     </section>
 
     <section className="home-types home-reveal" id="types" aria-labelledby="home-types-title">
-      <div className="home-section-heading"><p className="home-kicker">03 / {zh ? '开始探索' : 'Start exploring'}</p><h2 id="home-types-title">{zh ? '选一个方向，往里看。' : 'Start with a type.'}</h2><p>{zh ? '六类分开排行。每一类都有趋势、名次、图表和官方来源。' : 'Six separate collections. Each has trends, rankings, charts, and official sources.'}</p></div>
+      <div className="home-section-heading"><p className="home-kicker">04 / {zh ? '开始探索' : 'Start exploring'}</p><h2 id="home-types-title">{zh ? '选一个方向，往里看。' : 'Start with a type.'}</h2><p>{zh ? '六类分开排行。每一类都有趋势、名次、图表和官方来源。' : 'Six separate collections. Each has trends, rankings, charts, and official sources.'}</p></div>
       <div className="type-card-grid">
         {types.map((item, index) => <article className="type-card" key={item.id}>
           <div className="type-card-top"><span className="type-card-index">{String(index + 1).padStart(2, '0')} / 06</span><span className="type-card-count">{fmt(item.count, l)} {zh ? '条' : 'items'}</span></div>

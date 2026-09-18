@@ -360,7 +360,7 @@ function SubscribeCallout({l,t,data,board,type='github-repo',homepage=false}){
   return <section className="subscribe-cta" id="subscribe" aria-labelledby="subscribe-title">
     <div className="subscribe-cta-inner">
       <div className="subscribe-cta-copy">
-        <p className="subscribe-cta-kicker">04 / {zh?'每日摘要':'THE DAILY DIGEST'}</p>
+        <p className="subscribe-cta-kicker">{homepage ? '05' : '04'} / {zh?'每日摘要':'THE DAILY DIGEST'}</p>
         <h2 id="subscribe-title">{zh?'关掉网页，也能跟上变化。':'Keep up, without keeping a tab open.'}</h2>
         <p className="subscribe-cta-description">{zh?'用简洁的摘要与提醒，持续关注重要的开源变化。':'Keep up with the open-source changes that matter through concise digests and alerts.'}</p>
       </div>
