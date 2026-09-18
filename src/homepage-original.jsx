@@ -69,19 +69,18 @@ function HomeMovement({ l, navigate }) {
     </div>
     <div className="home-daily-grid">
       <div className="home-daily-card">
-        <div className="home-proof-card-title"><span>{zh ? '新进热榜（本周第一次进 Top）' : 'New on Hot this week'}</span><a className="home-method-link" href={typePath(l, selected, 'ranking')} onClick={go(typePath(l, selected, 'ranking'))}>{zh ? '更多新进项目' : 'More new projects'}</a></div>
-        {payload?.newcomers?.length ? <ol className="home-board-list">{payload.newcomers.map((item, index) => <li key={item.type + item.id}>
-          <span>{String(index + 1).padStart(2, '0')}</span>
+        <div className="home-proof-card-title"><span>{zh ? '新进热榜（本周第一次进 Top）' : 'New on Hot this week'}</span><a className="home-proof-link" href={typePath(l, selected, 'ranking')} onClick={go(typePath(l, selected, 'ranking'))}>{zh ? '更多新进项目' : 'More new projects'} <span aria-hidden="true">↗</span></a></div>
+        {payload?.newcomers?.length ? <ol className="home-board-list home-board-list-new">{payload.newcomers.map((item, index) => <li key={item.type + item.id}>
+          <span className="home-rank-index">{String(index + 1).padStart(2, '0')}</span>
           <a href={itemPath(l, item.type, item.slug)} onClick={go(itemPath(l, item.type, item.slug))}>{item.full_name}</a>
           <em className="discovery-type-label">{typeLabel(item.type, l)}</em>
           <p>{item.description || '—'}</p>
-          <strong>{zh ? '本周新进' : 'New this week'}</strong>
         </li>)}</ol> : <div className="home-chart-state" role="status">{loading ? (zh ? '正在读取新项目…' : 'Loading new projects…') : (zh ? '暂时没有新进项目。' : 'No new projects yet.')}</div>}
       </div>
       <div className="home-daily-card">
-        <div className="home-proof-card-title"><span>{zh ? '涨幅最大' : 'Biggest movers'}</span><a className="home-method-link" href={typePath(l, selected, 'ranking')} onClick={go(typePath(l, selected, 'ranking'))}>{zh ? '查看完整排行' : 'Open full ranking'}</a></div>
+        <div className="home-proof-card-title"><span>{zh ? '涨幅最大' : 'Biggest movers'}</span><a className="home-proof-link" href={typePath(l, selected, 'ranking')} onClick={go(typePath(l, selected, 'ranking'))}>{zh ? '查看完整排行' : 'Open full ranking'} <span aria-hidden="true">↗</span></a></div>
         {payload?.movers?.length ? <ol className="home-board-list">{payload.movers.map((item, index) => <li key={item.type + item.id}>
-          <span>{String(index + 1).padStart(2, '0')}</span>
+          <span className="home-rank-index">{String(index + 1).padStart(2, '0')}</span>
           <a href={itemPath(l, item.type, item.slug)} onClick={go(itemPath(l, item.type, item.slug))}>{item.full_name}</a>
           <em className="discovery-type-label">{typeLabel(item.type, l)}</em>
           <p>{item.description || '—'}</p>
