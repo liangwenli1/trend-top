@@ -33,14 +33,16 @@ export async function buildHomeSnapshot() {
     }
   }
   const previewCharts = [];
-  for (const item of variants[variantKey('', '')].items.slice(0, 3)) {
-    if (!item.updatedAt || item.metricScope === 'none') continue;
+  const seenTypes = new Set();
+  for (const item of variants[variantKey('', '')].items) {
+    if (seenTypes.has(item.type) || !item.updatedAt || item.metricScope === 'none') continue;
     const image = await freezeTrendImage(item,item.type,item.updatedAt,'',{requireComplete:true,inline:true});
     if (!image) continue;
+    seenTypes.add(item.type);
     const end = dataSource()==='demo' ? new Date(item.updatedAt) : lastCompleteDay(new Date(item.updatedAt));
     previewCharts.push({ type:item.type,id:item.id,image,end:asDay(end),start:asDay(new Date(end.getTime()-29*86400000)),days:30 });
   }
-  return { schemaVersion, previewVersion:1, previewCharts, summary, period: 'week', selection: 'type-board-round-robin',
+  return { schemaVersion, previewVersion:2, previewCharts, summary, period: 'week', selection: 'type-board-round-robin',
     tasks: taskIds.filter(id => available.has(id)).map(id => ({ id, ...USE_CASES[id] })), variants };
 }
 
@@ -62,7 +64,7 @@ export async function initializeHomeSnapshot() {
     const publication = await one('SELECT id FROM catalog_publications ORDER BY id DESC LIMIT 1');
     const existing = await one("SELECT catalog_version,schema_version,payload->>'previewVersion' AS preview_version FROM homepage_snapshots WHERE source=$1", [dataSource()]);
     const version = publication?.id || 0;
-    if (existing?.schema_version === schemaVersion && existing.preview_version === '1' && Number(existing.catalog_version) >= version) return;
+    if (existing?.schema_version === schemaVersion && existing.preview_version === '2' && Number(existing.catalog_version) >= version) return;
     await publishHomeSnapshot(version);
   }); } catch (error) {
     const existing = await one('SELECT schema_version FROM homepage_snapshots WHERE source=$1', [dataSource()]);

@@ -41,7 +41,7 @@ test('public email preview escapes catalog content, shares centered branding and
   assert.match(html,/email-logo\.png/);
   assert.match(html,/&lt;script&gt;/);
   assert.doesNotMatch(html,/<script|<img src=x|private@example|never-publish|\/manage\?|\/unsubscribe\?|token=/);
-  assert.match(html,/Associated repository/);
+  assert.match(html,/associated repository/i);
   assert.match(html,/\/en\/skill\/skill-1/);
   assert.match(renderPublicDigestPreview({source:'demo',items},'zh'),/示例邮件/);
   assert.match(renderPublicDigestPreview({source:'demo',items},'malicious"'),/<html lang="en">/);
@@ -67,6 +67,8 @@ test('public preview freezes real complete chart history without writing mail or
   const html=renderPublicDigestPreview(data);
   assert.match(html,/30-day cumulative new Stars chart/);
   assert.match(html,/src="data:image\/png;base64,iVBOR/);
+  assert.match(html,/7-day Hot/);
+  assert.match(html,/Skills|Plugins|Agents|Components|Websites|Repositories/);
   const chart=data.previewCharts[0];
   const selected=data.items.find(item=>item.type===chart.type&&item.id===chart.id);
   assert.notEqual(selected.type,'github-repo');

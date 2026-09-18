@@ -84,6 +84,9 @@ test('digest chart renders a PNG only with enough known days', async () => {
   assert.deepEqual([...png.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   assert.equal(png.readUInt32BE(16), 120);
   assert.equal(png.readUInt32BE(20), 60);
+  const labeled = renderGainChart([1, 4, 0, 9, 2, 7, 3], { width: 600, height: 180, xStart: '09-10', xEnd: '09-17' });
+  assert.equal(labeled.readUInt32BE(16), 600);
+  assert.ok(labeled.length > png.length);
 });
 
 test('daily snapshot rebuild keeps only the latest snapshot for each UTC day', async () => {

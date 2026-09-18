@@ -75,21 +75,79 @@ class Canvas {
     }
   }
   png() { return encodePng(this.width, this.height, this.data); }
+  text(x, y, value, color = '#666666', scale = 2) {
+    let cursor = x;
+    for (const char of String(value)) {
+      const rows = GLYPHS[char] || GLYPHS['?'];
+      for (let row = 0; row < rows.length; row++) {
+        for (let col = 0; col < rows[row].length; col++) {
+          if (rows[row][col] === '1') this.fillRect(cursor + col * scale, y + row * scale, scale, scale, color);
+        }
+      }
+      cursor += (rows[0].length + 1) * scale;
+    }
+    return cursor;
+  }
+  textWidth(value, scale = 2) {
+    let width = 0;
+    for (const char of String(value)) width += ((GLYPHS[char] || GLYPHS['?'])[0].length + 1) * scale;
+    return Math.max(0, width - scale);
+  }
+}
+
+const GLYPHS = {
+  '0': ['01110', '10001', '10001', '10011', '10101', '11001', '01110'],
+  '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'],
+  '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'],
+  '3': ['11110', '00001', '00001', '01110', '00001', '00001', '11110'],
+  '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'],
+  '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'],
+  '6': ['01110', '10000', '11110', '10001', '10001', '10001', '01110'],
+  '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'],
+  '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'],
+  '9': ['01110', '10001', '10001', '01111', '00001', '00001', '01110'],
+  '-': ['00000', '00000', '00000', '11111', '00000', '00000', '00000'],
+  '.': ['00000', '00000', '00000', '00000', '00000', '01100', '01100'],
+  k: ['10001', '10010', '10100', '11000', '10100', '10010', '10001'],
+  M: ['10001', '11011', '10101', '10101', '10001', '10001', '10001'],
+  '?': ['01110', '10001', '00010', '00100', '00100', '00000', '00100'],
+  ' ': ['00000', '00000', '00000', '00000', '00000', '00000', '00000']
+};
+
+function compactNumber(value) {
+  if (value >= 1000000) return `${Math.round(value / 100000) / 10}M`.replace('.0M', 'M');
+  if (value >= 10000) return `${Math.round(value / 1000)}k`;
+  return String(Math.round(value));
 }
 
 /**
  * Cumulative gain line for a series of daily counts (null = unknown day).
  * Returns null when fewer than two known days exist.
  */
-export function renderGainChart(counts, { width = 600, height = 180, accent = '#315fd9' } = {}) {
+export function renderGainChart(counts, { width = 600, height = 180, accent = '#315fd9', xStart = '', xEnd = '' } = {}) {
   const known = counts.filter(value => value != null);
   if (known.length < 2) return null;
+  const labeled = width >= 400 && height >= 140;
+  const scale = width >= 800 ? 2 : 1;
+  const yMax = (() => {
+    let running = 0;
+    return Math.max(1, ...counts.map(value => value == null ? 0 : (running += Math.max(0, value))));
+  })();
+  const yLabel = compactNumber(yMax);
   const canvas = new Canvas(width, height);
-  const pad = { left: 12, right: 12, top: 14, bottom: 14 };
+  const pad = labeled
+    ? { left: 16 + canvas.textWidth(yLabel, scale), right: 18, top: 16, bottom: xStart || xEnd ? 28 : 16 }
+    : { left: 12, right: 12, top: 14, bottom: 14 };
   const plotW = width - pad.left - pad.right, plotH = height - pad.top - pad.bottom;
   let running = 0;
   const cumulative = counts.map(value => value == null ? null : (running += Math.max(0, value)));
   const max = Math.max(1, ...cumulative.filter(value => value != null));
+  if (labeled) {
+    canvas.text(pad.left - canvas.textWidth(yLabel, scale) - 8, pad.top - 2, yLabel, '#737373', scale);
+    canvas.text(pad.left - canvas.textWidth('0', scale) - 8, pad.top + plotH - 12, '0', '#737373', scale);
+    if (xStart) canvas.text(pad.left, height - 18, xStart, '#737373', scale);
+    if (xEnd) canvas.text(width - pad.right - canvas.textWidth(xEnd, scale), height - 18, xEnd, '#737373', scale);
+  }
   for (let i = 1; i <= 3; i++) canvas.fillRect(pad.left, Math.round(pad.top + plotH * i / 4), plotW, 1, '#e5e5e5');
   canvas.fillRect(pad.left, pad.top + plotH, plotW, 1, '#cfcfcf');
   const points = [];

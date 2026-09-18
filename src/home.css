@@ -180,7 +180,7 @@
 .home-outline-button { display: inline-flex; gap: 10px; align-items: center; min-height: 42px; padding: 10px 15px; border: 1px solid #111; background: #fff; color: #111; border-radius: 0; font-size: 14px; font-weight: 650; }
 .home-outline-button:hover { color: #315fd9; border-color: #315fd9; }
 .dialog-content.digest-preview-dialog { width: min(94vw, 800px); max-height: 92dvh; }
-.digest-preview-frame { display: block; width: 100%; height: min(62dvh, 620px); border: 1px solid #dedede; background: #f5f5f3; }
+.digest-preview-frame { display: block; width: 100%; height: min(72dvh, 760px); border: 1px solid #dedede; background: #f5f5f3; }
 
 .type-home #types,.type-home #recent{scroll-margin-top:90px}
 .home-daily-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:18px}
