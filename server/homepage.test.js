@@ -77,11 +77,13 @@ test('homepage publication persists, follows catalog versions and survives gener
     assert.ok(filtered.items.every(item=>item.type==='skill'&&item.useCase===useCase));
   }
   const stored=await one('SELECT * FROM homepage_snapshots WHERE source=$1',[dataSource()]);
+  const catalogBefore=await one('SELECT id FROM catalog_publications ORDER BY id DESC LIMIT 1');
   await assert.rejects(transaction(async()=>{
-    await publishHomeSnapshot(published.snapshot.catalogVersion+1);
+    await publishCatalog(null,'interrupted-homepage-test');
     throw new Error('publication interrupted before commit');
   }),/publication interrupted/);
   assert.deepEqual(await one('SELECT * FROM homepage_snapshots WHERE source=$1',[dataSource()]),stored);
+  assert.deepEqual(await one('SELECT id FROM catalog_publications ORDER BY id DESC LIMIT 1'),catalogBefore);
   await assert.rejects(publishHomeSnapshot(published.snapshot.catalogVersion+1,async()=>{throw new Error('candidate generation failed');}),/generation failed/);
   assert.deepEqual(await getHomeDiscovery(),published);
   await publishHomeSnapshot(0,async()=>({variants:{}}));
