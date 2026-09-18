@@ -363,12 +363,12 @@ function SubscribeCallout({l,t,data,board,type='github-repo',homepage=false}){
         <p className="subscribe-cta-kicker">04 / {zh?'每日摘要':'THE DAILY DIGEST'}</p>
         <h2 id="subscribe-title">{zh?'关掉网页，也能跟上变化。':'Keep up, without keeping a tab open.'}</h2>
         <p className="subscribe-cta-description">{zh?'用简洁的摘要与提醒，持续关注重要的开源变化。':'Keep up with the open-source changes that matter through concise digests and alerts.'}</p>
+        {homepage&&<div className="home-preview-action"><DigestPreviewButton l={l}/></div>}
       </div>
       <div className="subscribe-cta-panel">
         <p className="subscribe-cta-panel-label">{zh?'PRO 带来的价值':'INCLUDED WITH PRO'}</p>
         <ol className="subscribe-cta-steps">{steps.map((step,index)=><li key={step}><span>{String(index+1).padStart(2,'0')}</span>{step}</li>)}</ol>
         <a className="primary subscribe-cta-button" href={destination} onClick={event=>{if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();updatePath(destination);}}>{proActive?(zh?'管理邮件推送':'Manage email delivery'):(zh?'开始使用':'Get started')}<span aria-hidden="true">↗</span></a>
-        {homepage&&<div className="home-preview-action"><DigestPreviewButton l={l}/></div>}
         <p className="subscribe-cta-fineprint">{zh?'Pro 功能；每天最多一封，随时可以暂停或停止邮件推送。':'Included with Pro. At most one email per day; pause or stop emails anytime.'}</p>
       </div>
     </div>
