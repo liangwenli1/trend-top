@@ -112,3 +112,11 @@ Pro：黑底白字、蓝色侧线；Free：白底蓝字、空心圆。来源身�
 Free 用户点击居中黑色 Get started 后进入订阅确认框，查看套餐、金额、币种、自动续费和政策，再继续付款。已有 Pro 显示当前套餐与管理订阅，避免重复购买。邮件启停保留在 Settings → Email preferences，取消付费续订在 Subscribe & billing。
 
 代码先提交推送，再进行桌面和手机页面检查；补充修复了确认框关闭后的键盘焦点恢复。构建和 4 项计费相关回归通过，详见[双卡定价页验收与截图](qa/pricing-plans/README.md)。未更改实际价格或支付模式，未执行真实支付。
+
+## 11. 标签与支持入口调整（2026-09-18）
+
+按用户反馈，Official / Community 标签固定为 116 × 30 像素，保留各自的色彩与图标。Explore 匹配 Skill 的按钮移除箭头，高度调整为与 Compare 一样的 30 像素，仍打开搜索弹窗。
+
+客户支持集中在全站页脚的 Contact us / 联系我们中，以后台配置邮箱的明文 mailto 链接展示；移除定价页、账户页、说明页、隐私和条款页中的重复 Need help 卡片。法律条款和退款 FAQ 中必要的联系说明保留。
+
+构建通过。提交推送后，在隔离 Demo 页面测量 Official / Community 均为 116 × 30，Compare / Explore 均高 30；Explore 文本无箭头且可打开弹窗，Escape 可关闭。检查了桌面和 390 像素手机页面；定价页无 customer-support 卡片，页脚链接为 mailto:support@tapzm.com。此为显示调整，未更改邮箱配置、账户权限或支付行为。
