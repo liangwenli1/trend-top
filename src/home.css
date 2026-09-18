@@ -104,7 +104,7 @@
   .discovery-collections > a:nth-child(-n+4) { border-bottom: 1px solid #dedede; }
   .discovery-collections p { margin-top: 8px; }
   .discovery-section { padding: 34px 0; }
-  .discovery-section-heading { align-items: start; gap: 16px; }
+  .discovery-section-heading { display: grid; grid-template-columns: 1fr; align-items: start; gap: 12px; }
   .discovery-section-heading h2 { font-size: 30px; }
   .discovery-section-heading p:not(.home-kicker) { font-size: 14px; }
   .home-method-link { font-size: 12px; }
