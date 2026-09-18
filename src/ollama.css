@@ -605,6 +605,9 @@ html.is-scrolling .analytics-page-nav,
 .site-footer .footer-legal{display:flex;gap:22px}
 .site-footer .footer-legal a{color:#f5f5f5;font-size:clamp(15px,.9vw,18px);font-weight:600;text-decoration:none;text-underline-offset:5px}
 .site-footer .footer-legal a:hover{color:#fff;text-decoration:underline}
+.site-footer .footer-legal{flex-wrap:wrap;align-items:baseline}
+.site-footer .footer-contact-inline{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline}
+.site-footer .footer-contact-inline>span{color:#f5f5f5;font-size:clamp(15px,.9vw,18px);font-weight:600}
 .site-footer .language-menu{position:relative;flex:none}
 .site-footer .language-menu-trigger{display:inline-flex;align-items:center;gap:10px;min-height:46px;padding:0 16px;border:1px solid #777;border-radius:0;background:transparent;color:#fff;font:inherit;font-size:15px;font-weight:600;cursor:pointer}
 .site-footer .language-menu-trigger:hover,.site-footer .language-menu-trigger[aria-expanded=true]{border-color:#fff;background:#fff;color:#111}

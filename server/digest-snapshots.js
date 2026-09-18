@@ -4,7 +4,7 @@ import { query } from './db.js';
 import { getStarSeries } from './rankings.js';
 import { renderGainChart } from './png-chart.js';
 
-export async function freezeTrendImage(item,type,sampledAt,root){
+export async function freezeTrendImage(item,type,sampledAt,root,{requireComplete=false,inline=false}={}){
   const end=dataSource()==='demo'?new Date(sampledAt):lastCompleteDay(new Date(sampledAt));
   let counts;
   if(type==='github-repo'&&dataSource()!=='demo'){
@@ -15,8 +15,10 @@ export async function freezeTrendImage(item,type,sampledAt,root){
     const byDay=new Map(rows.map(row=>[asDay(row.day),asNumber(row.star_created)]));
     counts=Array.from({length:30},(_,i)=>byDay.get(asDay(new Date(start.getTime()+i*86400000)))??null);
   }
+  if(requireComplete && (counts.length!==30 || counts.some(count=>count==null || !Number.isFinite(count) || count<0)))return null;
   const png=renderGainChart(counts,{width:1088,height:326});
   if(!png)return null;
+  if(inline)return `data:image/png;base64,${png.toString('base64')}`;
   const hash=crypto.createHash('sha256').update(png).digest('hex');
   await query('INSERT INTO digest_images (hash,png_base64) VALUES ($1,$2) ON CONFLICT (hash) DO UPDATE SET last_used_at=NOW()',[hash,png.toString('base64')]);
   return `${root}/api/digest-images/${hash}.png`;

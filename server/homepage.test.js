@@ -54,10 +54,34 @@ const {app}=await import('./index.js');
 const {ready,one,query,transaction,dataSource,closeDb}=await import('./db.js');
 const {initializeHomeSnapshot,getHomeDiscovery,publishHomeSnapshot}=await import('./homepage.js');
 const {publishCatalog}=await import('./operations.js');
+const {freezeTrendImage}=await import('./digest-snapshots.js');
 test.after(async()=>{ await closeDb(); });
 await ready;
 await assert.rejects(getHomeDiscovery(),error=>error.status===503);
 await initializeHomeSnapshot();
+
+test('public preview freezes real complete chart history without writing mail or digest images',async()=>{
+  const data=await getHomeDiscovery({includePreviewCharts:true});
+  assert.ok(data.previewCharts.length>0);
+  assert.equal((await getHomeDiscovery()).previewCharts,undefined,'ordinary homepage does not transfer PNG bytes');
+  const html=renderPublicDigestPreview(data);
+  assert.match(html,/30-day cumulative new Stars chart/);
+  assert.match(html,/src="data:image\/png;base64,iVBOR/);
+  const chart=data.previewCharts[0];
+  const selected=data.items.find(item=>item.type===chart.type&&item.id===chart.id);
+  assert.notEqual(selected.type,'github-repo');
+  const before=await one('SELECT COUNT(*)::int AS n FROM digest_images');
+  const png=await freezeTrendImage(selected,selected.type,selected.updatedAt,'',{requireComplete:true,inline:true});
+  assert.equal(png,chart.image);
+  assert.deepEqual(await one('SELECT COUNT(*)::int AS n FROM digest_images'),before);
+  await assert.rejects(transaction(async()=>{
+    await query('UPDATE asset_daily SET star_created=NULL WHERE asset_id=$1 AND day=$2::date',[selected.id,chart.end]);
+    assert.equal(await freezeTrendImage(selected,selected.type,selected.updatedAt,'',{requireComplete:true,inline:true}),null);
+    assert.equal(renderPublicDigestPreview(await getHomeDiscovery({includePreviewCharts:true})),html,'published image survives unpublished history changes');
+    throw new Error('restore chart fixture');
+  }),/restore chart fixture/);
+  assert.doesNotMatch(renderPublicDigestPreview({...data,previewCharts:[{...chart,image:'javascript:alert(1)'}]}),/javascript:/);
+});
 
 test('homepage publication persists, follows catalog versions and survives generation or commit failure',async()=>{
   const initial=await getHomeDiscovery();
@@ -125,6 +149,7 @@ test('public homepage API supports canonical type/task filters, validates inputs
     const preview=await(await fetch(base+'/api/home/digest-preview?locale=zh')).json();
     assert.equal(preview.sample,true);
     assert.match(preview.html,/公开目录/);
+    assert.match(preview.html,/data:image\/png;base64,iVBOR/);
     assert.doesNotMatch(preview.html,/manage_token|unsubscribe_token|recipient|private@example/);
     assert.deepEqual(await one('SELECT COUNT(*)::int AS count FROM outbox'),before);
   }finally{await new Promise(resolve=>server.close(resolve));}

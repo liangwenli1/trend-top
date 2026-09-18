@@ -1,6 +1,15 @@
 import React from 'react';
 const fmt = (value, l) => new Intl.NumberFormat(l === 'zh' ? 'zh-CN' : 'en-US').format(value);
 
+export function HomeDailyChart({ chart, l, loading, error }) {
+  const zh = l === 'zh', points = chart?.points || [];
+  const label = chart?.growthBasis === 'star_created' ? (zh ? '每日新增 Star' : 'Daily new Stars') : (zh ? '每日 Star 净增' : 'Daily net Star gain');
+  if (chart?.insufficient || points.length < 2 || points.some(point => !Number.isFinite(point.gain))) return <div className="home-chart-state" role="status">{loading ? (zh ? '正在读取每日变化…' : 'Loading daily movement…') : error ? (zh ? '每日变化暂不可用。' : 'Daily movement is unavailable.') : (zh ? '完整历史数据积累后会显示每日变化。' : 'Daily movement appears when complete history is available.')}</div>;
+  const daily = points.slice(1).map((point,index) => ({date:point.date,value:point.gain-points[index].gain}));
+  const max = Math.max(1,...daily.map(point=>Math.abs(point.value)));
+  return <figure className="home-daily-figure"><figcaption>{label} · {points[0].date} – {points.at(-1).date}</figcaption><ol className="home-daily-bars" aria-label={label}>{daily.map(point=><li key={point.date}><strong>{point.value>0?'+':''}{fmt(point.value,l)}</strong><i aria-hidden="true" style={{height:`${Math.abs(point.value)/max*110}px`,background:point.value<0?'#555':'#315fd9'}}/><span>{point.date.slice(5)}</span></li>)}</ol></figure>;
+}
+
 export function HomeGrowthChart({ chart, l, loading, error }) {
   const zh = l === 'zh';
   const growthLabel = chart?.growthBasis === 'star_created'

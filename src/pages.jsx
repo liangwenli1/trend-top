@@ -190,7 +190,7 @@ export function TypeTrending({ l, t, type, navigate }) {
   );
 }
 
-export { DiscoveryHome as TypeHome } from './homepage.jsx';
+export { RestoredHome as TypeHome } from './homepage-original.jsx';
 
 export function CategoryPage({ l, t, type, category, navigate }) {
   const [data, setData] = useState(null);

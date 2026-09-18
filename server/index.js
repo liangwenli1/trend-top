@@ -111,7 +111,7 @@ app.get('/api/home', publicCatalogCache, async (req, res) => {
 });
 app.get('/api/home/digest-preview', publicCatalogCache, async (req, res) => {
   const locale = req.query.locale === 'zh' ? 'zh' : 'en';
-  const discovery = await getHomeDiscovery();
+  const discovery = await getHomeDiscovery({includePreviewCharts:true});
   res.json({ html: renderPublicDigestPreview(discovery, locale), sample: true, source: discovery.source });
 });
 app.get('/api/search', publicCatalogCache, async (req, res) => res.json(await searchCatalog(req.query.q, req.query.type)));

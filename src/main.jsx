@@ -271,8 +271,8 @@ function SiteFooter({l,t,onLanguageSwitch}){
   for(const [name,url] of Object.entries(siteSettings?.social||{})){if(url&&SOCIAL_ICONS[name])contactLinks.push({name,href:url,title:SOCIAL_ICONS[name][l],external:true})}
   const languages=[['en','English'],['zh','简体中文']];
   return <footer className="footer site-footer">
-    <div className="footer-main"><div className="footer-identity"><strong className="footer-wordmark">Trend Top</strong><p className="footer-tagline">{l==='zh'?'发现开源世界的新动向。':'Find what is moving in open source.'}</p><div className="footer-contact"><h2>{l==='zh'?'联系我们':'Contact us'}</h2><SupportEmail/></div>{contactLinks.length>0&&<ul className="footer-social" aria-label={l==='zh'?'联系方式':'Contact'}>{contactLinks.map(link=><li key={link.name}><a href={link.href} title={link.title} aria-label={link.title} {...(link.external?{target:'_blank',rel:'noreferrer'}:{})}><SocialIcon name={link.name}/></a></li>)}</ul>}</div><FooterNetwork l={l} navigate={navigate}/></div>
-    <div className="footer-bottom"><div className="footer-bottom-copy"><p>{t.foot}</p><nav className="footer-legal" aria-label={l==='zh'?'法律信息':'Legal'}><a href={`/${l}/privacy`} onClick={e=>navigate(e,`/${l}/privacy`)}>{l==='zh'?'隐私':'Privacy'}</a><a href={`/${l}/terms`} onClick={e=>navigate(e,`/${l}/terms`)}>{l==='zh'?'条款':'Terms'}</a></nav></div><LanguageMenu l={l} languages={languages} onSwitch={onLanguageSwitch}/></div>
+    <div className="footer-main"><div className="footer-identity"><strong className="footer-wordmark">Trend Top</strong><p className="footer-tagline">{l==='zh'?'发现开源世界的新动向。':'Find what is moving in open source.'}</p>{contactLinks.length>0&&<ul className="footer-social" aria-label={l==='zh'?'联系方式':'Contact'}>{contactLinks.map(link=><li key={link.name}><a href={link.href} title={link.title} aria-label={link.title} {...(link.external?{target:'_blank',rel:'noreferrer'}:{})}><SocialIcon name={link.name}/></a></li>)}</ul>}</div><FooterNetwork l={l} navigate={navigate}/></div>
+    <div className="footer-bottom"><div className="footer-bottom-copy"><p>{t.foot}</p><nav className="footer-legal" aria-label={l==='zh'?'法律信息':'Legal'}><a href={`/${l}/privacy`} onClick={e=>navigate(e,`/${l}/privacy`)}>{l==='zh'?'隐私':'Privacy'}</a><a href={`/${l}/terms`} onClick={e=>navigate(e,`/${l}/terms`)}>{l==='zh'?'条款':'Terms'}</a><div className="footer-contact-inline"><span>{l==='zh'?'联系我们':'Contact us'}</span><SupportEmail/></div></nav></div><LanguageMenu l={l} languages={languages} onSwitch={onLanguageSwitch}/></div>
   </footer>;
 }
 
@@ -360,15 +360,15 @@ function SubscribeCallout({l,t,data,board,type='github-repo',homepage=false}){
   return <section className="subscribe-cta" id="subscribe" aria-labelledby="subscribe-title">
     <div className="subscribe-cta-inner">
       <div className="subscribe-cta-copy">
-        <p className="subscribe-cta-kicker">03 / {zh?'每日摘要':'THE DAILY DIGEST'}</p>
+        <p className="subscribe-cta-kicker">04 / {zh?'每日摘要':'THE DAILY DIGEST'}</p>
         <h2 id="subscribe-title">{zh?'关掉网页，也能跟上变化。':'Keep up, without keeping a tab open.'}</h2>
         <p className="subscribe-cta-description">{zh?'用简洁的摘要与提醒，持续关注重要的开源变化。':'Keep up with the open-source changes that matter through concise digests and alerts.'}</p>
-        {homepage&&<DigestPreviewButton l={l}/>}
       </div>
       <div className="subscribe-cta-panel">
         <p className="subscribe-cta-panel-label">{zh?'PRO 带来的价值':'INCLUDED WITH PRO'}</p>
         <ol className="subscribe-cta-steps">{steps.map((step,index)=><li key={step}><span>{String(index+1).padStart(2,'0')}</span>{step}</li>)}</ol>
         <a className="primary subscribe-cta-button" href={destination} onClick={event=>{if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();updatePath(destination);}}>{proActive?(zh?'管理邮件推送':'Manage email delivery'):(zh?'开始使用':'Get started')}<span aria-hidden="true">↗</span></a>
+        {homepage&&<div className="home-preview-action"><DigestPreviewButton l={l}/></div>}
         <p className="subscribe-cta-fineprint">{zh?'Pro 功能；每天最多一封，随时可以暂停或停止邮件推送。':'Included with Pro. At most one email per day; pause or stop emails anytime.'}</p>
       </div>
     </div>
