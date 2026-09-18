@@ -1,4 +1,4 @@
-import { SiteSettingsProvider, useSiteSettings, SupportContact } from './site-contact.jsx';
+import { SiteSettingsProvider, useSiteSettings, SupportEmail } from './site-contact.jsx';
 import React,{useEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {SearchInput,DesignSelect,TopicMultiSelect,TopicDialog} from './components.jsx';
@@ -264,12 +264,12 @@ function SiteFooter({l,t,onLanguageSwitch}){
     updatePath(path,query);
   };
   const contactLinks=[];
-  if(siteSettings?.contact?.email)contactLinks.push({name:'email',href:`mailto:${siteSettings.contact.email}`,title:`${SOCIAL_ICONS.email[l]}: ${siteSettings.contact.email}`});
+
 
   for(const [name,url] of Object.entries(siteSettings?.social||{})){if(url&&SOCIAL_ICONS[name])contactLinks.push({name,href:url,title:SOCIAL_ICONS[name][l],external:true})}
   const languages=[['en','English'],['zh','简体中文']];
   return <footer className="footer site-footer">
-    <div className="footer-main"><div className="footer-identity"><strong className="footer-wordmark">Trend Top</strong><p className="footer-tagline">{l==='zh'?'发现开源世界的新动向。':'Find what is moving in open source.'}</p>{contactLinks.length>0&&<ul className="footer-social" aria-label={l==='zh'?'联系方式':'Contact'}>{contactLinks.map(link=><li key={link.name}><a href={link.href} title={link.title} aria-label={link.title} {...(link.external?{target:'_blank',rel:'noreferrer'}:{})}><SocialIcon name={link.name}/></a></li>)}</ul>}</div><FooterNetwork l={l} navigate={navigate}/></div>
+    <div className="footer-main"><div className="footer-identity"><strong className="footer-wordmark">Trend Top</strong><p className="footer-tagline">{l==='zh'?'发现开源世界的新动向。':'Find what is moving in open source.'}</p><div className="footer-contact"><h2>{l==='zh'?'联系我们':'Contact us'}</h2><SupportEmail/></div>{contactLinks.length>0&&<ul className="footer-social" aria-label={l==='zh'?'联系方式':'Contact'}>{contactLinks.map(link=><li key={link.name}><a href={link.href} title={link.title} aria-label={link.title} {...(link.external?{target:'_blank',rel:'noreferrer'}:{})}><SocialIcon name={link.name}/></a></li>)}</ul>}</div><FooterNetwork l={l} navigate={navigate}/></div>
     <div className="footer-bottom"><div className="footer-bottom-copy"><p>{t.foot}</p><nav className="footer-legal" aria-label={l==='zh'?'法律信息':'Legal'}><a href={`/${l}/privacy`} onClick={e=>navigate(e,`/${l}/privacy`)}>{l==='zh'?'隐私':'Privacy'}</a><a href={`/${l}/terms`} onClick={e=>navigate(e,`/${l}/terms`)}>{l==='zh'?'条款':'Terms'}</a></nav></div><LanguageMenu l={l} languages={languages} onSwitch={onLanguageSwitch}/></div>
   </footer>;
 }
@@ -491,7 +491,7 @@ function Method({l,t}){
       <article><h2>{zh?'多久更新？':'How often does it update?'}</h2><p>{zh?'项目数据按日更新。每个榜单会显示最近的更新时间；不同时间窗口可能有不同的有效项目数。':'Project data updates daily. Each ranking shows its latest update time, and the number of eligible projects can vary by time window.'}</p></article>
       <article><h2>{zh?'热度分怎么算？':'How is hot score calculated?'}</h2><p>{zh?'热度按类型与时间窗口计算，筛选只改变显示范围，不重新计算分数。热度基于仓库新增 Star、增长率与最近推送。资源展示关联仓库的信号。目录安装量、用量保留来源、单位与窗口，不参与热度混排。独立网站没有关联仓库数据时不打热度分。':'Scores are calculated for each type and time window. Filters select from that ranking without recalculating scores. Hot rankings use repository momentum. Associated resources disclose their repository signal. Directory counts keep their source, unit, and window and never mix into Hot scores. Independent sites without repository momentum have no Hot score.'}</p></article>
       <article><h2>{zh?'如何阅读 AI 榜？':'How is the AI board selected?'}</h2><p>{zh?'根据仓库公开的主题与简介识别 AI 相关项目。若分类不准确，可在项目详情页提交反馈。':'AI-related projects are identified from public repository topics and descriptions. You can report a mismatch on a project page.'}</p></article>
-    </div></div><SupportContact l={l}/>
+    </div></div>
   </main>;
 }
 

@@ -26,10 +26,3 @@ export function SupportEmail() {
   const email = settings.contact?.email || DEFAULT_CONTACT_EMAIL;
   return <a href={`mailto:${email}`}>{email}</a>;
 }
-export function SupportContact({ l }) {
-  const zh = l === 'zh';
-  return <section className="customer-support" aria-label={zh ? '客户支持' : 'Customer support'}>
-    <EnvelopeSimple size={24} aria-hidden="true" />
-    <div><h2>{zh ? '需要帮助？' : 'Need help?'}</h2><p>{zh ? '账户、邮件推送或账单问题，请联系：' : 'For account, email delivery or billing questions, contact:'}</p><SupportEmail /><p className="support-response">{zh ? '我们将在 3 个工作日内答复。请勿发送密码、验证码或完整银行卡信息。' : 'We reply within 3 business days. Do not send passwords, verification codes or full card details.'}</p></div>
-  </section>;
-}
