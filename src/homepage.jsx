@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { EnvelopeSimple } from '@phosphor-icons/react';
 import { TYPES, TYPE_META, typePath, typeLabel, itemPath } from './catalog.js';
 import { SourceBadge } from './source-badge.jsx';
 
@@ -28,7 +27,7 @@ export function DigestPreviewButton({ l }) {
     read(`/api/home/digest-preview?locale=${l}`, controller.signal).then(value => { if (!controller.signal.aborted) setPreview(value); }).catch(err => { if (err.name !== 'AbortError') setError(true); });
     return () => controller.abort();
   }, [open, l, retry]);
-  return <Dialog.Root open={open} onOpenChange={setOpen}><Dialog.Trigger asChild><button type="button" className="home-outline-button"><EnvelopeSimple size={18} aria-hidden="true"/>{zh ? '预览订阅内容' : 'Preview what you get'}</button></Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content digest-preview-dialog"><Dialog.Close className="dialog-close" aria-label={zh ? '关闭' : 'Close'}>×</Dialog.Close><Dialog.Title>{zh ? '你会收到什么？' : 'Preview what you get'}</Dialog.Title><Dialog.Description>{zh ? '公开目录的格式预览；实际邮件按你的偏好生成。' : 'A format preview from the public catalog. Your email follows your preferences.'}</Dialog.Description>{preview ? <iframe title={zh ? '示例摘要邮件' : 'Sample digest email'} srcDoc={preview.html} sandbox="allow-popups allow-popups-to-escape-sandbox" className="digest-preview-frame"/> : <div className="discovery-state" role="status">{error ? <><p>{zh ? '暂时无法加载示例邮件。' : 'The preview is temporarily unavailable.'}</p><button className="primary" onClick={() => setRetry(value => value + 1)}>{zh ? '重试' : 'Retry'}</button></> : (zh ? '正在加载示例邮件…' : 'Loading the sample email…')}</div>}</Dialog.Content></Dialog.Portal></Dialog.Root>;
+  return <Dialog.Root open={open} onOpenChange={setOpen}><Dialog.Trigger asChild><button type="button" className="home-outline-button">{zh ? '预览订阅内容' : 'Preview what you get'}</button></Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content digest-preview-dialog"><Dialog.Close className="dialog-close" aria-label={zh ? '关闭' : 'Close'}>×</Dialog.Close><Dialog.Title>{zh ? '你会收到什么？' : 'Preview what you get'}</Dialog.Title><Dialog.Description>{zh ? '公开目录的格式预览；实际邮件按你的偏好生成。' : 'A format preview from the public catalog. Your email follows your preferences.'}</Dialog.Description>{preview ? <iframe title={zh ? '示例摘要邮件' : 'Sample digest email'} srcDoc={preview.html} sandbox="allow-popups allow-popups-to-escape-sandbox" className="digest-preview-frame"/> : <div className="discovery-state" role="status">{error ? <><p>{zh ? '暂时无法加载示例邮件。' : 'The preview is temporarily unavailable.'}</p><button className="primary" onClick={() => setRetry(value => value + 1)}>{zh ? '重试' : 'Retry'}</button></> : (zh ? '正在加载示例邮件…' : 'Loading the sample email…')}</div>}</Dialog.Content></Dialog.Portal></Dialog.Root>;
 }
 
 export function WorthCloserLook({ l, navigate }) {
