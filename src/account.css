@@ -41,7 +41,8 @@
 .account-page-card>.account-section:first-child{border:0;padding-top:0}
 .login-page{display:flex;flex-direction:column;min-height:100dvh;background:#fff;color:#111}
 .login-main{width:min(100% - 40px,490px);margin:auto;padding:28px 0 24px}
-.login-brand{display:block!important;width:max-content;margin:0 auto 22px;padding:0;font-size:29px!important;line-height:1.2;text-align:center}
+.login-brand{display:flex!important;align-items:center;justify-content:center;width:max-content;margin:0 auto 22px;padding:0;font-size:29px!important;line-height:1.2;text-align:center}
+.login-brand img{width:32px;height:32px}
 .login-heading{text-align:center;margin-bottom:20px}
 .login-heading .account-kicker{font-size:11px;letter-spacing:.1em}
 .login-heading h1{margin:12px 0;font-size:clamp(28px,3vw,36px);line-height:1.12;letter-spacing:-.045em}

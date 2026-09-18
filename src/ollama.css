@@ -16,7 +16,8 @@ a:hover{color:#555}
 .type-switch-menu{position:absolute;top:calc(100% - 4px);left:0;z-index:40;min-width:200px;margin:0;padding:6px 0;border:1px solid #111;background:#fff;list-style:none}
 .type-switch-menu a{display:block;padding:10px 16px;color:#111;font-size:14px;font-weight:560;text-decoration:none}
 .type-switch-menu a:hover,.type-switch-menu a[aria-current=page]{background:#111;color:#fff}
-.brand{font-size:23px;letter-spacing:-.055em;font-weight:750}
+.brand{display:inline-flex;align-items:center;gap:10px;font-size:23px;letter-spacing:-.055em;font-weight:750}
+.brand img{display:block;flex:none;width:28px;height:28px}
 .header-actions{gap:32px}
 .header-link{font-size:14px;font-weight:550;color:#525252}
 .header-link:hover{color:#111}
