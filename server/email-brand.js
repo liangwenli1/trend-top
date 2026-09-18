@@ -1,5 +1,11 @@
-const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&'+'amp;', '<':'&'+'lt;', '>':'&'+'gt;', '"':'&'+'quot;', "'":'&#39;' }[char]));
 export function emailBrandHeader(root, locale = 'en') {
   const home = root.replace(/\/$/, '') + '/' + (locale === 'zh' ? 'zh' : 'en') + '/home';
   return `<table role="presentation" align="center" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse"><tr><td align="center" style="text-align:center"><a href="${escape(home)}" style="text-decoration:none"><img src="${escape(root.replace(/\/$/, ''))}/email-logo.png" width="40" height="40" alt="" style="display:block;width:40px;height:40px;margin:0 auto 10px;border:0"><span style="display:block;font:700 24px/30px Arial,sans-serif;letter-spacing:-1px;color:#111">Trend Top</span></a></td></tr></table>`;
+}
+
+// Tables plus max-width, not <main>: Gmail strips unknown tags and the letter stretches on desktop.
+export function wrapEmailHtml(body, { locale = 'en', preheader = '' } = {}) {
+  locale = locale === 'zh' ? 'zh' : 'en';
+  return `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="X-UA-Compatible" content="IE=edge"><style>@media only screen and (max-width:620px){.email-pad{padding:20px 16px !important}.email-h1{font-size:22px !important}.email-h2{font-size:18px !important}}</style></head><body style="margin:0;padding:0;background:#f5f5f3;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%">${preheader ? `<div style="display:none;max-height:0;overflow:hidden">${escape(preheader)}</div>` : ''}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background:#f5f5f3;border-collapse:collapse"><tr><td align="center" style="padding:16px 8px"><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#fff;border-collapse:collapse"><tr><td class="email-pad" style="padding:28px 24px;color:#171717;font:15px/1.6 Arial,Helvetica,sans-serif">${body}</td></tr></table></td></tr></table></body></html>`;
 }

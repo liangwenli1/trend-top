@@ -1,4 +1,4 @@
-import { emailBrandHeader } from './email-brand.js';
+import { emailBrandHeader, wrapEmailHtml } from './email-brand.js';
 import { asJson } from './db.js';
 import { TYPES, TYPE_META, ASSET_BOARDS, getCatalogRankings } from './catalog.js';
 import { boards as REPO_BOARDS } from './rankings.js';
@@ -105,7 +105,7 @@ export async function buildDigest(sub, manageToken, { previous = null } = {}) {
       const previousKeys = previous && Array.isArray(previous[key]) ? previous[key] : null;
       snapshot[key] = ranking.items.map(itemKey);
       const sorted=[...ranking.items].sort((a,b)=>Number(rankChange(b,previousKeys)==='new')-Number(rankChange(a,previousKeys)==='new')||a.rank-b.rank);
-      const items = uniqueItems(sorted,Math.min(typeRemaining,first?5:2)).map(item => ({ ...item, change: rankChange(item, previousKeys) }));
+      const items = uniqueItems(sorted,Math.min(typeRemaining,first?5:4)).map(item => ({ ...item, change: rankChange(item, previousKeys) }));
       await addSection(type,board,ranking,items,title(board,type,locale),
         (zh?'匹配你选择的类型与榜单':'Matches your selected collection and board')+(languages.length?` · ${languages.join(', ')}`:'')+(topics.length?` · ${topics.join(', ')}`:''),first);
       typeRemaining-=items.length;
@@ -133,14 +133,14 @@ export async function buildDigest(sub, manageToken, { previous = null } = {}) {
   const htmlSections = sections.map(section => {
     const rows = section.items.map(item => `<p style="margin:8px 0;font-size:14px"><strong>#${item.rank}</strong> <a href="${escape(item.url)}" style="color:#171717">${escape(item.full_name)}</a>${changeHtml(item.change, zh)} <span style="color:#606060">${growthLabel(item, num, zh)}</span></p>`).join('');
     const trend = section.trend
-      ? `<p style="margin:14px 0 4px;color:#666;font-size:12px">${zh ? '近 30 天累计新增 Star（UTC，缺失日期不计）· ' : 'Cumulative new stars over 30 days (UTC; missing days excluded) · '}<a href="${escape(section.trend.url)}" style="color:#171717;font-weight:700">${escape(section.trend.name)}</a></p><a href="${escape(section.trend.url)}" style="display:block"><img src="${escape(section.trend.image)}" width="544" height="163" alt="${escape(section.trend.name)} ${zh ? '30 天累计新增 Star 走势' : '30-day cumulative new star trend'}" style="display:block;width:100%;max-width:544px;height:auto;border:1px solid #e5e5e5"></a>`
+      ? `<p style="margin:16px 0 6px;color:#666;font-size:12px">${zh ? '近 30 天累计新增 Star · ' : 'New stars, last 30 days · '}<a href="${escape(section.trend.url)}" style="color:#171717;font-weight:700">${escape(section.trend.name)}</a></p><a href="${escape(section.trend.url)}" style="display:block"><img src="${escape(section.trend.image)}" width="552" alt="${escape(section.trend.name)} ${zh ? '30 天累计新增 Star 走势' : '30-day cumulative new star trend'}" style="display:block;width:100%;max-width:100%;height:auto;border:1px solid #e5e5e5"></a>`
       : '';
     const periodName=({day:zh?'每日':'Daily',week:zh?'本周':'Weekly',month:zh?'本月':'Monthly'})[section.filters?.period || 'day'];
     const metricTitle = section.type === 'github-repo' ? (zh ? periodName+'新增 Star' : periodName+' new stars') : (zh ? '关联仓库'+periodName+'新增 Star' : periodName+' new stars in the associated repository');
     const hasGrowth = section.items.some(validGrowth);
-    const growth = section.chart && hasGrowth ? `<p style="margin:12px 0 0;color:#666;font-size:12px">${metricTitle}</p>${renderGrowthChart(section.items, num, zh, changeHtml)}` : rows;
-    return `<section style="border-top:1px solid #dedede;padding:22px 0"><p style="margin:0 0 5px;color:#315fd9;font-size:12px;font-weight:700;letter-spacing:1px">${escape(section.typeName)}</p><h2 style="margin:0;font-size:20px">${escape(section.name)}</h2><p style="margin:5px 0 12px;color:#666;font-size:12px">${escape(localTime(section.updatedAt))} · ${escape(sub.timezone)}${(process.env.DATA_MODE || 'demo') === 'demo' ? ' · DEMO DATA' : ''}</p><p style="font-size:12px;color:#666">${escape(section.reason)}</p>${growth}${trend}<a href="${escape(boardLink(section))}" style="display:inline-block;margin-top:8px;color:#315fd9;font-weight:700">${zh ? '查看完整榜单' : 'View full ranking'} →</a></section>`;
+    const growth = hasGrowth ? `<p style="margin:12px 0 0;color:#666;font-size:12px">${metricTitle}</p>${renderGrowthChart(section.items, num, zh, changeHtml)}` : rows;
+    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><td style="border-top:1px solid #dedede;padding:22px 0 8px"><p style="margin:0 0 5px;color:#315fd9;font-size:12px;font-weight:700;letter-spacing:1px">${escape(section.typeName)}</p><h2 class="email-h2" style="margin:0;font-size:20px">${escape(section.name)}</h2><p style="margin:5px 0 12px;color:#666;font-size:12px">${escape(localTime(section.updatedAt))} · ${escape(sub.timezone)}${(process.env.DATA_MODE || 'demo') === 'demo' ? ' · DEMO DATA' : ''}</p><p style="font-size:12px;color:#666">${escape(section.reason)}</p>${growth}${trend}<a href="${escape(boardLink(section))}" style="display:inline-block;margin-top:10px;color:#315fd9;font-weight:700">${zh ? '查看完整榜单' : 'View full ranking'} →</a></td></tr></table>`;
   }).join('');
-  const html = `<div style="background:#f5f5f3;padding:16px"><main style="max-width:600px;margin:auto;padding:28px;background:#fff;color:#171717;font:15px/1.6 Arial,sans-serif">${emailBrandHeader(root, locale)}<p>${escape(intro)}</p>${htmlSections}<footer style="border-top:1px solid #dedede;padding-top:20px;font-size:13px"><a href="${escape(account)}">${zh ? '管理邮件推送' : 'Manage email delivery'}</a> · <a href="${escape(unsubscribe)}">${zh ? '停止邮件推送' : 'Stop emails'}</a></footer></main></div>`;
-  return { schemaVersion:1, templateVersion:'2026-09-17.1', generatedAt:new Date().toISOString(), preferences:{types,boards,languages,topics,timezone:sub.timezone}, subject, text, html, sections, snapshot, unsubscribe, oneClick };
+  const html = wrapEmailHtml(`${emailBrandHeader(root, locale)}<p>${escape(intro)}</p>${htmlSections}<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="border-top:1px solid #dedede;padding-top:20px;font-size:13px"><a href="${escape(account)}">${zh ? '管理邮件推送' : 'Manage email delivery'}</a> · <a href="${escape(unsubscribe)}">${zh ? '停止邮件推送' : 'Stop emails'}</a></td></tr></table>`, { locale, preheader: intro });
+  return { schemaVersion:1, templateVersion:'2026-09-18.1', generatedAt:new Date().toISOString(), preferences:{types,boards,languages,topics,timezone:sub.timezone}, subject, text, html, sections, snapshot, unsubscribe, oneClick };
 }
