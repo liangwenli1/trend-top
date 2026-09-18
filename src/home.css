@@ -13,6 +13,7 @@
 .discovery-spotlight h2 a, .discovery-card h3 a { text-decoration: none; }
 .discovery-spotlight > p { font-size: 14px; color: #555; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .discovery-spotlight-foot { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding-top: 16px; margin-top: 16px; border-top: 1px solid #ddd; font-size: 13px; font-weight: 650; }
+.discovery-home #types, .discovery-home #recent { scroll-margin-top: 90px; }
 .discovery-collections { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border: 1px solid #dedede; }
 .discovery-collections > a { min-width: 0; padding: 18px 16px; border-right: 1px solid #dedede; text-decoration: none; }
 .discovery-collections > a:last-child { border-right: 0; }
@@ -91,6 +92,7 @@
   .discovery-card-grid, .discovery-skeletons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 700px) {
+  .discovery-home #types, .discovery-home #recent { scroll-margin-top: 170px; }
   .discovery-hero { grid-template-columns: 1fr; gap: 24px; padding: 30px 0 24px; }
   .discovery-hero h1 { font-size: clamp(32px, 8.5vw, 46px); }
   .discovery-intro { font-size: 16px; }
