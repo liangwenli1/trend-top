@@ -33,7 +33,7 @@ import { performanceMiddleware } from './performance.js';
 import { catalogRevision } from './operations.js';
 import { registerSavedSearchRoutes } from './saved-searches.js';
 import { registerDigestImageRoutes } from './digest-snapshots.js';
-import { getHomeDiscovery, initializeHomeSnapshot } from './homepage.js';
+import { getHomeDiscovery, getHomeMovement, initializeHomeSnapshot } from './homepage.js';
 import { renderPublicDigestPreview } from './digest-preview.js';
 import { USE_CASES } from '../shared/taxonomy.js';
 
@@ -113,6 +113,9 @@ app.get('/api/home/digest-preview', publicCatalogCache, async (req, res) => {
   const locale = req.query.locale === 'zh' ? 'zh' : 'en';
   const discovery = await getHomeDiscovery({includePreviewCharts:true});
   res.json({ html: renderPublicDigestPreview(discovery, locale), sample: true, source: discovery.source });
+});
+app.get('/api/home/movement', publicCatalogCache, async (_req, res) => {
+  res.json(await getHomeMovement());
 });
 app.get('/api/search', publicCatalogCache, async (req, res) => res.json(await searchCatalog(req.query.q, req.query.type)));
 app.get('/api/:type/filters', publicCatalogCache, async (req, res) => {

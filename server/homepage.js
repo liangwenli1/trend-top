@@ -1,5 +1,5 @@
 import { asDay, asJson, lastCompleteDay, many, one, query, ready, transaction, dataSource } from './db.js';
-import { TYPES, getTypeSummary, getCatalogRankings } from './catalog.js';
+import { TYPES, getTypeSummary, getCatalogRankings, getCatalogChart } from './catalog.js';
 import { USE_CASES } from '../shared/taxonomy.js';
 import { selectHomeItems } from '../shared/home-discovery.js';
 import { freezeTrendImage } from './digest-snapshots.js';
@@ -95,4 +95,70 @@ export async function getHomeDiscovery({ type = '', useCase = '', includePreview
     items: variant.items.map(item => ({ ...item, stale: item.stale || stale })),
     ...(includePreviewCharts ? {previewCharts:asJson(row.preview_charts,[]),previewBoards:asJson(row.preview_boards,{})} : {}),
     snapshot: { catalogVersion: Number(row.catalog_version), publishedAt, stale } };
+}
+
+function movementItem(item, type) {
+  return {
+    id: String(item.slug || item.id),
+    slug: String(item.slug || item.id),
+    type: item.type || type,
+    full_name: item.full_name,
+    description: String(item.description || '').slice(0, 180),
+    gain: item.gain ?? null,
+    official: Boolean(item.officialEvidence || item.official),
+    useCase: item.useCase || null,
+    useCaseLabel: item.useCaseLabel || null,
+    ageDays: item.ageDays ?? null
+  };
+}
+
+export async function getHomeMovement() {
+  const summaries = await Promise.all(TYPES.map(async type => {
+    const ranking = await getCatalogRankings(type, { board: 'hot', period: 'week', limit: 24 });
+    const withGain = ranking.items.filter(item => item.gain != null && Number.isFinite(item.gain) && !item.anomaly);
+    const mover = [...withGain].sort((a, b) => b.gain - a.gain)[0] || null;
+    return { type, ranking, mover, maxGain: mover?.gain ?? null };
+  }));
+  const defaultType = [...summaries].sort((a, b) => (b.maxGain || 0) - (a.maxGain || 0))[0]?.type || TYPES[0];
+  const byType = {};
+  for (const entry of summaries) {
+    const leader = entry.mover;
+    let peers = [];
+    if (leader?.useCase) {
+      peers = entry.ranking.items.filter(item => item.useCase === leader.useCase && item.gain != null && !item.anomaly).slice(0, 4);
+    }
+    if (peers.length < 2) {
+      peers = entry.ranking.items.filter(item => item.gain != null && !item.anomaly).slice(0, 4);
+    }
+    const chart = leader
+      ? await getCatalogChart(entry.type, { board: 'hot', period: 'week', id: leader.id }, entry.ranking)
+      : { insufficient: true, points: [], bars: [], leader: null };
+    byType[entry.type] = {
+      leader: leader ? movementItem(leader, entry.type) : null,
+      peers: peers.map(item => movementItem(item, entry.type)),
+      chart
+    };
+  }
+  const pooled = summaries.flatMap(entry => entry.ranking.items.map(item => movementItem(item, entry.type)));
+  const movers = pooled.filter(item => item.gain != null).sort((a, b) => b.gain - a.gain).slice(0, 5);
+  let newcomers = pooled.filter(item => item.ageDays != null && item.ageDays <= 14 && item.gain != null)
+    .sort((a, b) => (a.ageDays - b.ageDays) || (b.gain - a.gain)).slice(0, 5);
+  if (newcomers.length < 5) {
+    const extra = await Promise.all(TYPES.map(type => getCatalogRankings(type, { board: 'new', period: 'week', limit: 6 })));
+    const seen = new Set(newcomers.map(item => item.type + ':' + item.id));
+    for (const item of extra.flatMap(ranking => ranking.items.map(row => movementItem(row, ranking.type)))) {
+      const key = item.type + ':' + item.id;
+      if (seen.has(key) || item.gain == null) continue;
+      seen.add(key);
+      newcomers.push(item);
+      if (newcomers.length === 5) break;
+    }
+  }
+  return {
+    defaultType,
+    types: summaries.map(entry => ({ id: entry.type, gain: entry.maxGain, leader: entry.mover?.full_name || null })),
+    byType,
+    newcomers,
+    movers
+  };
 }

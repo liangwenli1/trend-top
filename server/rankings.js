@@ -362,7 +362,15 @@ export async function getChart(query, sampleOverride = null) {
     metric = ranking.board;
     bars = ranking.items.map(r => ({ id: r.id, name: r.full_name, value: r[metric], rank: r.rank }));
   }
-  const leader = metric === 'gain' ? bars[0] || null : null;
+  const requested = query.id == null || query.id === '' ? null : String(query.id);
+  const chosen = requested
+    ? sample.items.find(item => String(item.id) === requested || String(item.slug || '') === requested)
+    : null;
+  const leader = metric === 'gain'
+    ? (chosen && chosen.gain != null && !chosen.anomaly
+      ? { id: chosen.id, name: chosen.full_name, value: chosen.gain, rank: chosen.rank }
+      : bars[0] || null)
+    : null;
   let points = [];
   if (leader) {
     const days = DAYS[ranking.period];

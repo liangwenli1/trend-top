@@ -105,6 +105,17 @@ test('github-repo catalog still ranks live demo repos', async () => {
   assert.ok(combined.ranking.items.length > 0);
 });
 
+test('home movement returns every type so the homepage can switch without a second fetch', async () => {
+  const { getHomeMovement } = await import('./homepage.js');
+  const data = await getHomeMovement();
+  assert.ok(['skill','plugin','agent','components','website','github-repo'].includes(data.defaultType));
+  assert.equal(data.types.length, 6);
+  assert.ok(data.byType.plugin);
+  assert.ok(data.byType[data.defaultType]);
+  assert.ok(Array.isArray(data.movers));
+  assert.ok(Array.isArray(data.newcomers));
+});
+
 test('topic aliases agree in JavaScript and SQL without merging related concepts', async () => {
   const samples = ['API', ' apis ', 'public-api', 'public-apis', 'public', 'software', 'ai_agent', 'AI agents', 'mcp-servers', 'next.js', 'golang', 'front-end', 'ai', 'llm', 'react', 'components', 'C++', '--web---tools--'];
   const result = await query('SELECT value, canonical_topic(value) AS canonical FROM jsonb_array_elements_text($1::jsonb) AS value', [JSON.stringify(samples)]);
