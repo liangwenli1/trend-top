@@ -4,3 +4,4 @@ data/*.sqlite*
 data/pglite/
 data/test-*/
 .env
+.firecrawl/
