@@ -183,7 +183,10 @@
 .digest-preview-frame { display: block; width: 100%; height: min(62dvh, 620px); border: 1px solid #dedede; background: #f5f5f3; }
 
 .type-home #types,.type-home #recent{scroll-margin-top:90px}
-.home-daily-card{margin-top:18px;padding:clamp(22px,2.5vw,38px);border:1px solid #e5e5e5}
+.home-daily-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:18px}
+.home-daily-card{min-width:0;padding:clamp(22px,2.5vw,38px);border:1px solid #e5e5e5}
+.type-home .home-daily-link{margin-top:24px}
+@media(max-width:900px){.home-daily-grid{grid-template-columns:1fr}}
 .home-daily-figure{margin:24px 0 0}
 .home-daily-card .home-proof-card-title{flex-wrap:wrap}
 .home-daily-card .home-proof-card-title span{min-width:0;overflow-wrap:anywhere}

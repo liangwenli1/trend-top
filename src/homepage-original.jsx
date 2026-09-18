@@ -19,11 +19,14 @@ export function RestoredHome({ l, t, navigate }) {
   const [data, setData] = useState(null);
   const [chart, setChart] = useState(null);
   const [chartError, setChartError] = useState(false);
+  const [pluginChart, setPluginChart] = useState(null);
+  const [pluginChartError, setPluginChartError] = useState(false);
   const zh = l === 'zh';
   useEffect(() => {
     let active = true;
     api('/api/types').then(result => { if (active) setData(result); }).catch(() => { if (active) setData({ source: 'unavailable', types: TYPES.map(id => ({ id, ...TYPE_META[id], count: null })) }); });
     api('/api/github-repo/charts?board=hot&period=week').then(result => { if (active) setChart(result); }).catch(() => { if (active) setChartError(true); });
+    api('/api/plugin/charts?board=hot&period=week').then(result => { if (active) setPluginChart(result); }).catch(() => { if (active) setPluginChartError(true); });
     return () => { active = false; };
   }, []);
   useEffect(() => {
@@ -97,8 +100,11 @@ export function RestoredHome({ l, t, navigate }) {
           <a className="home-proof-link" href={typePath(l, 'github-repo', 'charts')} onClick={go(typePath(l, 'github-repo', 'charts'))}>{zh ? '查看完整图表' : 'Explore all charts'} <span aria-hidden="true">↗</span></a>
         </div>
       </div>
-      <div className="home-daily-card"><div className="home-proof-card-title"><span>{zh ? "每日变化" : "Daily movement"}</span><span>{chart?.leader || ""}</span></div><HomeDailyChart chart={chart} l={l} loading={!chart && !chartError} error={chartError}/></div>
-      <p className="home-proof-footnote">{zh ? '图表来自仓库热门榜。' : 'From the repository Hot board.'}</p>
+      <div className="home-daily-grid">
+        <div className="home-daily-card"><div className="home-proof-card-title"><span>{zh ? '仓库 · 每日变化' : 'Repositories · Daily movement'}</span><span>{chart?.leader || ''}</span></div><HomeDailyChart chart={chart} l={l} loading={!chart && !chartError} error={chartError}/></div>
+        <div className="home-daily-card"><div className="home-proof-card-title"><span>{zh ? '插件 / MCP · 每日变化' : 'Plugins / MCP · Daily movement'}</span><span>{pluginChart?.leader || ''}</span></div><HomeDailyChart chart={pluginChart} l={l} loading={!pluginChart && !pluginChartError} error={pluginChartError}/><a className="home-proof-link home-daily-link" href={typePath(l, 'plugin', 'charts')} onClick={go(typePath(l, 'plugin', 'charts'))}>{zh ? '查看插件图表' : 'Explore plugin charts'} <span aria-hidden="true">↗</span></a></div>
+      </div>
+      <p className="home-proof-footnote">{zh ? '图表来自各类型热门榜；插件指标为关联仓库的 Star 变化。' : 'From each collection’s Hot board; plugin metrics reflect associated repository Star changes.'}</p>
     </section>
 
     <section className="home-process home-reveal" aria-labelledby="home-process-title">
