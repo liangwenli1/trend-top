@@ -106,6 +106,7 @@ function movementItem(item, type) {
     description: String(item.description || '').slice(0, 180),
     gain: item.gain ?? null,
     official: Boolean(item.officialEvidence || item.official),
+    officialEvidence: item.officialEvidence || null,
     useCase: item.useCase || null,
     useCaseLabel: item.useCaseLabel || null,
     ageDays: item.ageDays ?? null
