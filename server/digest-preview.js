@@ -34,7 +34,8 @@ export function renderPublicDigestPreview(discovery, locale = 'en') {
     list.push(item);
     grouped.set(item.type, list);
   }
-  const rows = TYPES.filter(type => grouped.has(type)).map(type => typeSection(grouped.get(type).slice(0, 3), discovery, locale, zh, num)).join('');
+  const boards = discovery.previewBoards && typeof discovery.previewBoards === 'object' ? discovery.previewBoards : {};
+  const rows = TYPES.filter(type => (boards[type]?.length || grouped.get(type)?.length)).map(type => typeSection((boards[type]?.length ? boards[type] : grouped.get(type)).slice(0, 5), discovery, locale, zh, num)).join('');
   const body = `${emailBrandHeader('', locale)}<p style="text-align:center;color:#315fd9;font-size:12px;font-weight:700">${zh ? '示例邮件 · 公开目录内容' : 'SAMPLE EMAIL · PUBLIC CATALOG'}${discovery.source === 'demo' ? ' · DEMO DATA' : ''}</p><h1 class="email-h1" style="font-size:24px;text-align:center">${zh ? '值得关注的开源变化' : 'Open-source changes worth a look'}</h1><p>${zh ? '这是格式预览，采用公开的近 7 天数据；实际每日摘要会按你的偏好生成。' : 'A format preview using public seven-day data. Your daily digest follows your preferences.'}</p>${rows || `<p>${zh ? '当前没有可预览的内容。' : 'No preview content is available.'}</p>`}<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="border-top:1px solid #dedede;padding-top:16px;color:#666;font-size:12px;text-align:center">${zh ? '每天最多一封 · 邮件启停可在 Settings 中管理' : 'At most one email a day · Manage email delivery in Settings'}</td></tr></table>`;
   return wrapEmailHtml(body, { locale });
 }

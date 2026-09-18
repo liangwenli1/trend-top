@@ -24,6 +24,9 @@ test('growth charts never substitute totals, manufacture a zero bar, or show unv
   assert.equal(growthLabel({gain:-3},num,false), '-3 ★');
   assert.equal(growthLabel({gain:NaN},num,false), 'Growth unavailable');
   assert.doesNotMatch(renderGrowthChart([{full_name:'<script>',gain:1}],num,false), /<script>/);
+  const compared = renderGrowthChart([{full_name:'big',gain:80},{full_name:'small',gain:20}], num, false);
+  assert.match(compared, /width:100%/);
+  assert.match(compared, /width:25%/);
 });
 
 test('email chart dates are explicit valid UTC days, with no future or coercible input', () => {

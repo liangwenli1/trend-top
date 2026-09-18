@@ -45,6 +45,12 @@ test('public email preview escapes catalog content, shares centered branding and
   assert.match(html,/\/en\/skill\/skill-1/);
   assert.match(renderPublicDigestPreview({source:'demo',items},'zh'),/示例邮件/);
   assert.match(renderPublicDigestPreview({source:'demo',items},'malicious"'),/<html lang="en">/);
+  const compared=renderPublicDigestPreview({source:'demo',items:[],previewBoards:{skill:[
+    {...items[0],gain:100,full_name:'big',url:'/en/skill/skill-1'},
+    {...items[0],id:'2',slug:'skill-2',gain:40,full_name:'small',url:'/en/skill/skill-2'}
+  ]}});
+  assert.match(compared,/width:100%/);
+  assert.match(compared,/width:40%/);
 });
 
 delete process.env.DATABASE_URL;

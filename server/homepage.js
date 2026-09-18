@@ -18,6 +18,7 @@ export async function buildHomeSnapshot() {
   ]);
   const available = new Set(taskRows.map(row => row.use_case));
   const variants = {};
+  let previewSource = [];
   // Reuse each set of six ordered boards for all seven type variants. Generate
   // every accepted canonical filter, including combinations with no results.
   for (const useCase of ['', ...Object.keys(USE_CASES)]) {
@@ -25,6 +26,7 @@ export async function buildHomeSnapshot() {
       const hot = await getCatalogRankings(type, { board: 'hot', period: 'week', limit: 12, useCase });
       return hot.items.length ? hot : getCatalogRankings(type, { board: 'stars', period: 'week', limit: 12, useCase });
     }));
+    if (!useCase) previewSource = collections;
     for (const type of ['', ...TYPES]) {
       const selected = type ? collections.filter(collection => collection.type === type) : collections;
       variants[variantKey(type, useCase)] = { type, useCase, items: selectHomeItems(selected),
@@ -33,6 +35,7 @@ export async function buildHomeSnapshot() {
     }
   }
   const previewCharts = [];
+  const previewBoards = Object.fromEntries(previewSource.map(collection => [collection.type, selectHomeItems([collection], 5)]));
   const seenTypes = new Set();
   for (const item of variants[variantKey('', '')].items) {
     if (seenTypes.has(item.type) || !item.updatedAt || item.metricScope === 'none') continue;
@@ -42,7 +45,7 @@ export async function buildHomeSnapshot() {
     const end = dataSource()==='demo' ? new Date(item.updatedAt) : lastCompleteDay(new Date(item.updatedAt));
     previewCharts.push({ type:item.type,id:item.id,image,end:asDay(end),start:asDay(new Date(end.getTime()-29*86400000)),days:30 });
   }
-  return { schemaVersion, previewVersion:2, previewCharts, summary, period: 'week', selection: 'type-board-round-robin',
+  return { schemaVersion, previewVersion:3, previewCharts, previewBoards, summary, period: 'week', selection: 'type-board-round-robin',
     tasks: taskIds.filter(id => available.has(id)).map(id => ({ id, ...USE_CASES[id] })), variants };
 }
 
@@ -64,7 +67,7 @@ export async function initializeHomeSnapshot() {
     const publication = await one('SELECT id FROM catalog_publications ORDER BY id DESC LIMIT 1');
     const existing = await one("SELECT catalog_version,schema_version,payload->>'previewVersion' AS preview_version FROM homepage_snapshots WHERE source=$1", [dataSource()]);
     const version = publication?.id || 0;
-    if (existing?.schema_version === schemaVersion && existing.preview_version === '2' && Number(existing.catalog_version) >= version) return;
+    if (existing?.schema_version === schemaVersion && existing.preview_version === '3' && Number(existing.catalog_version) >= version) return;
     await publishHomeSnapshot(version);
   }); } catch (error) {
     const existing = await one('SELECT schema_version FROM homepage_snapshots WHERE source=$1', [dataSource()]);
@@ -79,7 +82,8 @@ export async function getHomeDiscovery({ type = '', useCase = '', includePreview
   // A request reads only its public variant, never rankings or private mail data.
   const row = await one(`SELECT catalog_version,published_at,payload->'summary' AS summary,
     payload->'tasks' AS tasks,payload->'variants'->$2 AS variant,
-    CASE WHEN $4::boolean THEN payload->'previewCharts' ELSE NULL END AS preview_charts
+    CASE WHEN $4::boolean THEN payload->'previewCharts' ELSE NULL END AS preview_charts,
+    CASE WHEN $4::boolean THEN payload->'previewBoards' ELSE NULL END AS preview_boards
     FROM homepage_snapshots WHERE source=$1 AND schema_version=$3`, [dataSource(), variantKey(type, useCase), schemaVersion,includePreviewCharts]);
   if (!row) throw Object.assign(new Error('Homepage publication is not available yet'), { status: 503 });
   const variant = asJson(row.variant, null);
@@ -89,6 +93,6 @@ export async function getHomeDiscovery({ type = '', useCase = '', includePreview
   return { ...asJson(row.summary, {}), ...variant, period: 'week', selection: 'type-board-round-robin',
     tasks: asJson(row.tasks, []), generatedAt: publishedAt, partial: variant.partial || stale,
     items: variant.items.map(item => ({ ...item, stale: item.stale || stale })),
-    ...(includePreviewCharts ? {previewCharts:asJson(row.preview_charts,[])} : {}),
+    ...(includePreviewCharts ? {previewCharts:asJson(row.preview_charts,[]),previewBoards:asJson(row.preview_boards,{})} : {}),
     snapshot: { catalogVersion: Number(row.catalog_version), publishedAt, stale } };
 }
