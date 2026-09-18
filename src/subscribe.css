@@ -90,13 +90,27 @@
 }
 .subscribe-cta-steps li:first-child { border-top: 1px solid #e6e6e6; }
 .subscribe-cta-steps li span { flex: none; color: #315fd9; font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.subscribe-cta-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+.subscribe-cta-actions .home-outline-button {
+  flex: none;
+  min-height: 64px;
+  padding: 12px 16px;
+  white-space: nowrap;
+  font-size: 15px;
+}
 .subscribe-cta-button {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 1 1 auto;
   gap: 24px;
-  width: 100%;
+  width: auto;
+  min-width: 0;
   min-height: 64px;
   padding: 15px 52px;
   font-size: 18px;
@@ -165,6 +179,8 @@
   .subscribe-cta-panel { padding: 23px 19px; }
   .subscribe-cta-steps li { font-size: 16px; }
   .subscribe-cta-button { min-height: 58px; font-size: 16px; }
+  .subscribe-cta-actions { flex-wrap: wrap; }
+  .subscribe-cta-actions .home-outline-button { flex: 1 1 100%; min-height: 50px; justify-content: center; }
   .dialog-content { max-height: min(92dvh, 850px); padding: 24px 18px; }
   .dialog-content h2 { font-size: 28px; }
   .dialog-content > p { margin-bottom: 23px; font-size: 15px; }
