@@ -425,6 +425,10 @@ CREATE TABLE IF NOT EXISTS catalog_publications (
   id SERIAL PRIMARY KEY, run_id INTEGER, published_at TIMESTAMPTZ NOT NULL,
   status TEXT NOT NULL, counts JSONB NOT NULL
 );
+CREATE TABLE IF NOT EXISTS homepage_snapshots (
+  source TEXT PRIMARY KEY, catalog_version BIGINT NOT NULL, schema_version INTEGER NOT NULL,
+  published_at TIMESTAMPTZ NOT NULL, payload JSONB NOT NULL
+);
 CREATE TABLE IF NOT EXISTS collection_traces (
   id SERIAL PRIMARY KEY, run_id INTEGER NOT NULL, collection_type TEXT NOT NULL,
   identity TEXT NOT NULL, resource_path TEXT, query_text TEXT,

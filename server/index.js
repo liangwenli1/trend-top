@@ -33,7 +33,7 @@ import { performanceMiddleware } from './performance.js';
 import { catalogRevision } from './operations.js';
 import { registerSavedSearchRoutes } from './saved-searches.js';
 import { registerDigestImageRoutes } from './digest-snapshots.js';
-import { getHomeDiscovery } from './homepage.js';
+import { getHomeDiscovery, initializeHomeSnapshot } from './homepage.js';
 import { renderPublicDigestPreview } from './digest-preview.js';
 import { USE_CASES } from '../shared/taxonomy.js';
 
@@ -355,6 +355,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   ready
     .then(async adapter => {
       console.log('Catalog classification audit', await auditCopiedAssets());
+      await initializeHomeSnapshot();
       app.listen(port, '0.0.0.0', () => {
         console.log(`Trend Top API at http://localhost:${port} (${demo ? 'DEMO' : 'LIVE'}, ${adapter.kind})`);
       });

@@ -51,9 +51,48 @@ delete process.env.DATABASE_URL;
 process.env.DATA_MODE='demo';
 process.env.PGLITE_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'trend-home-test-'));
 const {app}=await import('./index.js');
-const {ready,one,closeDb}=await import('./db.js');
+const {ready,one,query,transaction,dataSource,closeDb}=await import('./db.js');
+const {initializeHomeSnapshot,getHomeDiscovery,publishHomeSnapshot}=await import('./homepage.js');
+const {publishCatalog}=await import('./operations.js');
 test.after(async()=>{ await closeDb(); });
 await ready;
+await assert.rejects(getHomeDiscovery(),error=>error.status===503);
+await initializeHomeSnapshot();
+
+test('homepage publication persists, follows catalog versions and survives generation or commit failure',async()=>{
+  const initial=await getHomeDiscovery();
+  assert.equal(initial.snapshot.catalogVersion,0);
+  const selected=initial.items[0];
+  assert.notEqual(selected.type,'github-repo');
+  await query('UPDATE assets SET description=$1 WHERE id=$2',['Changed only in unpublished storage',selected.id]);
+  assert.deepEqual(await getHomeDiscovery(),initial);
+  await initializeHomeSnapshot();
+  assert.deepEqual(await getHomeDiscovery(),initial,'restart reuses the publication');
+  await publishCatalog(null,'homepage-test');
+  const published=await getHomeDiscovery();
+  assert.ok(published.snapshot.catalogVersion>0);
+  assert.equal(published.items.find(item=>item.id===selected.id&&item.type===selected.type).description,'Changed only in unpublished storage');
+  for(const useCase of Object.keys((await import('../shared/taxonomy.js')).USE_CASES)){
+    const filtered=await getHomeDiscovery({type:'skill',useCase});
+    assert.ok(filtered.items.every(item=>item.type==='skill'&&item.useCase===useCase));
+  }
+  const stored=await one('SELECT * FROM homepage_snapshots WHERE source=$1',[dataSource()]);
+  await assert.rejects(transaction(async()=>{
+    await publishHomeSnapshot(published.snapshot.catalogVersion+1);
+    throw new Error('publication interrupted before commit');
+  }),/publication interrupted/);
+  assert.deepEqual(await one('SELECT * FROM homepage_snapshots WHERE source=$1',[dataSource()]),stored);
+  await assert.rejects(publishHomeSnapshot(published.snapshot.catalogVersion+1,async()=>{throw new Error('candidate generation failed');}),/generation failed/);
+  assert.deepEqual(await getHomeDiscovery(),published);
+  await publishHomeSnapshot(0,async()=>({variants:{}}));
+  assert.deepEqual(await getHomeDiscovery(),published,'older workers cannot replace newer publications');
+  await query("UPDATE homepage_snapshots SET published_at=NOW()-INTERVAL '2 days' WHERE source=$1",[dataSource()]);
+  const stale=await getHomeDiscovery();
+  assert.equal(stale.snapshot.stale,true);
+  assert.ok(stale.items.every(item=>item.stale));
+  assert.deepEqual(stale.items.map(item=>item.updatedAt),published.items.map(item=>item.updatedAt));
+  await query('UPDATE homepage_snapshots SET published_at=$1 WHERE source=$2',[stored.published_at,dataSource()]);
+});
 test('public homepage API supports canonical type/task filters, validates inputs, and never queues mail',async()=>{
   const server=app.listen(0);
   const base=`http://127.0.0.1:${server.address().port}`;
@@ -66,6 +105,14 @@ test('public homepage API supports canonical type/task filters, validates inputs
     assert.ok(data.items.length>0&&data.items.length<=6);
     assert.equal(new Set(data.items.map(item=>item.productFamily)).size,data.items.length);
     assert.equal(data.selection,'type-board-round-robin');
+    assert.ok(response.headers.get('X-Catalog-Version'));
+    const cached=await fetch(base+'/api/home');
+    assert.equal(cached.headers.get('X-Catalog-Cache'),'HIT');
+    assert.equal((await cached.json()).generatedAt,data.generatedAt);
+    await publishCatalog(null,'homepage-api-test');
+    const refreshed=await fetch(base+'/api/home');
+    assert.equal(refreshed.headers.get('X-Catalog-Cache'),'MISS');
+    assert.ok((await refreshed.json()).snapshot.catalogVersion>data.snapshot.catalogVersion);
     assert.ok(data.tasks.every(task=>['browser','coding','ui','documents','research','git'].includes(task.id)));
     const filtered=await(await fetch(base+'/api/home?type=skill')).json();
     assert.ok(filtered.items.length>0);

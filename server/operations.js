@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { asJson, many, one, query, catalogWritesStaged } from './db.js';
+import { asJson, many, one, query, transaction, catalogWritesStaged } from './db.js';
 import { publicResponseCache } from './catalog-cache.js';
 
 export async function acquireLease(task, owner, seconds = 180) {
@@ -51,16 +51,21 @@ export async function recordTraces(runId, type, entries) {
   }
 }
 export async function publishCatalog(runId, status) {
-  if(runId)await query("UPDATE collection_traces SET outcome='published' WHERE run_id=$1 AND stage='storage' AND outcome='staged'",[runId]);
-  const rows = await many('SELECT type,COUNT(*)::int AS n FROM assets WHERE active=TRUE GROUP BY type');
-  const repos = await one("SELECT COUNT(*)::int AS n FROM repos WHERE source='github' AND active=TRUE AND deleted=FALSE AND archived=FALSE");
-  const counts = { ...Object.fromEntries(rows.map(row => [row.type, row.n])), 'github-repo': repos.n };
-  await query('INSERT INTO catalog_publications (run_id,published_at,status,counts) VALUES ($1,NOW(),$2,$3::jsonb)', [runId, status, JSON.stringify(counts)]);
+  await transaction(async () => {
+    await query('LOCK TABLE catalog_publications IN SHARE ROW EXCLUSIVE MODE');
+    if(runId)await query("UPDATE collection_traces SET outcome='published' WHERE run_id=$1 AND stage='storage' AND outcome='staged'",[runId]);
+    const rows = await many('SELECT type,COUNT(*)::int AS n FROM assets WHERE active=TRUE GROUP BY type');
+    const repos = await one("SELECT COUNT(*)::int AS n FROM repos WHERE source='github' AND active=TRUE AND deleted=FALSE AND archived=FALSE");
+    const counts = { ...Object.fromEntries(rows.map(row => [row.type, row.n])), 'github-repo': repos.n };
+    const publication = await one('INSERT INTO catalog_publications (run_id,published_at,status,counts) VALUES ($1,NOW(),$2,$3::jsonb) RETURNING id', [runId, status, JSON.stringify(counts)]);
+    // Commit catalog and homepage together. A failure keeps the previous snapshot.
+    await (await import('./homepage.js')).publishHomeSnapshot(publication.id);
+  });
   publicResponseCache.clear();(await import('./catalog.js')).clearRelatedCache();
 }
 let revisionAt = 0, revision = '';
 export async function catalogRevision(req, res, next) {
-  if (!/^\/api\/(?:types|search|filters|rankings|chart|(?:skill|plugin|agent|components|website|github-repo)\/)/.test(req.path)) return next();
+  if (!/^\/api\/(?:types|home(?:\/|$)|search|filters|rankings|chart|(?:skill|plugin|agent|components|website|github-repo)\/)/.test(req.path)) return next();
   try {
     if (Date.now() - revisionAt > 5000) {
       const row = await one('SELECT id,published_at FROM catalog_publications ORDER BY id DESC LIMIT 1');
