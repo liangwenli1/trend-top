@@ -105,6 +105,20 @@ test('github-repo catalog still ranks live demo repos', async () => {
   assert.ok(combined.ranking.items.length > 0);
 });
 
+test('home movement picks the largest weekly gain and same-purpose peers', async () => {
+  const { getHomeMovement } = await import('./homepage.js');
+  const data = await getHomeMovement({});
+  assert.ok(['skill','plugin','agent','components','website','github-repo'].includes(data.type));
+  assert.equal(data.types.length, 6);
+  assert.ok(data.peers.length <= 4);
+  const typed = await getHomeMovement({ type: 'plugin' });
+  assert.equal(typed.type, 'plugin');
+  if (typed.leader) {
+    const chart = await getCatalogChart('plugin', { board: 'hot', period: 'week', id: typed.leader.id });
+    assert.equal(chart.leader, typed.leader.full_name);
+  }
+});
+
 test('topic aliases agree in JavaScript and SQL without merging related concepts', async () => {
   const samples = ['API', ' apis ', 'public-api', 'public-apis', 'public', 'software', 'ai_agent', 'AI agents', 'mcp-servers', 'next.js', 'golang', 'front-end', 'ai', 'llm', 'react', 'components', 'C++', '--web---tools--'];
   const result = await query('SELECT value, canonical_topic(value) AS canonical FROM jsonb_array_elements_text($1::jsonb) AS value', [JSON.stringify(samples)]);

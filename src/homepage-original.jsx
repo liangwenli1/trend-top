@@ -1,7 +1,8 @@
 import React, {useEffect,useRef,useState} from 'react';
-import {TYPES,TYPE_META,typePath,itemPath} from './catalog.js';
-import {HomeGrowthChart,HomeDailyChart} from './home-growth.jsx';
+import {TYPES,TYPE_META,typePath,itemPath,typeLabel} from './catalog.js';
+import {HomeGrowthChart} from './home-growth.jsx';
 import {WorthCloserLook} from './homepage.jsx';
+import {SourceBadge} from './source-badge.jsx';
 const fmt=(n,l)=>n==null?'—':new Intl.NumberFormat(l==='zh'?'zh-CN':'en-US').format(n);
 const api=url=>fetch(url).then(r=>{if(!r.ok)throw new Error('Content unavailable');return r.json()});
 
@@ -14,19 +15,84 @@ const HOME_TYPE_COPY = {
   'github-repo': { zh: '关注近期增势，而非只有总 Star。', en: 'Recent momentum, beyond all-time Star totals.' }
 };
 
+function MovementList({ items, l, navigate, empty }) {
+  const go = path => event => navigate(event, path);
+  if (!items?.length) return <div className="home-chart-state" role="status">{empty}</div>;
+  return <ol className="home-move-list">{items.map(item => <li key={item.id}>
+    <div className="home-move-identity">
+      <a href={itemPath(l, item.type, item.slug)} onClick={go(itemPath(l, item.type, item.slug))} title={item.full_name}>{item.full_name}</a>
+      <SourceBadge l={l} official={item.official} evidence={item.officialEvidence}/>
+    </div>
+    <strong>{item.gain == null ? '—' : `${item.gain > 0 ? '+' : ''}${fmt(item.gain, l)}`}</strong>
+  </li>)}</ol>;
+}
+
+function HomeMovement({ l, navigate }) {
+  const zh = l === 'zh';
+  const [type, setType] = useState(null);
+  const [payload, setPayload] = useState(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    setError(false);
+    const params = type ? `?type=${encodeURIComponent(type)}` : '';
+    fetch('/api/home/movement' + params, { signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error('Content unavailable');
+      return response.json();
+    }).then(value => {
+      if (!controller.signal.aborted) setPayload(value);
+    }).catch(err => { if (err.name !== 'AbortError') setError(true); });
+    return () => controller.abort();
+  }, [type]);
+  const go = path => event => navigate(event, path);
+  const selected = type || payload?.type || 'github-repo';
+  const peers = payload?.peers || [];
+  const maxGain = Math.max(1, ...peers.map(item => item.gain || 0));
+  const leader = payload?.leader;
+  const useCase = leader?.useCaseLabel?.[zh ? 'zh' : 'en'];
+  const loading = !payload && !error;
+  return <section className="home-proof home-reveal" aria-labelledby="home-proof-title">
+    <div className="home-section-heading"><p className="home-kicker">02 / {zh ? '看见变化' : 'See the movement'}</p><h2 id="home-proof-title">{zh ? '不只看总量，更看最近谁在增长。' : 'Look beyond totals. See what is moving now.'}</h2><p>{zh ? '选一个类型，看近 7 天谁在涨，以及同一用途里还有哪些选项。' : 'Pick a collection to see what gained stars in the last 7 days, and which options share the same use case.'}</p></div>
+    <div className="discovery-type-filters home-proof-types" role="group" aria-label={zh ? '选择资源类型' : 'Choose a resource type'}>
+      {TYPES.map(id => <button key={id} type="button" aria-pressed={selected === id} onClick={() => setType(id)}>{typeLabel(id, l)}</button>)}
+    </div>
+    <div className="home-proof-grid">
+      <div className="home-proof-chart">
+        <div className="home-proof-card-title"><span>{zh ? `${typeLabel(selected, l)} · 近 7 天` : `${typeLabel(selected, l)} · 7 days`}</span><span>{zh ? '累计新增 Star' : 'Cumulative new Stars'}</span></div>
+        <HomeGrowthChart chart={payload?.chart} l={l} loading={loading} error={error} />
+        {leader && <p className="home-proof-caption"><SourceBadge l={l} official={leader.official} evidence={leader.officialEvidence}/>{useCase ? <span>{useCase}</span> : null}<a href={itemPath(l, leader.type, leader.slug)} onClick={go(itemPath(l, leader.type, leader.slug))}>{leader.full_name} ↗</a></p>}
+      </div>
+      <div className="home-proof-rank">
+        <div className="home-proof-card-title"><span>{useCase || (zh ? '同类选项' : 'Same-purpose options')}</span><span>{zh ? '近 7 天' : 'Last 7 days'}</span></div>
+        {peers.length ? <ol className="home-rank-bars">{peers.map((item, index) => <li key={item.id}>
+          <div className="home-rank-row"><span>{String(index + 1).padStart(2, '0')}</span><div className="home-rank-identity"><a href={itemPath(l, item.type, item.slug)} onClick={go(itemPath(l, item.type, item.slug))} title={item.full_name}>{item.full_name}</a><SourceBadge l={l} official={item.official} evidence={item.officialEvidence}/></div><strong>{item.gain > 0 ? '+' : ''}{fmt(item.gain, l)}</strong></div>
+          <div className="home-rank-track" aria-hidden="true"><i style={{ width: `${Math.max(0, (item.gain || 0) / maxGain * 100)}%` }} /></div>
+        </li>)}</ol> : <div className="home-chart-state" role="status">{error ? (zh ? '暂时无法读取同类项目。' : 'Peer projects are temporarily unavailable.') : loading ? (zh ? '正在读取同类项目…' : 'Loading peer projects…') : (zh ? '当前没有可对比的同类项目。' : 'No comparable projects in this use case.')}</div>}
+        <a className="home-proof-link" href={typePath(l, selected, 'ranking')} onClick={go(typePath(l, selected, 'ranking'))}>{zh ? '查看完整排行' : 'Open full ranking'} <span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+    <div className="home-daily-grid">
+      <div className="home-daily-card">
+        <div className="home-proof-card-title"><span>{zh ? '新进热榜' : 'New on Hot'}</span><span>{zh ? '30 天内' : 'Last 30 days'}</span></div>
+        <MovementList items={payload?.newcomers} l={l} navigate={navigate} empty={loading ? (zh ? '正在读取新项目…' : 'Loading new projects…') : (zh ? '这一类暂时没有新进项目。' : 'No new projects in this collection yet.')}/>
+      </div>
+      <div className="home-daily-card">
+        <div className="home-proof-card-title"><span>{zh ? '涨幅最大' : 'Biggest movers'}</span><span>{zh ? '近 7 天' : 'Last 7 days'}</span></div>
+        <MovementList items={payload?.movers} l={l} navigate={navigate} empty={loading ? (zh ? '正在读取涨幅…' : 'Loading movers…') : (zh ? '这一类还没有可比较的增量。' : 'No comparable gains in this collection yet.')}/>
+        <a className="home-proof-link home-daily-link" href={typePath(l, selected, 'charts')} onClick={go(typePath(l, selected, 'charts'))}>{zh ? '查看图表' : 'Explore charts'} <span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+    <p className="home-proof-footnote">{zh ? '按类型的近 7 天 Hot 榜。右侧是同一用途的选项，不是跨类型总榜。新进热榜看项目年龄。' : 'From each collection’s 7-day Hot board. Options on the right share a use case; this is not a cross-type ranking. New on Hot uses project age.'}</p>
+  </section>;
+}
+
 export function RestoredHome({ l, t, navigate }) {
   const initialAnchorHandled = useRef(false);
   const [data, setData] = useState(null);
-  const [chart, setChart] = useState(null);
-  const [chartError, setChartError] = useState(false);
-  const [pluginChart, setPluginChart] = useState(null);
-  const [pluginChartError, setPluginChartError] = useState(false);
   const zh = l === 'zh';
   useEffect(() => {
     let active = true;
     api('/api/types').then(result => { if (active) setData(result); }).catch(() => { if (active) setData({ source: 'unavailable', types: TYPES.map(id => ({ id, ...TYPE_META[id], count: null })) }); });
-    api('/api/github-repo/charts?board=hot&period=week').then(result => { if (active) setChart(result); }).catch(() => { if (active) setChartError(true); });
-    api('/api/plugin/charts?board=hot&period=week').then(result => { if (active) setPluginChart(result); }).catch(() => { if (active) setPluginChartError(true); });
     return () => { active = false; };
   }, []);
   useEffect(() => {
@@ -52,8 +118,6 @@ export function RestoredHome({ l, t, navigate }) {
   const total = data?.types?.reduce((sum, item) => sum + (item.count || 0), 0);
   const maxCount = Math.max(1, ...types.map(item => item.count || 0));
   const sourceLabel = !data ? (zh ? '正在读取数据…' : 'Loading data…') : data.source === 'unavailable' ? (zh ? '数据暂不可用' : 'Data unavailable') : (zh ? '当前收录' : 'Current catalog');
-  const bars = chart?.bars?.slice(0, 4) || [];
-  const maxGain = Math.max(1, ...bars.map(item => item.value || 0));
   const go = path => event => navigate(event, path);
 
   return <main className="page-shell type-home">
@@ -83,29 +147,7 @@ export function RestoredHome({ l, t, navigate }) {
 
     <WorthCloserLook l={l} navigate={navigate}/>
 
-    <section className="home-proof home-reveal" aria-labelledby="home-proof-title">
-      <div className="home-section-heading"><p className="home-kicker">02 / {zh ? '看见变化' : 'See the movement'}</p><h2 id="home-proof-title">{zh ? '不只看总量，更看最近谁在增长。' : 'Look beyond totals. See what is moving now.'}</h2><p>{zh ? '以仓库榜为例，增长曲线和同榜项目的增量放在一起，快速看出趋势与差异。' : 'A sample from the repository board pairs a growth curve with the projects beside it, so the direction and the differences are easy to read.'}</p></div>
-      <div className="home-proof-grid">
-        <div className="home-proof-chart">
-          <div className="home-proof-card-title"><span>{zh ? '仓库增长' : 'Repository growth'}</span><span>{zh ? '近 7 天' : 'Last 7 days'}</span></div>
-          <HomeGrowthChart chart={chart} l={l} loading={!chart && !chartError} error={chartError} />
-          {chart?.leader && <p className="home-proof-caption">{zh ? '领跑项目' : 'Leading project'} <a href={itemPath(l, 'github-repo', chart.bars?.[0]?.id || chart.leader)} onClick={go(itemPath(l, 'github-repo', chart.bars?.[0]?.id || chart.leader))}>{chart.leader} ↗</a></p>}
-        </div>
-        <div className="home-proof-rank">
-          <div className="home-proof-card-title"><span>{zh ? '同榜项目对比' : 'Projects on the same board'}</span><span>{zh ? '近 7 天' : 'Last 7 days'}</span></div>
-          {bars.length ? <ol className="home-rank-bars">{bars.map((item, index) => <li key={item.id}>
-            <div className="home-rank-row"><span>{String(index + 1).padStart(2, '0')}</span><a href={itemPath(l, 'github-repo', item.id)} onClick={go(itemPath(l, 'github-repo', item.id))} title={item.name}>{item.name}</a><strong>{item.value > 0 ? '+' : ''}{fmt(item.value, l)}</strong></div>
-            <div className="home-rank-track" aria-hidden="true"><i style={{ width: `${Math.max(0, item.value / maxGain * 100)}%` }} /></div>
-          </li>)}</ol> : <div className="home-chart-state" role="status">{chartError ? (zh ? '暂时无法读取榜单。' : 'The board is temporarily unavailable.') : chart ? (zh ? '当前没有可对比的项目。' : 'No comparable projects in this view.') : (zh ? '正在读取榜单…' : 'Loading the board…')}</div>}
-          <a className="home-proof-link" href={typePath(l, 'github-repo', 'charts')} onClick={go(typePath(l, 'github-repo', 'charts'))}>{zh ? '查看完整图表' : 'Explore all charts'} <span aria-hidden="true">↗</span></a>
-        </div>
-      </div>
-      <div className="home-daily-grid">
-        <div className="home-daily-card"><div className="home-proof-card-title"><span>{zh ? '仓库 · 每日变化' : 'Repositories · Daily movement'}</span><span>{chart?.leader || ''}</span></div><HomeDailyChart chart={chart} l={l} loading={!chart && !chartError} error={chartError}/></div>
-        <div className="home-daily-card"><div className="home-proof-card-title"><span>{zh ? '插件 / MCP · 每日变化' : 'Plugins / MCP · Daily movement'}</span><span>{pluginChart?.leader || ''}</span></div><HomeDailyChart chart={pluginChart} l={l} loading={!pluginChart && !pluginChartError} error={pluginChartError}/><a className="home-proof-link home-daily-link" href={typePath(l, 'plugin', 'charts')} onClick={go(typePath(l, 'plugin', 'charts'))}>{zh ? '查看插件图表' : 'Explore plugin charts'} <span aria-hidden="true">↗</span></a></div>
-      </div>
-      <p className="home-proof-footnote">{zh ? '图表来自各类型热门榜；插件指标为关联仓库的 Star 变化。' : 'From each collection’s Hot board; plugin metrics reflect associated repository Star changes.'}</p>
-    </section>
+    <HomeMovement l={l} navigate={navigate}/>
 
     <section className="home-process home-reveal" aria-labelledby="home-process-title">
       <div className="home-section-heading"><p className="home-kicker">03 / {zh ? '更好地选择' : 'Make a better choice'}</p><h2 id="home-process-title">{zh ? '从发现到决定，少走几步。' : 'From discovery to decision, with less noise.'}</h2></div>

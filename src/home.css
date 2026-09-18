@@ -58,16 +58,27 @@
 @keyframes home-line{to{stroke-dashoffset:0}}
 @keyframes home-area{to{opacity:1}}
 .type-home .home-growth-dates{display:flex;justify-content:space-between;margin:0 1px 0 46px;color:#737373;font-size:13px;font-variant-numeric:tabular-nums}
-.type-home .home-proof-caption{margin:23px 0 0;color:#666;font-size:15px;line-height:1.5;overflow-wrap:anywhere}
+.type-home .home-rank-identity{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0}
+.type-home .home-rank-identity a{max-width:100%}
+.type-home .home-proof-caption{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:23px 0 0}
+.type-home .home-proof-caption span{color:#315fd9;font-size:13px;font-weight:650}
+.type-home .home-proof-types{margin:0 0 22px}
+.type-home .home-move-list{display:flex;flex-direction:column;gap:0;list-style:none;margin:18px 0 0;padding:0}
+.type-home .home-move-list li{display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:0;padding:14px 0;border-bottom:1px solid #eee}
+.type-home .home-move-identity{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0}
+.type-home .home-move-identity a{overflow:hidden;color:#111;font-size:16px;font-weight:600;text-decoration:none;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.type-home .home-move-identity a:hover{text-decoration:underline;text-underline-offset:3px}
+.type-home .home-move-list strong{flex:none;font-size:16px;font-weight:680;font-variant-numeric:tabular-nums}
+.type-home .home-daily-card .home-chart-state{min-height:160px;font-size:15px}
 .type-home .home-proof-caption a{color:#111;font-weight:680;text-decoration:underline;text-decoration-color:#aaa;text-underline-offset:4px}
 .type-home .home-chart-state{display:grid;flex:1;place-items:center;min-height:240px;color:#737373;font-size:17px;text-align:center}
 .type-home .home-rank-bars{display:flex;flex-direction:column;gap:25px;list-style:none;margin:35px 0 30px;padding:0}
-.type-home .home-rank-row{display:grid;grid-template-columns:27px minmax(0,1fr) auto;align-items:baseline;gap:10px;min-width:0;margin-bottom:10px}
+.type-home .home-rank-row{display:grid;grid-template-columns:27px minmax(0,1fr) auto;align-items:start;gap:10px;min-width:0;margin-bottom:10px}
 .type-home .home-rank-row span{color:#8a8a8a;font-size:13px;font-variant-numeric:tabular-nums}
 .type-home .home-rank-row a{overflow:hidden;color:#111;font-size:16px;font-weight:600;text-decoration:none;text-overflow:ellipsis;white-space:nowrap}
 .type-home .home-rank-row a:hover{text-decoration:underline;text-underline-offset:3px}
 .type-home .home-rank-row strong{font-size:17px;font-weight:680;font-variant-numeric:tabular-nums}
-.type-home .home-rank-track i{background:#555}
+.type-home .home-rank-track i{background:#315fd9}
 .type-home .home-rank-bars li:first-child i{background:#315fd9}
 .type-home .home-proof-link{display:inline-flex;align-items:center;justify-content:space-between;gap:20px;width:max-content;min-height:44px;margin-top:auto;padding-bottom:4px;border-bottom:1px solid #111;color:#111;font-size:16px;font-weight:700;text-decoration:none}
 .type-home .home-proof-link:hover{border-color:#315fd9;color:#315fd9}

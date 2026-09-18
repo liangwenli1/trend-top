@@ -1,5 +1,5 @@
 import { asDay, asJson, lastCompleteDay, many, one, query, ready, transaction, dataSource } from './db.js';
-import { TYPES, getTypeSummary, getCatalogRankings } from './catalog.js';
+import { TYPES, getTypeSummary, getCatalogRankings, getCatalogChart } from './catalog.js';
 import { USE_CASES } from '../shared/taxonomy.js';
 import { selectHomeItems } from '../shared/home-discovery.js';
 import { freezeTrendImage } from './digest-snapshots.js';
@@ -91,4 +91,67 @@ export async function getHomeDiscovery({ type = '', useCase = '', includePreview
     items: variant.items.map(item => ({ ...item, stale: item.stale || stale })),
     ...(includePreviewCharts ? {previewCharts:asJson(row.preview_charts,[])} : {}),
     snapshot: { catalogVersion: Number(row.catalog_version), publishedAt, stale } };
+}
+
+function movementItem(item, type) {
+  return {
+    id: String(item.slug || item.id),
+    slug: String(item.slug || item.id),
+    type: item.type || type,
+    full_name: item.full_name,
+    gain: item.gain ?? null,
+    official: Boolean(item.officialEvidence || item.official),
+    officialEvidence: item.officialEvidence || null,
+    useCase: item.useCase || null,
+    useCaseLabel: item.useCaseLabel || null,
+    ageDays: item.ageDays ?? null
+  };
+}
+
+export async function getHomeMovement({ type = '' } = {}) {
+  const summaries = await Promise.all(TYPES.map(async id => {
+    const ranking = await getCatalogRankings(id, { board: 'hot', period: 'week', limit: 24 });
+    const withGain = ranking.items.filter(item => item.gain != null && Number.isFinite(item.gain) && !item.anomaly);
+    const mover = [...withGain].sort((a, b) => b.gain - a.gain)[0] || null;
+    return { type: id, ranking, mover, maxGain: mover?.gain ?? null };
+  }));
+  const fallback = summaries.find(entry => entry.mover) || summaries[0];
+  const defaultType = [...summaries].sort((a, b) => (b.maxGain || 0) - (a.maxGain || 0))[0]?.type || fallback.type;
+  const selected = TYPES.includes(type) ? type : defaultType;
+  const current = summaries.find(entry => entry.type === selected) || fallback;
+  const leader = current.mover;
+  const chart = leader
+    ? await getCatalogChart(selected, { board: 'hot', period: 'week', id: leader.id }, current.ranking)
+    : { insufficient: true, points: [], bars: [], leader: null };
+  let peers = [];
+  if (leader?.useCase) {
+    const peerRanking = await getCatalogRankings(selected, { board: 'hot', period: 'week', useCase: leader.useCase, limit: 8 });
+    peers = peerRanking.items.filter(item => item.gain != null && !item.anomaly).slice(0, 4);
+  }
+  if (peers.length < 2) {
+    peers = current.ranking.items.filter(item => item.gain != null && !item.anomaly).slice(0, 4);
+  }
+  let newcomers = current.ranking.items
+    .filter(item => item.ageDays != null && item.ageDays <= 30 && item.gain != null && !item.anomaly)
+    .sort((a, b) => b.gain - a.gain)
+    .slice(0, 5);
+  if (newcomers.length < 3) {
+    const fresh = await getCatalogRankings(selected, { board: 'new', period: 'week', limit: 8 });
+    newcomers = fresh.items.filter(item => item.gain != null && !item.anomaly).slice(0, 5);
+  }
+  const movers = [...current.ranking.items]
+    .filter(item => item.gain != null && !item.anomaly)
+    .sort((a, b) => b.gain - a.gain)
+    .slice(0, 5);
+  return {
+    defaultType,
+    type: selected,
+    types: summaries.map(entry => ({ id: entry.type, gain: entry.maxGain, leader: entry.mover?.full_name || null })),
+    leader: leader ? movementItem(leader, selected) : null,
+    chart,
+    peers: peers.map(item => movementItem(item, selected)),
+    newcomers: newcomers.map(item => movementItem(item, selected)),
+    movers: movers.map(item => movementItem(item, selected)),
+    updatedAt: current.ranking.updatedAt || null
+  };
 }

@@ -556,7 +556,13 @@ export async function getCatalogChart(type, query = {}, sampleOverride = null) {
   const bars = ranking.items
     .filter(r => r.gain != null && !r.anomaly)
     .map(r => ({ id: r.id, name: r.full_name, value: r.gain, rank: r.rank }));
-  const leader = bars[0] || null;
+  const requested = query.id == null || query.id === '' ? null : String(query.id);
+  const chosen = requested
+    ? sample.items.find(item => String(item.id) === requested || String(item.slug || '') === requested)
+    : null;
+  const leader = chosen && chosen.gain != null && !chosen.anomaly
+    ? { id: chosen.id, name: chosen.full_name, value: chosen.gain, rank: chosen.rank }
+    : bars[0] || null;
   let points = [];
   if (leader) {
     const days = DAYS[ranking.period] || 7;
